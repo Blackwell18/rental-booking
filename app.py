@@ -1225,8 +1225,12 @@ ADMIN_BOOKING_HTML = """
         {% endif %}
         <tr><td colspan="3">Delivery Fee ({{ b.distance_miles or '?' }} mi)</td><td style="text-align:right;font-weight:600">${{ "%.2f"|format(b.delivery_fee or 0) }}</td></tr>
         <tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
-        <tr style="background:#f0fff4"><td colspan="3" style="color:#276749;font-weight:600">25% Deposit (if &gt;7 days away)</td><td style="text-align:right;font-weight:700;color:#276749">${{ "%.2f"|format((b.grand_total or 0) * 0.25) }}</td></tr>
-        <tr style="background:#fff5f5"><td colspan="3" style="color:#c53030;font-weight:600">Full Payment (if &le;7 days away)</td><td style="text-align:right;font-weight:700;color:#c53030">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
+        {% if days_until <= 7 %}
+        <tr style="background:#fff5f5"><td colspan="3" style="color:#c53030;font-weight:700">Due Now (event within 7 days — full payment required)</td><td style="text-align:right;font-weight:700;color:#c53030">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
+        {% else %}
+        <tr style="background:#f0fff4"><td colspan="3" style="color:#276749;font-weight:700">25% Deposit Due Now</td><td style="text-align:right;font-weight:700;color:#276749">${{ "%.2f"|format((b.grand_total or 0) * 0.25) }}</td></tr>
+        <tr><td colspan="3" style="color:#718096">Remaining Balance (due 48 hrs before event)</td><td style="text-align:right;color:#718096">${{ "%.2f"|format((b.grand_total or 0) * 0.75) }}</td></tr>
+        {% endif %}
       </tbody>
     </table>
   </div>
@@ -1539,8 +1543,21 @@ def admin_booking(booking_id):
     if not b:
         return "Booking not found", 404
 
+    # Calculate days until event for payment label logic
+    days_until = 999
+    try:
+        event_raw = b.get("event_start_date")
+        if event_raw:
+            if isinstance(event_raw, str):
+                event_dt = datetime.strptime(str(event_raw), "%Y-%m-%d").date()
+            else:
+                event_dt = event_raw
+            days_until = (event_dt - date.today()).days
+    except Exception:
+        pass
+
     return render_template_string(ADMIN_BOOKING_HTML,
-        business_name=BUSINESS_NAME, b=b, items=items)
+        business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until)
 
 
 @app.route("/admin/booking/<int:booking_id>/accept", methods=["POST"])
