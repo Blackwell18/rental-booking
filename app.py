@@ -1547,13 +1547,8 @@ def admin_booking(booking_id):
     # Calculate days until event for payment label logic
     days_until = 999
     try:
-        event_raw = b.get("event_start_date")
-        if event_raw:
-            if isinstance(event_raw, str):
-                event_dt = datetime.strptime(str(event_raw), "%Y-%m-%d").date()
-            else:
-                event_dt = event_raw
-            days_until = (event_dt - date.today()).days
+        event_dt = datetime.strptime(str(b.get("event_start_date", ""))[:10], "%Y-%m-%d").date()
+        days_until = (event_dt - date.today()).days
     except Exception:
         pass
 
@@ -1592,15 +1587,13 @@ def accept_booking(booking_id):
     # ── Determine payment type based on days until event ──────────────────
     event_date_raw = b.get("event_start_date")
     days_until = 999
-    if event_date_raw:
-        try:
-            if isinstance(event_date_raw, str):
-                event_dt = datetime.strptime(str(event_date_raw), "%Y-%m-%d").date()
-            else:
-                event_dt = event_date_raw
-            days_until = (event_dt - date.today()).days
-        except Exception:
-            pass
+    try:
+        # Convert to string first — handles date objects, datetime objects, and strings
+        event_dt = datetime.strptime(str(event_date_raw)[:10], "%Y-%m-%d").date()
+        days_until = (event_dt - date.today()).days
+        log.info(f"Booking #{booking_id}: event={event_dt}, today={date.today()}, days_until={days_until}")
+    except Exception as e:
+        log.error(f"Date calc error for booking #{booking_id}: {e} (raw={event_date_raw!r})")
 
     if days_until <= 7:
         # Event within 7 days — full payment required
