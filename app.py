@@ -489,8 +489,11 @@ def send_customer_email(b):
     _send_email(email, subject, html, plain)
 
 
-def send_accepted_email(b, deposit_amount):
-    """Send invoice + contract + Stripe payment link to customer."""
+def send_accepted_email(b, charge_amount, payment_type="deposit"):
+    """
+    Send invoice + contract + Stripe payment link to customer.
+    payment_type: "deposit" (25% now, rest later) or "full" (100% required now).
+    """
     email = b.get("email")
     first = b.get("full_name", "").split()[0]
     if not email:
@@ -500,8 +503,26 @@ def send_accepted_email(b, deposit_amount):
     items = json.loads(b.get("items_json") or "[]")
     exact = b.get("exact_time_delivery", False)
     grand_total = float(b.get("grand_total") or 0)
-    remaining = round(grand_total - deposit_amount, 2)
+    remaining = round(grand_total - charge_amount, 2)
     event_addr = f"{b.get('event_street','')}, {b.get('event_city','')}, {b.get('event_state','')} {b.get('event_zip','')}"
+
+    is_deposit = (payment_type == "deposit")
+
+    # Labels based on payment type
+    if is_deposit:
+        due_label      = "25% Deposit Due Now"
+        pay_btn_label  = f"Pay ${charge_amount:.2f} Deposit Now"
+        header_sub     = "Pay your 25% deposit to secure your date"
+        urgency_msg    = "Your booking is <strong>not secured</strong> until the deposit is paid. Pay now to lock in your date."
+        balance_line   = f'<div style="border-top:1px solid #c6f6d5;margin-top:1rem;padding-top:1rem;font-size:.87rem;color:#4a5568"><p style="margin:0"><strong>Remaining balance:</strong> ${remaining:.2f} — due <strong>48 hours before</strong> your event on {b.get("event_start_date")}</p></div>'
+        balance_plain  = f"Remaining balance: ${remaining:.2f} — due 48 hours before your event."
+    else:
+        due_label      = "Full Payment Required"
+        pay_btn_label  = f"Pay Full Amount ${charge_amount:.2f}"
+        header_sub     = "Full payment required — your event is within 7 days"
+        urgency_msg    = "Because your event is <strong>within 7 days</strong>, full payment is required to secure your booking."
+        balance_line   = ""
+        balance_plain  = "Full payment required — no remaining balance."
 
     item_rows = ""
     for it in items:
@@ -515,62 +536,63 @@ def send_accepted_email(b, deposit_amount):
 
     payment_btn = f"""
     <div style="text-align:center;margin:1.5rem 0">
-      <a href="{payment_link}" style="display:inline-block;background:linear-gradient(135deg,#276749,#38a169);color:white;padding:1rem 2.5rem;border-radius:10px;font-weight:700;font-size:1.15rem;text-decoration:none;letter-spacing:.3px">
-        Pay ${deposit_amount:.2f} Deposit Now
+      <a href="{payment_link}"
+         style="display:inline-block;background:linear-gradient(135deg,#276749,#38a169);color:white;padding:1.1rem 2.75rem;border-radius:10px;font-weight:700;font-size:1.15rem;text-decoration:none;letter-spacing:.3px;box-shadow:0 4px 12px rgba(39,103,73,.35)">
+        {pay_btn_label}
       </a>
       <p style="margin:.6rem 0 0;font-size:.82rem;color:#718096">Secure payment powered by Stripe</p>
     </div>""" if payment_link else f"""
     <div style="background:#fffaf0;border:2px solid #ed8936;border-radius:10px;padding:1.25rem;text-align:center;margin:1.5rem 0">
-      <p style="font-weight:700;color:#744210">Deposit Due: ${deposit_amount:.2f}</p>
-      <p style="color:#744210;font-size:.9rem">We will send your payment link shortly. {f"Questions? Call {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}</p>
+      <p style="font-weight:700;color:#744210">Amount Due: ${charge_amount:.2f}</p>
+      <p style="color:#744210;font-size:.9rem">We will send your payment link shortly.{f" Questions? Call {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}</p>
     </div>"""
 
-    contract_html = build_contract_html(b, deposit_amount)
+    contract_html = build_contract_html(b, charge_amount)
 
-    subject = f"Booking Accepted — Invoice & Contract Enclosed | {BUSINESS_NAME}"
+    subject_tag = "Deposit Required" if is_deposit else "Full Payment Required"
+    subject = f"Booking Accepted — {subject_tag} | {BUSINESS_NAME}"
+
     html = f"""
 <html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
 <div style="max-width:640px;margin:0 auto">
 
   <div style="background:linear-gradient(135deg,#276749,#38a169);border-radius:12px 12px 0 0;padding:1.75rem 2rem;color:white;text-align:center">
-    <div style="font-size:2rem;margin-bottom:.5rem">Booking Accepted!</div>
-    <h2 style="margin:0;font-weight:700">Booking #{b.get('id')} — {BUSINESS_NAME}</h2>
-    <p style="margin:.4rem 0 0;opacity:.85">Please review your invoice and pay your deposit to secure your date</p>
+    <div style="font-size:2.2rem;margin-bottom:.4rem">&#127881; Booking Accepted!</div>
+    <h2 style="margin:0;font-weight:700;font-size:1.2rem">Booking #{b.get('id')} &mdash; {BUSINESS_NAME}</h2>
+    <p style="margin:.5rem 0 0;opacity:.88;font-size:.95rem">{header_sub}</p>
   </div>
 
   <div style="background:white;padding:2rem;border-radius:0 0 12px 12px;box-shadow:0 4px 16px rgba(0,0,0,.08)">
 
-    <p style="color:#2d3748;font-size:1.05rem">Hi <strong>{first}</strong>,</p>
-    <p style="color:#4a5568;line-height:1.7;margin:.75rem 0">Great news — we've reviewed your rental request and we're happy to confirm availability for your event!
-    Please review your invoice below, pay your 25% deposit to lock in your reservation, and read the rental agreement.</p>
+    <p style="color:#2d3748;font-size:1.05rem;margin-bottom:.75rem">Hi <strong>{first}</strong>,</p>
+    <p style="color:#4a5568;line-height:1.7;margin-bottom:1.25rem">
+      Great news &mdash; your rental request has been reviewed and we have availability for your event!
+      Please review your invoice below, make your payment, and read the rental agreement at the bottom of this email.
+    </p>
 
-    <!-- Event Summary -->
-    <div style="background:#f0fff4;border:1.5px solid #68d391;border-radius:10px;padding:1.1rem 1.25rem;margin:1.25rem 0;font-size:.9rem">
-      <div style="display:grid;gap:.3rem">
-        <div><strong>Event Date:</strong> {b.get('event_start_date')} → {b.get('event_end_date')}</div>
-        <div><strong>Location:</strong> {event_addr}</div>
-        <div><strong>Deliver to:</strong> {b.get('delivery_location','')}</div>
-      </div>
+    <!-- Event Summary box -->
+    <div style="background:#f0fff4;border:1.5px solid #68d391;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem;font-size:.9rem;color:#2d3748">
+      <div style="margin-bottom:.3rem"><strong>Event Date:</strong> {b.get('event_start_date')} &rarr; {b.get('event_end_date')}</div>
+      <div style="margin-bottom:.3rem"><strong>Location:</strong> {event_addr}</div>
+      <div><strong>Deliver to:</strong> {b.get('delivery_location','')}</div>
     </div>
 
-    <!-- Invoice -->
-    <h3 style="color:#1a365d;font-size:1rem;margin:1.5rem 0 .75rem">Invoice</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:.9rem">
+    <!-- Invoice table -->
+    <h3 style="color:#1a365d;font-size:.95rem;font-weight:700;margin:0 0 .75rem;text-transform:uppercase;letter-spacing:.5px">Invoice</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-bottom:1.5rem">
       <thead>
         <tr style="background:#ebf4ff">
-          <th style="padding:9px 12px;text-align:left;color:#2b6cb0;font-size:.8rem;text-transform:uppercase">Item</th>
-          <th style="padding:9px 12px;text-align:center;color:#2b6cb0;font-size:.8rem;text-transform:uppercase">Qty</th>
-          <th style="padding:9px 12px;text-align:right;color:#2b6cb0;font-size:.8rem;text-transform:uppercase">Unit</th>
-          <th style="padding:9px 12px;text-align:right;color:#2b6cb0;font-size:.8rem;text-transform:uppercase">Total</th>
+          <th style="padding:9px 12px;text-align:left;color:#2b6cb0;font-size:.78rem;text-transform:uppercase">Item</th>
+          <th style="padding:9px 12px;text-align:center;color:#2b6cb0;font-size:.78rem;text-transform:uppercase">Qty</th>
+          <th style="padding:9px 12px;text-align:right;color:#2b6cb0;font-size:.78rem;text-transform:uppercase">Unit Price</th>
+          <th style="padding:9px 12px;text-align:right;color:#2b6cb0;font-size:.78rem;text-transform:uppercase">Total</th>
         </tr>
       </thead>
       <tbody>
         {item_rows}
         {"<tr><td colspan='3' style='padding:8px 12px;border-bottom:1px solid #e2e8f0'>Exact Time Delivery</td><td style='padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0'>$175.00</td></tr>" if exact else ""}
         <tr>
-          <td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096">
-            Delivery Fee ({b.get('distance_miles','?')} mi)
-          </td>
+          <td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096">Delivery Fee ({b.get('distance_miles','?')} mi)</td>
           <td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0">${b.get('delivery_fee',0):.2f}</td>
         </tr>
         <tr style="background:#1a365d;color:white">
@@ -580,58 +602,61 @@ def send_accepted_email(b, deposit_amount):
       </tbody>
     </table>
 
-    <!-- Deposit Section -->
-    <div style="background:#f0fff4;border:2px solid #38a169;border-radius:12px;padding:1.5rem;margin:1.5rem 0;text-align:center">
-      <p style="font-size:.9rem;color:#276749;margin:0 0 .4rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Deposit Due Now (25%)</p>
-      <p style="font-size:2.5rem;font-weight:700;color:#276749;margin:.25rem 0">${deposit_amount:.2f}</p>
+    <!-- Payment section -->
+    <div style="background:#f0fff4;border:2px solid #38a169;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;text-align:center">
+      <p style="font-size:.82rem;color:#276749;margin:0 0 .3rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px">{due_label}</p>
+      <p style="font-size:2.75rem;font-weight:800;color:#276749;margin:.2rem 0 .1rem;line-height:1">${charge_amount:.2f}</p>
+      {f'<p style="font-size:.85rem;color:#718096;margin:.2rem 0 0">of ${grand_total:.2f} total</p>' if is_deposit else ""}
       {payment_btn}
-      <div style="border-top:1px solid #c6f6d5;margin-top:1rem;padding-top:1rem;font-size:.87rem;color:#4a5568">
-        <p style="margin:0"><strong>Remaining balance:</strong> ${remaining:.2f} — due 48 hours before your event</p>
-      </div>
+      {balance_line}
     </div>
 
-    <!-- Warning -->
-    <div style="background:#fffaf0;border-left:4px solid #ed8936;padding:1rem 1.25rem;border-radius:0 8px 8px 0;margin-bottom:1.5rem;font-size:.88rem">
-      <strong>Important:</strong> Your booking is <strong>not secured</strong> until the deposit is paid.
-      Inventory is first-come-first-paid. Pay as soon as possible to hold your date.
+    <!-- Urgency note -->
+    <div style="background:#fffaf0;border-left:4px solid #ed8936;padding:1rem 1.25rem;border-radius:0 8px 8px 0;margin-bottom:1.75rem;font-size:.88rem;color:#744210">
+      <strong>Important:</strong> {urgency_msg}
+      Inventory is first-come-first-paid &mdash; we cannot hold your reservation without payment.
     </div>
 
     <!-- Contract -->
-    <div style="margin-top:1.75rem;border-top:2px solid #e2e8f0;padding-top:1.5rem">
-      <h3 style="color:#1a365d;font-size:1rem;margin:0 0 .5rem">Rental Agreement</h3>
-      <p style="font-size:.83rem;color:#718096;margin:0 0 1rem">
+    <div style="border-top:2px solid #e2e8f0;padding-top:1.5rem">
+      <h3 style="color:#1a365d;font-size:.95rem;font-weight:700;margin:0 0 .4rem;text-transform:uppercase;letter-spacing:.5px">Rental Agreement</h3>
+      <p style="font-size:.82rem;color:#718096;margin:0 0 1rem">
         Please read the following agreement carefully.
-        By paying the deposit above, you agree to all terms below.
+        By completing your payment above, you agree to all terms below. No additional signature is required.
       </p>
       <div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1.25rem">
         {contract_html}
       </div>
     </div>
 
-    <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
-    {f'<p style="font-size:.85rem;color:#718096">Questions? Call {BUSINESS_PHONE}</p>' if BUSINESS_PHONE else ""}
+    <p style="color:#2d3748;font-weight:600;margin-top:1.75rem">&mdash; The {BUSINESS_NAME} Team</p>
+    {f'<p style="font-size:.85rem;color:#718096">Questions? Call us at {BUSINESS_PHONE}</p>' if BUSINESS_PHONE else ""}
   </div>
 </div></body></html>"""
 
     plain = f"""Hi {first},
 
-Your rental request (Booking #{b.get('id')}) has been ACCEPTED!
+GREAT NEWS — Your rental request (Booking #{b.get('id')}) has been ACCEPTED!
 
-EVENT: {b.get('event_start_date')} | {event_addr}
+EVENT DETAILS
+  Date:       {b.get('event_start_date')} - {b.get('event_end_date')}
+  Location:   {event_addr}
+  Deliver to: {b.get('delivery_location','')}
 
---- INVOICE ---
-{"".join(f"{i['qty']}x {i['name']} = ${i['total']:.2f}\n" for i in items)}{"Exact Time Delivery: $175.00\n" if exact else ""}Delivery: ${b.get('delivery_fee',0):.2f}
-TOTAL: ${grand_total:.2f}
+INVOICE
+{"".join(f"  {i['qty']}x {i['name']} @ ${i['unit_price']:.2f} = ${i['total']:.2f}\n" for i in items)}{"  Exact Time Delivery: $175.00\n" if exact else ""}  Delivery Fee: ${b.get('delivery_fee',0):.2f}
+  ─────────────────────────────
+  TOTAL: ${grand_total:.2f}
 
---- DEPOSIT DUE ---
-25% Deposit: ${deposit_amount:.2f}
-{f"Pay here: {payment_link}" if payment_link else "We will send your payment link shortly."}
-Remaining balance: ${remaining:.2f} — due 48 hours before your event.
+PAYMENT REQUIRED
+  {due_label}: ${charge_amount:.2f}
+  {f"Pay here: {payment_link}" if payment_link else "We will send your payment link shortly."}
+  {balance_plain}
 
-Your booking is NOT secured until the deposit is paid.
+IMPORTANT: Your booking is NOT secured until payment is received.
+{f"Call us at {BUSINESS_PHONE} with any questions." if BUSINESS_PHONE else ""}
 
-By paying you agree to the rental terms. Please contact us with any questions.
-{f"Phone: {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}
+By completing payment you agree to the rental terms and contract.
 
 — {BUSINESS_NAME}"""
 
@@ -1200,7 +1225,8 @@ ADMIN_BOOKING_HTML = """
         {% endif %}
         <tr><td colspan="3">Delivery Fee ({{ b.distance_miles or '?' }} mi)</td><td style="text-align:right;font-weight:600">${{ "%.2f"|format(b.delivery_fee or 0) }}</td></tr>
         <tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
-        <tr style="background:#f0fff4"><td colspan="3" style="color:#276749;font-weight:600">25% Deposit</td><td style="text-align:right;font-weight:700;color:#276749">${{ "%.2f"|format((b.grand_total or 0) * 0.25) }}</td></tr>
+        <tr style="background:#f0fff4"><td colspan="3" style="color:#276749;font-weight:600">25% Deposit (if &gt;7 days away)</td><td style="text-align:right;font-weight:700;color:#276749">${{ "%.2f"|format((b.grand_total or 0) * 0.25) }}</td></tr>
+        <tr style="background:#fff5f5"><td colspan="3" style="color:#c53030;font-weight:600">Full Payment (if &le;7 days away)</td><td style="text-align:right;font-weight:700;color:#c53030">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
       </tbody>
     </table>
   </div>
@@ -1541,14 +1567,39 @@ def accept_booking(booking_id):
     if not b:
         return "Booking not found", 404
 
-    grand_total    = float(b.get("grand_total") or 0)
-    deposit_amount = round(grand_total * DEPOSIT_PERCENT, 2)
+    grand_total = float(b.get("grand_total") or 0)
     items = json.loads(b.get("items_json") or "[]")
     items_desc = ", ".join(f"{i['qty']}x {i['name']}" for i in items)
 
+    # ── Determine payment type based on days until event ──────────────────
+    event_date_raw = b.get("event_start_date")
+    days_until = 999
+    if event_date_raw:
+        try:
+            if isinstance(event_date_raw, str):
+                event_dt = datetime.strptime(str(event_date_raw), "%Y-%m-%d").date()
+            else:
+                event_dt = event_date_raw
+            days_until = (event_dt - date.today()).days
+        except Exception:
+            pass
+
+    if days_until <= 7:
+        # Event within 7 days — full payment required
+        charge_amount = round(grand_total, 2)
+        payment_type  = "full"
+        stripe_desc   = f"Full Payment — Booking #{booking_id} ({items_desc})"
+        log.info(f"Booking #{booking_id}: {days_until} days away — requiring FULL payment ${charge_amount:.2f}")
+    else:
+        # More than 7 days away — 25% deposit
+        charge_amount = round(grand_total * DEPOSIT_PERCENT, 2)
+        payment_type  = "deposit"
+        stripe_desc   = f"25% Deposit — Booking #{booking_id} ({items_desc})"
+        log.info(f"Booking #{booking_id}: {days_until} days away — requiring 25% deposit ${charge_amount:.2f}")
+
     # Create Stripe Payment Link
     payment_link, stripe_error = create_stripe_payment_link(
-        booking_id, deposit_amount, b.get("email"), items_desc
+        booking_id, charge_amount, b.get("email"), stripe_desc
     )
     if stripe_error:
         log.warning(f"Stripe error for #{booking_id}: {stripe_error}")
@@ -1565,13 +1616,13 @@ def accept_booking(booking_id):
             conn.commit()
             cur.close()
             conn.close()
-            log.info(f"Booking #{booking_id} accepted")
+            log.info(f"Booking #{booking_id} accepted ({payment_type})")
         except Exception as e:
             log.error(f"Accept DB update error: {e}")
 
-    # Send acceptance email
+    # Send acceptance email with invoice + contract + payment link
     b["stripe_payment_link"] = payment_link
-    send_accepted_email(b, deposit_amount)
+    send_accepted_email(b, charge_amount, payment_type)
 
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
