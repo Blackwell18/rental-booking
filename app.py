@@ -256,15 +256,16 @@ def calc_delivery_fee(miles):
 #  STRIPE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def create_stripe_payment_link(booking_id, deposit_amount, customer_email, items_desc):
-    """Create a Stripe Payment Link for the 25% deposit. Returns (url, error)."""
+def create_stripe_payment_link(booking_id, deposit_amount, customer_email, items_desc, product_name=None):
+    """Create a Stripe Payment Link. Returns (url, error)."""
     if not STRIPE_SECRET_KEY:
         log.warning("STRIPE_SECRET_KEY not set — cannot create payment link")
         return None, "Stripe not configured"
     try:
+        name = product_name or f"25% Deposit — Booking #{booking_id}"
         # Create a product for this booking
         product = stripe.Product.create(
-            name=f"25% Deposit — Booking #{booking_id}",
+            name=name,
             description=(items_desc[:500] if items_desc else "Rental deposit"),
         )
         # Create a one-time price
@@ -1603,20 +1604,22 @@ def accept_booking(booking_id):
 
     if days_until <= 7:
         # Event within 7 days — full payment required
-        charge_amount = round(grand_total, 2)
-        payment_type  = "full"
-        stripe_desc   = f"Full Payment — Booking #{booking_id} ({items_desc})"
+        charge_amount  = round(grand_total, 2)
+        payment_type   = "full"
+        product_name   = f"Full Payment — Booking #{booking_id}"
+        stripe_desc    = items_desc
         log.info(f"Booking #{booking_id}: {days_until} days away — requiring FULL payment ${charge_amount:.2f}")
     else:
         # More than 7 days away — 25% deposit
-        charge_amount = round(grand_total * DEPOSIT_PERCENT, 2)
-        payment_type  = "deposit"
-        stripe_desc   = f"25% Deposit — Booking #{booking_id} ({items_desc})"
+        charge_amount  = round(grand_total * DEPOSIT_PERCENT, 2)
+        payment_type   = "deposit"
+        product_name   = f"25% Deposit — Booking #{booking_id}"
+        stripe_desc    = items_desc
         log.info(f"Booking #{booking_id}: {days_until} days away — requiring 25% deposit ${charge_amount:.2f}")
 
     # Create Stripe Payment Link
     payment_link, stripe_error = create_stripe_payment_link(
-        booking_id, charge_amount, b.get("email"), stripe_desc
+        booking_id, charge_amount, b.get("email"), stripe_desc, product_name
     )
     if stripe_error:
         log.warning(f"Stripe error for #{booking_id}: {stripe_error}")
