@@ -884,10 +884,91 @@ setVenue('venue');
 function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;document.getElementById('avail_note').textContent='Checking availability...';fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{document.getElementById('avail_note').textContent='Availability updated for your dates.';Object.entries(data).forEach(([id,avail])=>{const input=document.getElementById('qty_'+id);const badge=document.getElementById('avail_'+id);if(!input)return;input.dataset.max=avail;input.max=avail;if(avail===0){badge.textContent='SOLD OUT for these dates';badge.className='avail-badge out';input.value=0;}else if(avail<=3){badge.textContent=avail+' left!';badge.className='avail-badge low';}else{badge.textContent=avail+' available';badge.className='avail-badge ok';}if(parseInt(input.value)>avail){input.value=avail;}});updateTotals();}).catch(()=>{document.getElementById('avail_note').textContent='Could not check availability - please proceed.';});}
 let distTimer;
 function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';}).catch(()=>{});}},800);}
-document.getElementById('bookingForm').addEventListener('submit',function(){const btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent='Submitting...';});
+// ── Date validation ───────────────────────────────────────────────────────
 const today=new Date().toISOString().split('T')[0];
-document.getElementById('event_start_date').min=today;
-document.getElementById('event_end_date').min=today;
+const startDateEl = document.getElementById('event_start_date');
+const endDateEl   = document.getElementById('event_end_date');
+const startTimeEl = document.querySelector('[name="event_start_time"]');
+const endTimeEl   = document.querySelector('[name="event_end_time"]');
+const setupTimeEl = document.querySelector('[name="setup_time"]');
+
+startDateEl.min = today;
+endDateEl.min   = today;
+
+// When start date changes, end date must be >= start date
+startDateEl.addEventListener('change', function() {
+  endDateEl.min = this.value;
+  if (endDateEl.value && endDateEl.value < this.value) {
+    endDateEl.value = this.value;
+  }
+  onDateChange();
+});
+
+endDateEl.addEventListener('change', function() {
+  if (this.value < startDateEl.value) {
+    this.value = startDateEl.value;
+    showTimeError('End date cannot be before start date.');
+  }
+  onDateChange();
+});
+
+// When start time changes, end time must be after it; setup time must be before it
+startTimeEl.addEventListener('change', function() {
+  if (endTimeEl.value && endTimeEl.value <= this.value) {
+    endTimeEl.value = '';
+    showTimeError('Event end time must be after start time.');
+  }
+  if (setupTimeEl.value && setupTimeEl.value >= this.value) {
+    setupTimeEl.value = '';
+    showTimeError('Setup time must be before event start time.');
+  }
+});
+
+endTimeEl.addEventListener('change', function() {
+  if (startTimeEl.value && this.value <= startTimeEl.value) {
+    this.value = '';
+    showTimeError('Event end time must be after the start time.');
+  }
+});
+
+setupTimeEl.addEventListener('change', function() {
+  if (startTimeEl.value && this.value >= startTimeEl.value) {
+    this.value = '';
+    showTimeError('Setup time must be before the event start time.');
+  }
+});
+
+function showTimeError(msg) {
+  let el = document.getElementById('time_error');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'time_error';
+    el.style.cssText = 'background:#fff5f5;border:1px solid #feb2b2;color:#c53030;padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem';
+    document.getElementById('submitBtn').before(el);
+  }
+  el.textContent = msg;
+  setTimeout(() => { if (el) el.textContent = ''; }, 4000);
+}
+
+// ── Form submit validation ────────────────────────────────────────────────
+document.getElementById('bookingForm').addEventListener('submit', function(e) {
+  const errors = [];
+  const sd = startDateEl.value, ed = endDateEl.value;
+  const st = startTimeEl.value, et = endTimeEl.value, sut = setupTimeEl.value;
+
+  if (sd && ed && ed < sd)   errors.push('End date cannot be before start date.');
+  if (st && et && et <= st)  errors.push('Event end time must be after the start time.');
+  if (sut && st && sut >= st) errors.push('Setup time must be before the event start time.');
+
+  if (errors.length) {
+    e.preventDefault();
+    showTimeError(errors.join(' '));
+    return;
+  }
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+});
 </script>
 </body></html>
 """
