@@ -79,6 +79,7 @@ ADMIN_PASSWORD     = os.getenv("ADMIN_PASSWORD",     "admin123")
 STRIPE_SECRET_KEY     = os.getenv("STRIPE_SECRET_KEY",     "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 BASE_URL              = os.getenv("BASE_URL", "").rstrip("/")
+CRON_SECRET           = os.getenv("CRON_SECRET", "")
 
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
@@ -156,6 +157,8 @@ def init_db():
         migrations = [
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_payment_link TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_session_id TEXT",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_payment_link TEXT",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_reminder_sent BOOLEAN DEFAULT FALSE",
         ]
         for m in migrations:
             try:
@@ -693,6 +696,149 @@ def send_denied_email(b):
   </div>
 </div></body></html>"""
     plain = f"Hi {first},\n\nThank you for your interest in {BUSINESS_NAME}. Unfortunately, we are unable to accommodate your rental request for {b.get('event_start_date')} at this time.\n\nWe hope to serve you in the future.{f' Please call {BUSINESS_PHONE} if you have questions.' if BUSINESS_PHONE else ''}\n\n— {BUSINESS_NAME}"
+    _send_email(email, subject, html, plain)
+
+
+def send_final_payment_email(b, remaining_amount, payment_link):
+    """Send final payment reminder 48 hours before event with Stripe link for remaining balance."""
+    email = b.get("email")
+    first = b.get("full_name", "").split()[0]
+    if not email:
+        return
+
+    items = json.loads(b.get("items_json") or "[]")
+    exact = b.get("exact_time_delivery", False)
+    grand_total    = float(b.get("grand_total") or 0)
+    deposit_paid   = round(grand_total - remaining_amount, 2)
+    event_addr     = f"{b.get('event_street','')}, {b.get('event_city','')}, {b.get('event_state','')} {b.get('event_zip','')}"
+    event_date     = str(b.get("event_start_date", ""))
+    event_time     = str(b.get("event_start_time", ""))
+    setup_time     = str(b.get("setup_time", ""))
+
+    item_rows = ""
+    for it in items:
+        item_rows += f"""
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">{it['name']}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center">{it['qty']}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${it['unit_price']:.2f}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${it['total']:.2f}</td>
+        </tr>"""
+
+    pay_btn = f"""
+      <a href="{payment_link}"
+         style="display:inline-block;background:linear-gradient(135deg,#c05621,#dd6b20);color:white;padding:1.1rem 2.75rem;border-radius:10px;font-weight:700;font-size:1.15rem;text-decoration:none;letter-spacing:.3px;box-shadow:0 4px 12px rgba(192,86,33,.35)">
+        Pay Remaining Balance ${remaining_amount:.2f}
+      </a>
+      <p style="margin:.6rem 0 0;font-size:.82rem;color:#718096">Secure payment powered by Stripe</p>""" if payment_link else f"""
+      <p style="font-weight:700;color:#c05621">Remaining Balance Due: ${remaining_amount:.2f}</p>
+      <p style="color:#744210;font-size:.9rem">Please contact us to complete your payment.{f" Call {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}</p>"""
+
+    subject = f"Final Payment Due — Your Event is in 2 Days! | {BUSINESS_NAME}"
+    html = f"""
+<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:640px;margin:0 auto">
+
+  <div style="background:linear-gradient(135deg,#c05621,#dd6b20);border-radius:12px 12px 0 0;padding:1.75rem 2rem;color:white;text-align:center">
+    <div style="font-size:2rem;margin-bottom:.4rem">&#8987; Your Event is in 2 Days!</div>
+    <h2 style="margin:0;font-weight:700;font-size:1.2rem">Final Payment Due — {BUSINESS_NAME}</h2>
+    <p style="margin:.5rem 0 0;opacity:.88;font-size:.95rem">Booking #{b.get('id')} &bull; {event_date}</p>
+  </div>
+
+  <div style="background:white;padding:2rem;border-radius:0 0 12px 12px;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+
+    <p style="color:#2d3748;font-size:1.05rem;margin-bottom:.75rem">Hi <strong>{first}</strong>,</p>
+    <p style="color:#4a5568;line-height:1.7;margin-bottom:1.25rem">
+      This is your final payment reminder. Your event is <strong>2 days away</strong> and your remaining balance
+      is due now to ensure everything is ready for delivery.
+    </p>
+
+    <!-- Event Summary -->
+    <div style="background:#fff8f3;border:1.5px solid #fbd38d;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem;font-size:.9rem;color:#2d3748">
+      <div style="margin-bottom:.3rem"><strong>&#128197; Event Date:</strong> {event_date}</div>
+      <div style="margin-bottom:.3rem"><strong>&#8986; Event Start Time:</strong> {event_time}</div>
+      <div style="margin-bottom:.3rem"><strong>&#128337; Setup Time:</strong> {setup_time}</div>
+      <div style="margin-bottom:.3rem"><strong>&#128205; Location:</strong> {event_addr}</div>
+      <div><strong>&#128666; Deliver to:</strong> {b.get('delivery_location','')}</div>
+    </div>
+
+    <!-- Invoice summary -->
+    <h3 style="color:#1a365d;font-size:.95rem;font-weight:700;margin:0 0 .75rem;text-transform:uppercase;letter-spacing:.5px">Your Order</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-bottom:1.5rem">
+      <thead>
+        <tr style="background:#ebf4ff">
+          <th style="padding:9px 12px;text-align:left;color:#2b6cb0;font-size:.78rem;text-transform:uppercase">Item</th>
+          <th style="padding:9px 12px;text-align:center;color:#2b6cb0;font-size:.78rem;text-transform:uppercase">Qty</th>
+          <th style="padding:9px 12px;text-align:right;color:#2b6cb0;font-size:.78rem;text-transform:uppercase">Unit</th>
+          <th style="padding:9px 12px;text-align:right;color:#2b6cb0;font-size:.78rem;text-transform:uppercase">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {item_rows}
+        {"<tr><td colspan='3' style='padding:8px 12px;border-bottom:1px solid #e2e8f0'>Exact Time Delivery</td><td style='padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0'>$175.00</td></tr>" if exact else ""}
+        <tr>
+          <td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096">Delivery Fee</td>
+          <td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0">${b.get('delivery_fee',0):.2f}</td>
+        </tr>
+        <tr style="background:#f7fafc">
+          <td colspan="3" style="padding:9px 12px;border-bottom:1px solid #e2e8f0;color:#718096">Total Invoice</td>
+          <td style="padding:9px 12px;text-align:right;border-bottom:1px solid #e2e8f0">${grand_total:.2f}</td>
+        </tr>
+        <tr style="background:#f7fafc">
+          <td colspan="3" style="padding:9px 12px;border-bottom:1px solid #e2e8f0;color:#718096">Deposit Paid</td>
+          <td style="padding:9px 12px;text-align:right;color:#276749;font-weight:600;border-bottom:1px solid #e2e8f0">- ${deposit_paid:.2f}</td>
+        </tr>
+        <tr style="background:#1a365d;color:white">
+          <td colspan="3" style="padding:11px 12px;font-weight:700;font-size:1rem">REMAINING BALANCE DUE</td>
+          <td style="padding:11px 12px;text-align:right;font-weight:700;font-size:1.2rem">${remaining_amount:.2f}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Payment section -->
+    <div style="background:#fff8f3;border:2px solid #dd6b20;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;text-align:center">
+      <p style="font-size:.82rem;color:#c05621;margin:0 0 .3rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Final Payment Due Now</p>
+      <p style="font-size:2.75rem;font-weight:800;color:#c05621;margin:.2rem 0 .8rem;line-height:1">${remaining_amount:.2f}</p>
+      {pay_btn}
+    </div>
+
+    <!-- Urgency note -->
+    <div style="background:#fff5f5;border-left:4px solid #e53e3e;padding:1rem 1.25rem;border-radius:0 8px 8px 0;margin-bottom:1.5rem;font-size:.88rem;color:#742a2a">
+      <strong>Important:</strong> Failure to make final payment may result in your order being considered canceled.
+      Please complete payment as soon as possible to guarantee your delivery.
+    </div>
+
+    <p style="color:#4a5568;line-height:1.7;font-size:.9rem">
+      If you have any questions or need assistance, please don't hesitate to reach out.
+      {f"You can call us at <strong>{BUSINESS_PHONE}</strong>." if BUSINESS_PHONE else ""}
+      We look forward to making your event a success!
+    </p>
+
+    <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">&mdash; The {BUSINESS_NAME} Team</p>
+  </div>
+</div></body></html>"""
+
+    plain = f"""Hi {first},
+
+YOUR EVENT IS IN 2 DAYS — FINAL PAYMENT REQUIRED
+
+Booking #{b.get('id')} | {event_date}
+Location: {event_addr}
+Event Time: {event_time} | Setup Time: {setup_time}
+
+PAYMENT SUMMARY
+  Total Invoice:    ${grand_total:.2f}
+  Deposit Paid:   - ${deposit_paid:.2f}
+  ──────────────────────────
+  REMAINING DUE:   ${remaining_amount:.2f}
+
+PAY NOW: {payment_link if payment_link else 'Contact us to complete payment.'}
+
+Failure to make final payment may result in your order being canceled.
+{f"Questions? Call {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}
+
+— {BUSINESS_NAME}"""
+
     _send_email(email, subject, html, plain)
 
 
@@ -1235,6 +1381,7 @@ ADMIN_BOOKING_HTML = """
     .btn-deny{background:#e53e3e;color:white}
     .btn-confirm{background:#3182ce;color:white}
     .btn-cancel{background:#718096;color:white}
+    .btn-reminder{background:linear-gradient(135deg,#c05621,#dd6b20);color:white}
     .payment-link-box{background:#f0fff4;border:2px solid #38a169;border-radius:10px;padding:1.1rem 1.25rem;margin-bottom:1rem}
     .alert{background:#fffaf0;border-left:4px solid #ed8936;padding:.85rem 1rem;border-radius:0 8px 8px 0;font-size:.9rem;margin-bottom:1rem}
     a{color:#2b6cb0}
@@ -1347,7 +1494,21 @@ ADMIN_BOOKING_HTML = """
       <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel Booking</button>
     </form>
     {% endif %}
+    {% if b.status == 'confirmed' %}
+    <form method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
+      <button class="btn btn-reminder" onclick="return confirm('Send final payment reminder to {{ b.email }}? This will create a new Stripe link for the remaining 75% balance.')">
+        Send Final Payment Reminder
+      </button>
+    </form>
+    {% endif %}
   </div>
+
+  {% if b.final_payment_link %}
+  <div style="background:#fff8f3;border:2px solid #dd6b20;border-radius:10px;padding:1.1rem 1.25rem;margin-top:1rem">
+    <div style="font-weight:700;color:#c05621;margin-bottom:.4rem">Final Payment Link Sent</div>
+    <a href="{{ b.final_payment_link }}" target="_blank" style="font-size:.85rem;word-break:break-all">{{ b.final_payment_link }}</a>
+  </div>
+  {% endif %}
 </div>
 </body></html>
 """
@@ -1832,6 +1993,141 @@ def stripe_webhook():
                         log.error(f"Webhook DB error: {e}")
 
     return jsonify({"status": "received"}), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROUTES — FINAL PAYMENT REMINDER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/admin/booking/<int:booking_id>/send-final-reminder", methods=["POST"])
+@admin_required
+def send_final_reminder(booking_id):
+    """Manually send final payment reminder from the admin panel."""
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+
+    b = None
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            b = dict(row)
+    except Exception as e:
+        log.error(f"Final reminder fetch error: {e}")
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+
+    if not b:
+        return "Booking not found", 404
+
+    grand_total     = float(b.get("grand_total") or 0)
+    remaining       = round(grand_total * 0.75, 2)
+    items_list      = ", ".join(f"{i['qty']}x {i['name']}" for i in json.loads(b.get("items_json") or "[]"))
+    product_name    = f"Final Payment — Booking #{booking_id}"
+
+    payment_link, err = create_stripe_payment_link(
+        booking_id, remaining, b.get("email"), items_list, product_name
+    )
+    if err:
+        log.warning(f"Stripe error for final payment #{booking_id}: {err}")
+
+    # Save final payment link to DB
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE bookings SET final_payment_link=%s, final_reminder_sent=TRUE WHERE id=%s",
+                (payment_link, booking_id)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"Final reminder DB error: {e}")
+
+    b["final_payment_link"] = payment_link
+    send_final_payment_email(b, remaining, payment_link)
+    log.info(f"Final payment reminder sent for booking #{booking_id}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/cron/final-reminders")
+def cron_final_reminders():
+    """
+    Called daily by an external cron (e.g. cron-job.org).
+    Finds all confirmed bookings whose event is exactly 2 days away
+    and sends them a final payment reminder if not already sent.
+
+    Secure with CRON_SECRET: call as /cron/final-reminders?secret=YOUR_SECRET
+    """
+    if CRON_SECRET and request.args.get("secret") != CRON_SECRET:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from datetime import timedelta
+    target_date = (date.today() + timedelta(days=2)).isoformat()
+    conn = get_db()
+    if not conn:
+        return jsonify({"error": "DB unavailable"}), 500
+
+    sent = []
+    errors = []
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("""
+            SELECT * FROM bookings
+            WHERE status = 'confirmed'
+              AND event_start_date = %s
+              AND (final_reminder_sent IS NULL OR final_reminder_sent = FALSE)
+        """, (target_date,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        for row in rows:
+            b = dict(row)
+            booking_id   = b["id"]
+            grand_total  = float(b.get("grand_total") or 0)
+            remaining    = round(grand_total * 0.75, 2)
+            items_list   = ", ".join(f"{i['qty']}x {i['name']}" for i in json.loads(b.get("items_json") or "[]"))
+            product_name = f"Final Payment — Booking #{booking_id}"
+
+            payment_link, err = create_stripe_payment_link(
+                booking_id, remaining, b.get("email"), items_list, product_name
+            )
+
+            # Save link + mark reminder sent
+            conn2 = get_db()
+            if conn2:
+                try:
+                    cur2 = conn2.cursor()
+                    cur2.execute(
+                        "UPDATE bookings SET final_payment_link=%s, final_reminder_sent=TRUE WHERE id=%s",
+                        (payment_link, booking_id)
+                    )
+                    conn2.commit()
+                    cur2.close()
+                    conn2.close()
+                except Exception as e:
+                    log.error(f"Cron DB update error #{booking_id}: {e}")
+
+            b["final_payment_link"] = payment_link
+            send_final_payment_email(b, remaining, payment_link)
+            sent.append(booking_id)
+            log.info(f"Auto final reminder sent for booking #{booking_id}")
+
+    except Exception as e:
+        log.error(f"Cron error: {e}")
+        errors.append(str(e))
+
+    return jsonify({
+        "date_checked": target_date,
+        "reminders_sent": sent,
+        "errors": errors,
+    }), 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════
