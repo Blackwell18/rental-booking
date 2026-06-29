@@ -166,6 +166,23 @@ def init_db():
             except Exception as me:
                 log.warning(f"Migration warning: {me}")
 
+        # Create customers table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS customers (
+                id           SERIAL PRIMARY KEY,
+                created_at   TIMESTAMPTZ DEFAULT NOW(),
+                full_name    VARCHAR(255) NOT NULL,
+                company_name VARCHAR(255),
+                email        VARCHAR(255),
+                phone        VARCHAR(50),
+                street       VARCHAR(255),
+                city         VARCHAR(100),
+                state        VARCHAR(50),
+                zip          VARCHAR(20),
+                notes        TEXT
+            )
+        """)
+
         # Create inventory table
         cur.execute("""
             CREATE TABLE IF NOT EXISTS inventory (
@@ -1363,6 +1380,7 @@ ADMIN_DASH_HTML = """
   <div style="display:flex;align-items:center;gap:.5rem">
     <a href="/admin/dashboard" style="color:#2563eb;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .75rem;border-radius:6px;background:#eff6ff">Dashboard</a>
     <a href="/admin/inventory" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Inventory</a>
+    <a href="/admin/customers" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Customers</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -1895,6 +1913,7 @@ ADMIN_INVENTORY_HTML = """
   <div class="topbar-nav">
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link active">Inventory</a>
+    <a href="/admin/customers" class="nav-link">Customers</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -2361,6 +2380,351 @@ def send_final_reminder(booking_id):
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
+ADMIN_CUSTOMERS_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Customers — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar-brand{font-size:1rem;font-weight:700;color:#111827}
+    .topbar-nav{display:flex;gap:.5rem;align-items:center}
+    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s}
+    .nav-link:hover{background:#f3f4f6;color:#111827}
+    .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none}
+    .main{max-width:1100px;margin:0 auto;padding:1.75rem}
+    .top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem}
+    .page-title{font-size:1.4rem;font-weight:700;color:#111827}
+    .flash{padding:.75rem 1rem;border-radius:8px;margin-bottom:1.25rem;font-size:.9rem;font-weight:500}
+    .flash-ok{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+    .flash-err{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+
+    /* Add form panel */
+    .add-panel{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;display:none}
+    .add-panel.open{display:block}
+    .add-panel h3{font-size:.95rem;font-weight:700;color:#374151;margin-bottom:1rem}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+    .form-grid.three{grid-template-columns:1fr 1fr 1fr}
+    .form-group{display:flex;flex-direction:column;gap:.3rem}
+    .form-group label{font-size:.75rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.4px}
+    .form-group input,.form-group textarea{padding:.45rem .65rem;border:1px solid #d1d5db;border-radius:6px;font-size:.86rem;color:#111827;font-family:inherit}
+    .form-group input:focus,.form-group textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+    .form-group textarea{resize:vertical;min-height:60px}
+    .form-actions{display:flex;gap:.6rem;justify-content:flex-end;margin-top:.75rem}
+
+    /* Table */
+    .card{background:white;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+    .card-header{padding:.85rem 1.25rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+    .card-title{font-weight:700;font-size:.88rem;color:#374151}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:#f9fafb}
+    th{padding:.65rem 1rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e5e7eb}
+    td{padding:.85rem 1rem;border-bottom:1px solid #f3f4f6;vertical-align:middle;font-size:.86rem}
+    tr:last-child td{border-bottom:none}
+    tbody tr:hover td{background:#fafafa}
+    .avatar{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;color:white;flex-shrink:0}
+    .client-cell{display:flex;align-items:center;gap:.65rem}
+    .client-name{font-weight:600;color:#111827}
+    .client-company{font-size:.78rem;color:#9ca3af}
+    .btn{display:inline-block;padding:.32rem .7rem;border-radius:6px;font-size:.78rem;font-weight:600;cursor:pointer;border:1px solid transparent;text-decoration:none;line-height:1.5;transition:all .12s}
+    .btn-primary{background:#2563eb;color:white;border:none}
+    .btn-primary:hover{background:#1d4ed8}
+    .btn-outline{background:white;color:#374151;border-color:#d1d5db}
+    .btn-outline:hover{background:#f3f4f6}
+    .btn-edit{background:#eff6ff;color:#2563eb;border-color:#bfdbfe}
+    .btn-edit:hover{background:#dbeafe}
+    .btn-danger{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+    .btn-danger:hover{background:#fee2e2}
+    .action-btns{display:flex;gap:.4rem}
+    .empty-state{padding:3rem;text-align:center;color:#9ca3af}
+    .search-box{padding:.45rem .75rem;border:1px solid #d1d5db;border-radius:7px;font-size:.86rem;width:220px}
+    .search-box:focus{outline:none;border-color:#2563eb}
+    @media(max-width:700px){.form-grid,.form-grid.three{grid-template-columns:1fr}.main{padding:1rem}}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-nav">
+    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+    <a href="/admin/inventory" class="nav-link">Inventory</a>
+    <a href="/admin/customers" class="nav-link active">Customers</a>
+    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+  </div>
+</div>
+<div class="main">
+  <div class="top-row">
+    <div class="page-title">Customers</div>
+    <button class="btn btn-primary" onclick="toggleAdd()">+ Add Customer</button>
+  </div>
+
+  {% if flash_ok %}<div class="flash flash-ok">✓ {{ flash_ok }}</div>{% endif %}
+  {% if flash_err %}<div class="flash flash-err">⚠ {{ flash_err }}</div>{% endif %}
+
+  <!-- Add Customer Panel -->
+  <div class="add-panel" id="addPanel">
+    <h3>New Customer</h3>
+    <form method="POST" action="/admin/customers/add">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" name="full_name" required>
+        </div>
+        <div class="form-group">
+          <label>Company Name</label>
+          <input type="text" name="company_name">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email">
+        </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="tel" name="phone">
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:.75rem">
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Street Address</label>
+          <input type="text" name="street">
+        </div>
+        <div class="form-group">
+          <label>City</label>
+          <input type="text" name="city">
+        </div>
+        <div class="form-group three">
+          <label>State</label>
+          <input type="text" name="state" maxlength="2">
+        </div>
+        <div class="form-group three">
+          <label>Zip</label>
+          <input type="text" name="zip" maxlength="10">
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:.75rem">
+        <label>Notes</label>
+        <textarea name="notes" placeholder="Any notes about this customer..."></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="toggleAdd()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Customer</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Customer List -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">All Customers ({{ customers|length }})</span>
+      <input class="search-box" type="text" id="searchBox" placeholder="Search name or email..." onkeyup="filterCustomers()">
+    </div>
+    {% if customers %}
+    <table id="customerTable">
+      <thead>
+        <tr>
+          <th>Customer</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th>Location</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set avatar_colors = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16'] %}
+        {% for c in customers %}
+        {% set color = avatar_colors[loop.index0 % 10] %}
+        <tr class="cust-row">
+          <td>
+            <div class="client-cell">
+              <div class="avatar" style="background:{{ color }}">{{ (c.full_name or '?')[0]|upper }}</div>
+              <div>
+                <div class="client-name cust-name">{{ c.full_name }}</div>
+                {% if c.company_name %}<div class="client-company">{{ c.company_name }}</div>{% endif %}
+              </div>
+            </div>
+          </td>
+          <td class="cust-email"><a href="mailto:{{ c.email }}" style="color:#2563eb;text-decoration:none">{{ c.email or '—' }}</a></td>
+          <td><a href="tel:{{ c.phone }}" style="color:#374151;text-decoration:none">{{ c.phone or '—' }}</a></td>
+          <td style="color:#6b7280;font-size:.82rem">
+            {% if c.city %}{{ c.city }}{% if c.state %}, {{ c.state }}{% endif %}{% else %}—{% endif %}
+          </td>
+          <td>
+            <div class="action-btns">
+              <a href="/admin/customers/{{ c.id }}/edit" class="btn btn-edit">Edit</a>
+              <form method="POST" action="/admin/customers/{{ c.id }}/delete" style="display:inline">
+                <button class="btn btn-danger" onclick="return confirm('Remove {{ c.full_name }}?')">Remove</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">No customers yet. Click "+ Add Customer" to get started.</div>
+    {% endif %}
+  </div>
+</div>
+<script>
+function toggleAdd(){
+  var p=document.getElementById('addPanel');
+  p.classList.toggle('open');
+  if(p.classList.contains('open')) p.querySelector('input').focus();
+}
+function filterCustomers(){
+  var q=document.getElementById('searchBox').value.toLowerCase();
+  document.querySelectorAll('.cust-row').forEach(function(row){
+    var name=row.querySelector('.cust-name').textContent.toLowerCase();
+    var email=row.querySelector('.cust-email').textContent.toLowerCase();
+    row.style.display=(name.includes(q)||email.includes(q))?'':'none';
+  });
+}
+</script>
+</body></html>
+"""
+
+ADMIN_CUSTOMER_EDIT_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Edit Customer — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar-brand{font-size:1rem;font-weight:700;color:#111827}
+    .topbar-nav{display:flex;gap:.5rem;align-items:center}
+    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px}
+    .nav-link:hover{background:#f3f4f6;color:#111827}
+    .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none}
+    .main{max-width:700px;margin:0 auto;padding:1.75rem}
+    .breadcrumb{font-size:.82rem;color:#9ca3af;margin-bottom:1rem}
+    .breadcrumb a{color:#2563eb;text-decoration:none}
+    .page-title{font-size:1.3rem;font-weight:700;color:#111827;margin-bottom:1.5rem}
+    .card{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1.5rem;margin-bottom:1.25rem}
+    .card h3{font-size:.88rem;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.4px;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #f3f4f6}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+    .form-group{display:flex;flex-direction:column;gap:.3rem}
+    .form-group label{font-size:.75rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.4px}
+    .form-group input,.form-group textarea{padding:.45rem .65rem;border:1px solid #d1d5db;border-radius:6px;font-size:.86rem;color:#111827;font-family:inherit}
+    .form-group input:focus,.form-group textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+    .form-group textarea{resize:vertical;min-height:70px}
+    .form-actions{display:flex;gap:.75rem;margin-top:1.25rem}
+    .btn{display:inline-block;padding:.5rem 1.1rem;border-radius:7px;font-size:.86rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:all .12s}
+    .btn-primary{background:#2563eb;color:white}
+    .btn-primary:hover{background:#1d4ed8}
+    .btn-outline{background:white;color:#374151;border:1px solid #d1d5db}
+    .btn-outline:hover{background:#f3f4f6}
+    .btn-danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+    .span2{grid-column:1/-1}
+    /* Recent bookings mini-table */
+    .bookings-mini{width:100%;border-collapse:collapse;font-size:.84rem}
+    .bookings-mini th{padding:.5rem .75rem;text-align:left;color:#9ca3af;font-size:.72rem;font-weight:600;text-transform:uppercase;border-bottom:1px solid #e5e7eb}
+    .bookings-mini td{padding:.6rem .75rem;border-bottom:1px solid #f3f4f6;color:#374151}
+    .bookings-mini tr:last-child td{border-bottom:none}
+    .badge{display:inline-flex;padding:.2rem .55rem;border-radius:20px;font-size:.72rem;font-weight:600}
+    .badge-pending{background:#fef9c3;color:#854d0e}
+    .badge-accepted{background:#dbeafe;color:#1e40af}
+    .badge-confirmed{background:#dcfce7;color:#166534}
+    .badge-denied{background:#fee2e2;color:#991b1b}
+    .badge-cancelled{background:#f3f4f6;color:#6b7280}
+    @media(max-width:600px){.form-grid{grid-template-columns:1fr}.main{padding:1rem}}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-nav">
+    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+    <a href="/admin/inventory" class="nav-link">Inventory</a>
+    <a href="/admin/customers" class="nav-link active">Customers</a>
+    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+  </div>
+</div>
+<div class="main">
+  <div class="breadcrumb"><a href="/admin/customers">Customers</a> › Edit</div>
+  <div class="page-title">{{ c.full_name }}</div>
+
+  <div class="card">
+    <h3>Contact Information</h3>
+    <form method="POST" action="/admin/customers/{{ c.id }}/save">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" name="full_name" value="{{ c.full_name or '' }}" required>
+        </div>
+        <div class="form-group">
+          <label>Company Name</label>
+          <input type="text" name="company_name" value="{{ c.company_name or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" value="{{ c.email or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="tel" name="phone" value="{{ c.phone or '' }}">
+        </div>
+        <div class="form-group span2">
+          <label>Street Address</label>
+          <input type="text" name="street" value="{{ c.street or '' }}">
+        </div>
+        <div class="form-group">
+          <label>City</label>
+          <input type="text" name="city" value="{{ c.city or '' }}">
+        </div>
+        <div class="form-group">
+          <label>State</label>
+          <input type="text" name="state" value="{{ c.state or '' }}" maxlength="2">
+        </div>
+        <div class="form-group">
+          <label>Zip</label>
+          <input type="text" name="zip" value="{{ c.zip or '' }}" maxlength="10">
+        </div>
+        <div class="form-group span2">
+          <label>Notes</label>
+          <textarea name="notes">{{ c.notes or '' }}</textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <a href="/admin/customers" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <form method="POST" action="/admin/customers/{{ c.id }}/delete" style="display:inline;margin:0">
+          <button class="btn btn-danger" onclick="return confirm('Permanently remove {{ c.full_name }}?')">Remove Customer</button>
+        </form>
+      </div>
+    </form>
+  </div>
+
+  {% if bookings %}
+  <div class="card">
+    <h3>Booking History ({{ bookings|length }})</h3>
+    <table class="bookings-mini">
+      <thead><tr><th>#</th><th>Event Date</th><th>Total</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for b in bookings %}
+        <tr>
+          <td><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;font-weight:600">#{{ b.id }}</a></td>
+          <td>{{ b.event_start_date }}</td>
+          <td>${{ "%.2f"|format(b.grand_total or 0) }}</td>
+          <td><span class="badge badge-{{ b.status }}">{{ b.status|capitalize }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+</body></html>
+"""
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  ROUTES — INVENTORY MANAGEMENT
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2471,6 +2835,158 @@ def admin_inventory_delete(item_id):
     except Exception as e:
         log.error(f"Inventory delete error: {e}")
         return redirect(url_for("admin_inventory", err=f"Delete failed: {e}"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROUTES — CUSTOMER MANAGEMENT
+# ══════════════════════════════════════════════════════════════════════════════
+
+_CUST_AVATAR_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6',
+                       '#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16']
+
+@app.route("/admin/customers")
+@admin_required
+def admin_customers():
+    customers = []
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM customers ORDER BY full_name")
+            customers = [dict(r) for r in cur.fetchall()]
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"Customers list error: {e}")
+    return render_template_string(ADMIN_CUSTOMERS_HTML,
+        business_name=BUSINESS_NAME, customers=customers,
+        flash_ok=request.args.get("ok", ""),
+        flash_err=request.args.get("err", ""))
+
+
+@app.route("/admin/customers/add", methods=["POST"])
+@admin_required
+def admin_customers_add():
+    f = request.form
+    full_name = f.get("full_name", "").strip()
+    if not full_name:
+        return redirect(url_for("admin_customers", err="Full name is required"))
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_customers", err="Database unavailable"))
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            full_name,
+            f.get("company_name", "").strip() or None,
+            f.get("email", "").strip() or None,
+            f.get("phone", "").strip() or None,
+            f.get("street", "").strip() or None,
+            f.get("city", "").strip() or None,
+            f.get("state", "").strip() or None,
+            f.get("zip", "").strip() or None,
+            f.get("notes", "").strip() or None,
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info(f"Customer added: {full_name}")
+        return redirect(url_for("admin_customers", ok=f'"{full_name}" added!'))
+    except Exception as e:
+        log.error(f"Customer add error: {e}")
+        return redirect(url_for("admin_customers", err=f"Add failed: {e}"))
+
+
+@app.route("/admin/customers/<int:customer_id>/edit")
+@admin_required
+def admin_customer_edit(customer_id):
+    conn = get_db()
+    c, bookings = None, []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM customers WHERE id=%s", (customer_id,))
+            row = cur.fetchone()
+            if row:
+                c = dict(row)
+                # Load bookings by matching email
+                if c.get("email"):
+                    cur.execute(
+                        "SELECT id, event_start_date, grand_total, status FROM bookings WHERE email=%s ORDER BY event_start_date DESC",
+                        (c["email"],)
+                    )
+                    bookings = [dict(r) for r in cur.fetchall()]
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"Customer edit fetch error: {e}")
+    if not c:
+        return redirect(url_for("admin_customers", err="Customer not found"))
+    return render_template_string(ADMIN_CUSTOMER_EDIT_HTML,
+        business_name=BUSINESS_NAME, c=c, bookings=bookings)
+
+
+@app.route("/admin/customers/<int:customer_id>/save", methods=["POST"])
+@admin_required
+def admin_customer_save(customer_id):
+    f = request.form
+    full_name = f.get("full_name", "").strip()
+    if not full_name:
+        return redirect(url_for("admin_customer_edit", customer_id=customer_id))
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_customers", err="Database unavailable"))
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE customers SET full_name=%s, company_name=%s, email=%s, phone=%s,
+                street=%s, city=%s, state=%s, zip=%s, notes=%s
+            WHERE id=%s
+        """, (
+            full_name,
+            f.get("company_name", "").strip() or None,
+            f.get("email", "").strip() or None,
+            f.get("phone", "").strip() or None,
+            f.get("street", "").strip() or None,
+            f.get("city", "").strip() or None,
+            f.get("state", "").strip() or None,
+            f.get("zip", "").strip() or None,
+            f.get("notes", "").strip() or None,
+            customer_id,
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info(f"Customer #{customer_id} updated")
+        return redirect(url_for("admin_customers", ok=f'"{full_name}" updated!'))
+    except Exception as e:
+        log.error(f"Customer save error: {e}")
+        return redirect(url_for("admin_customers", err=f"Save failed: {e}"))
+
+
+@app.route("/admin/customers/<int:customer_id>/delete", methods=["POST"])
+@admin_required
+def admin_customer_delete(customer_id):
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_customers", err="Database unavailable"))
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT full_name FROM customers WHERE id=%s", (customer_id,))
+        row = cur.fetchone()
+        name = row[0] if row else "Customer"
+        cur.execute("DELETE FROM customers WHERE id=%s", (customer_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info(f"Customer #{customer_id} deleted")
+        return redirect(url_for("admin_customers", ok=f'"{name}" removed.'))
+    except Exception as e:
+        log.error(f"Customer delete error: {e}")
+        return redirect(url_for("admin_customers", err=f"Delete failed: {e}"))
 
 
 @app.route("/cron/final-reminders")
