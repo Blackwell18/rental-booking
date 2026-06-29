@@ -159,6 +159,7 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_session_id TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_payment_link TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_reminder_sent BOOLEAN DEFAULT FALSE",
+            "CREATE UNIQUE INDEX IF NOT EXISTS customers_email_idx ON customers (email) WHERE email IS NOT NULL",
         ]
         for m in migrations:
             try:
@@ -1848,6 +1849,39 @@ def submit():
     }
     send_owner_email(booking_data)
     send_customer_email(booking_data)
+
+    # Upsert customer record — if email already exists update their info, else insert
+    cust_conn = get_db()
+    if cust_conn and email:
+        try:
+            cust_cur = cust_conn.cursor()
+            cust_cur.execute("""
+                INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (email) DO UPDATE SET
+                    full_name    = EXCLUDED.full_name,
+                    company_name = EXCLUDED.company_name,
+                    phone        = EXCLUDED.phone,
+                    street       = EXCLUDED.street,
+                    city         = EXCLUDED.city,
+                    state        = EXCLUDED.state,
+                    zip          = EXCLUDED.zip
+            """, (
+                full_name,
+                company_name or None,
+                email,
+                phone or None,
+                renter_street or None,
+                renter_city or None,
+                renter_state or None,
+                renter_zip or None,
+            ))
+            cust_conn.commit()
+            cust_cur.close()
+            cust_conn.close()
+            log.info(f"Customer record upserted for {email}")
+        except Exception as e:
+            log.error(f"Customer upsert error: {e}")
 
     return render_template_string(SUCCESS_HTML,
         business_name=BUSINESS_NAME,
