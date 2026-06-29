@@ -1360,7 +1360,11 @@ ADMIN_DASH_HTML = """
 
 <div class="topbar">
   <div class="topbar-brand"><span>🎉</span> {{ business_name }}</div>
-  <a href="/admin/logout" class="logout-btn">Sign Out</a>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    <a href="/admin/dashboard" style="color:#2563eb;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .75rem;border-radius:6px;background:#eff6ff">Dashboard</a>
+    <a href="/admin/inventory" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Inventory</a>
+    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+  </div>
 </div>
 
 <div class="main">
@@ -2355,6 +2359,118 @@ def send_final_reminder(booking_id):
     send_final_payment_email(b, remaining, payment_link)
     log.info(f"Final payment reminder sent for booking #{booking_id}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROUTES — INVENTORY MANAGEMENT
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/admin/inventory")
+@admin_required
+def admin_inventory():
+    products = get_products()
+    flash_ok  = request.args.get("ok",  "")
+    flash_err = request.args.get("err", "")
+    return render_template_string(ADMIN_INVENTORY_HTML,
+        business_name=BUSINESS_NAME, products=products,
+        flash_ok=flash_ok, flash_err=flash_err)
+
+
+@app.route("/admin/inventory/save", methods=["POST"])
+@admin_required
+def admin_inventory_save():
+    """Save all inventory edits submitted from the table form."""
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_inventory", err="Database unavailable"))
+    try:
+        count = int(request.form.get("count", 0))
+        cur = conn.cursor()
+        for i in range(count):
+            pid   = request.form.get(f"id_{i}",    "").strip()
+            name  = request.form.get(f"name_{i}",  "").strip()
+            price = request.form.get(f"price_{i}", "0").strip()
+            total = request.form.get(f"total_{i}", "0").strip()
+            if not pid or not name:
+                continue
+            cur.execute(
+                "UPDATE inventory SET name=%s, price=%s, total=%s WHERE id=%s",
+                (name, float(price), int(total), pid)
+            )
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info("Inventory updated via admin")
+        return redirect(url_for("admin_inventory", ok="Inventory saved successfully!"))
+    except Exception as e:
+        log.error(f"Inventory save error: {e}")
+        return redirect(url_for("admin_inventory", err=f"Save failed: {e}"))
+
+
+@app.route("/admin/inventory/add", methods=["POST"])
+@admin_required
+def admin_inventory_add():
+    """Add a new item to inventory."""
+    name  = request.form.get("name",  "").strip()
+    price = request.form.get("price", "0").strip()
+    total = request.form.get("total", "0").strip()
+    if not name:
+        return redirect(url_for("admin_inventory", err="Item name is required"))
+    # Generate a slug ID from the name
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")[:60]
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_inventory", err="Database unavailable"))
+    try:
+        cur = conn.cursor()
+        # Get next sort_order
+        cur.execute("SELECT COALESCE(MAX(sort_order),0)+1 FROM inventory")
+        next_order = cur.fetchone()[0]
+        # Ensure unique id
+        base_slug = slug
+        suffix = 1
+        while True:
+            cur.execute("SELECT 1 FROM inventory WHERE id=%s", (slug,))
+            if not cur.fetchone():
+                break
+            slug = f"{base_slug}_{suffix}"
+            suffix += 1
+        cur.execute(
+            "INSERT INTO inventory (id, name, price, total, sort_order) VALUES (%s, %s, %s, %s, %s)",
+            (slug, name, float(price), int(total), next_order)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info(f"New inventory item added: {name} (id={slug})")
+        return redirect(url_for("admin_inventory", ok=f'"{name}" added to inventory!'))
+    except Exception as e:
+        log.error(f"Inventory add error: {e}")
+        return redirect(url_for("admin_inventory", err=f"Add failed: {e}"))
+
+
+@app.route("/admin/inventory/delete/<item_id>", methods=["POST"])
+@admin_required
+def admin_inventory_delete(item_id):
+    """Remove an item from inventory."""
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_inventory", err="Database unavailable"))
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM inventory WHERE id=%s", (item_id,))
+        row = cur.fetchone()
+        name = row[0] if row else item_id
+        cur.execute("DELETE FROM inventory WHERE id=%s", (item_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info(f"Inventory item deleted: {item_id}")
+        return redirect(url_for("admin_inventory", ok=f'"{name}" removed from inventory.'))
+    except Exception as e:
+        log.error(f"Inventory delete error: {e}")
+        return redirect(url_for("admin_inventory", err=f"Delete failed: {e}"))
 
 
 @app.route("/cron/final-reminders")
