@@ -1217,127 +1217,236 @@ ADMIN_DASH_HTML = """
   <title>Admin — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
-    header{background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;padding:1.25rem 2rem;display:flex;justify-content:space-between;align-items:center}
-    header h1{font-size:1.3rem}
-    .logout{background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.4);padding:.4rem .9rem;border-radius:6px;cursor:pointer;font-size:.85rem;text-decoration:none}
-    .container{max-width:1100px;margin:0 auto;padding:1.5rem 1rem}
-    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem}
-    .stat{background:white;border-radius:10px;padding:1.1rem;box-shadow:0 2px 8px rgba(0,0,0,.07);text-align:center}
-    .stat-num{font-size:1.8rem;font-weight:700;color:#2b6cb0}
-    .stat-label{font-size:.75rem;color:#718096;text-transform:uppercase;letter-spacing:.5px;margin-top:.2rem}
-    .card{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);margin-bottom:1.5rem;overflow:hidden}
-    .card-header{padding:1rem 1.5rem;background:#ebf4ff;font-weight:700;color:#2b6cb0;font-size:.95rem;text-transform:uppercase;letter-spacing:.5px}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
+
+    /* Top bar */
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar-brand{font-size:1rem;font-weight:700;color:#111827;display:flex;align-items:center;gap:.5rem}
+    .topbar-brand span{font-size:1.25rem}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;text-decoration:none;transition:all .15s}
+    .logout-btn:hover{border-color:#9ca3af;color:#374151}
+
+    /* Layout */
+    .main{max-width:1280px;margin:0 auto;padding:1.75rem 1.75rem}
+    .page-title{font-size:1.4rem;font-weight:700;color:#111827;margin-bottom:1.25rem}
+
+    /* Metric cards */
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.75rem}
+    .metric{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1.25rem 1.5rem}
+    .metric-label{font-size:.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:.35rem;font-weight:600}
+    .metric-value{font-size:1.9rem;font-weight:700;color:#111827;line-height:1}
+
+    /* Inventory grid */
+    .section-title{font-size:.95rem;font-weight:700;color:#374151;margin:0 0 .75rem;text-transform:uppercase;letter-spacing:.4px}
+    .inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.75rem;margin-bottom:1.75rem}
+    .inv-card{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.1rem}
+    .inv-name{font-size:.85rem;font-weight:600;color:#111827;margin-bottom:.55rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .inv-meta{display:flex;justify-content:space-between;align-items:center;font-size:.75rem;margin-bottom:.45rem}
+    .inv-reserved{color:#6b7280}
+    .inv-avail-ok{color:#059669;font-weight:700}
+    .inv-avail-low{color:#d97706;font-weight:700}
+    .inv-avail-zero{color:#dc2626;font-weight:700}
+    .inv-bar{height:5px;border-radius:3px;background:#e5e7eb;overflow:hidden}
+    .inv-fill{height:100%;border-radius:3px}
+
+    /* Tabs + table card */
+    .tabs{display:flex;background:white;border:1px solid #e5e7eb;border-bottom:none;border-radius:10px 10px 0 0;overflow-x:auto}
+    .tab{padding:.7rem 1.1rem;font-size:.82rem;font-weight:500;color:#6b7280;text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap;flex-shrink:0;transition:all .12s}
+    .tab:hover{color:#111827;background:#f9fafb}
+    .tab.active{color:#2563eb;border-bottom-color:#2563eb;font-weight:600}
+    .table-card{background:white;border:1px solid #e5e7eb;border-radius:0 0 10px 10px;overflow:hidden}
+
+    /* Table */
     table{width:100%;border-collapse:collapse}
-    th{padding:10px 12px;text-align:left;font-size:.8rem;color:#718096;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #e2e8f0}
-    td{padding:10px 12px;border-bottom:1px solid #f0f4f8;font-size:.9rem;vertical-align:middle}
+    thead tr{background:#f9fafb}
+    th{padding:.7rem 1rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
+    td{padding:.85rem 1rem;border-bottom:1px solid #f3f4f6;vertical-align:middle;font-size:.86rem;color:#374151}
     tr:last-child td{border-bottom:none}
-    tr:hover td{background:#f7fafc}
-    .badge{display:inline-block;padding:.2rem .6rem;border-radius:20px;font-size:.75rem;font-weight:700;text-transform:uppercase}
-    .badge-pending{background:#fefcbf;color:#975a16}
-    .badge-accepted{background:#bee3f8;color:#2c5282}
-    .badge-confirmed{background:#c6f6d5;color:#276749}
-    .badge-denied{background:#fbd38d;color:#744210}
-    .badge-cancelled{background:#fed7d7;color:#9b2c2c}
-    .btn{display:inline-block;padding:.3rem .75rem;border-radius:6px;font-size:.8rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;line-height:1.5}
-    .btn-view{background:#ebf4ff;color:#2b6cb0}
-    .btn-accept{background:#c6f6d5;color:#276749}
-    .btn-deny{background:#fed7d7;color:#9b2c2c}
-    .btn-confirm{background:#bee3f8;color:#2c5282}
-    .btn-cancel{background:#e2e8f0;color:#4a5568}
-    .inv-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;padding:.75rem 1.5rem;border-bottom:1px solid #f0f4f8;align-items:center;font-size:.9rem}
-    .inv-row:last-child{border-bottom:none}
-    .inv-header{background:#ebf4ff;font-weight:700;font-size:.8rem;color:#2b6cb0;text-transform:uppercase}
-    .filter-bar{padding:.75rem 1.5rem;background:#f7fafc;border-bottom:1px solid #e2e8f0;display:flex;gap:.5rem;flex-wrap:wrap}
-    .filter-btn{padding:.3rem .8rem;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer;border:1.5px solid #cbd5e0;background:white;color:#4a5568;text-decoration:none}
-    .filter-btn.active{border-color:#2b6cb0;background:#ebf4ff;color:#2b6cb0}
-    .empty{padding:2rem;text-align:center;color:#a0aec0;font-size:.95rem}
-    @media(max-width:600px){.stats{grid-template-columns:1fr 1fr}td,th{padding:8px}}
+    tbody tr:hover td{background:#fafafa}
+
+    /* Avatar */
+    .client-cell{display:flex;align-items:center;gap:.6rem}
+    .avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:700;color:white;flex-shrink:0}
+    .client-name{font-weight:600;color:#111827;font-size:.86rem}
+    .client-email{font-size:.75rem;color:#9ca3af;margin-top:.05rem}
+
+    /* Booking status badges */
+    .badge{display:inline-flex;align-items:center;padding:.22rem .65rem;border-radius:20px;font-size:.74rem;font-weight:600;white-space:nowrap}
+    .badge-pending{background:#fef9c3;color:#854d0e}
+    .badge-accepted{background:#dbeafe;color:#1e40af}
+    .badge-confirmed{background:#dcfce7;color:#166534}
+    .badge-denied{background:#fee2e2;color:#991b1b}
+    .badge-cancelled{background:#f3f4f6;color:#6b7280}
+
+    /* Payment status badges */
+    .pay-badge{display:inline-flex;align-items:center;padding:.22rem .65rem;border-radius:20px;font-size:.74rem;font-weight:600;white-space:nowrap}
+    .pay-paid{background:#dcfce7;color:#166534}
+    .pay-due{background:#fef9c3;color:#854d0e}
+    .pay-partial{background:#dbeafe;color:#1e40af}
+    .pay-none{color:#9ca3af;font-size:.78rem}
+
+    /* Date range */
+    .date-range{display:flex;align-items:center;gap:.35rem;font-size:.83rem;white-space:nowrap}
+    .date-arrow{color:#d1d5db;font-size:.7rem}
+
+    /* Action buttons */
+    .action-btns{display:flex;gap:.35rem;flex-wrap:nowrap;align-items:center}
+    .btn{display:inline-block;padding:.3rem .65rem;border-radius:6px;font-size:.76rem;font-weight:600;cursor:pointer;border:1px solid transparent;text-decoration:none;line-height:1.5;white-space:nowrap;transition:all .12s}
+    .btn-view{background:#eff6ff;color:#2563eb;border-color:#bfdbfe}
+    .btn-view:hover{background:#dbeafe}
+    .btn-accept{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+    .btn-accept:hover{background:#dcfce7}
+    .btn-deny{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+    .btn-deny:hover{background:#fee2e2}
+    .btn-confirm{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+    .btn-confirm:hover{background:#dbeafe}
+    .btn-cancel{background:#f9fafb;color:#6b7280;border-color:#d1d5db}
+
+    .empty-state{padding:3rem;text-align:center;color:#9ca3af;font-size:.95rem}
+
+    @media(max-width:900px){
+      .metrics{grid-template-columns:1fr 1fr}
+      .main{padding:1rem}
+    }
+    @media(max-width:540px){
+      .metrics{grid-template-columns:1fr}
+      th,td{padding:.6rem .75rem}
+    }
   </style>
 </head>
 <body>
-<header>
-  <h1>{{ business_name }} — Admin</h1>
-  <a href="/admin/logout" class="logout">Sign Out</a>
-</header>
-<div class="container">
 
-  <div class="stats">
-    <div class="stat"><div class="stat-num">{{ stats.total }}</div><div class="stat-label">Total</div></div>
-    <div class="stat"><div class="stat-num" style="color:#975a16">{{ stats.pending }}</div><div class="stat-label">Pending</div></div>
-    <div class="stat"><div class="stat-num" style="color:#2c5282">{{ stats.accepted }}</div><div class="stat-label">Awaiting Payment</div></div>
-    <div class="stat"><div class="stat-num" style="color:#276749">{{ stats.confirmed }}</div><div class="stat-label">Confirmed</div></div>
-    <div class="stat"><div class="stat-num">${{ "%.0f"|format(stats.revenue) }}</div><div class="stat-label">Revenue</div></div>
+<div class="topbar">
+  <div class="topbar-brand"><span>🎉</span> {{ business_name }}</div>
+  <a href="/admin/logout" class="logout-btn">Sign Out</a>
+</div>
+
+<div class="main">
+  <div class="page-title">Dashboard</div>
+
+  <!-- ── Metric Cards ── -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Bookings</div>
+      <div class="metric-value">{{ stats.total }}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Pending Review</div>
+      <div class="metric-value" style="color:#d97706">{{ stats.pending }}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Revenue</div>
+      <div class="metric-value" style="color:#059669">${{ "{:,.2f}".format(stats.revenue) }}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Amount Due</div>
+      <div class="metric-value" style="color:#dc2626">${{ "{:,.2f}".format(stats.amount_due) }}</div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-header">Inventory — Available Today</div>
-    <div class="inv-row inv-header"><div>Item</div><div>Total Stock</div><div>Reserved</div><div>Available</div></div>
+  <!-- ── Inventory ── -->
+  <div class="section-title">Inventory</div>
+  <div class="inv-grid">
     {% for item in inventory %}
-    <div class="inv-row">
-      <div>{{ item.name }}</div>
-      <div>{{ item.total }}</div>
-      <div style="color:#e53e3e">{{ item.reserved }}</div>
-      <div style="font-weight:700;color:{% if item.available == 0 %}#e53e3e{% elif item.available <= 3 %}#d69e2e{% else %}#38a169{% endif %}">{{ item.available }}{% if item.available == 0 %} SOLD OUT{% endif %}</div>
+    {% set pct = ((item.reserved / item.total * 100) | int) if item.total > 0 else 0 %}
+    <div class="inv-card">
+      <div class="inv-name" title="{{ item.name }}">{{ item.name }}</div>
+      <div class="inv-meta">
+        <span class="inv-reserved">{{ item.reserved }} reserved</span>
+        <span class="{% if item.available == 0 %}inv-avail-zero{% elif item.available <= 3 %}inv-avail-low{% else %}inv-avail-ok{% endif %}">
+          {{ item.available }}/{{ item.total }}{% if item.available == 0 %} SOLD OUT{% endif %}
+        </span>
+      </div>
+      <div class="inv-bar">
+        <div class="inv-fill" style="width:{{ pct }}%;background:{% if pct >= 100 %}#ef4444{% elif pct >= 70 %}#f59e0b{% else %}#10b981{% endif %}"></div>
+      </div>
     </div>
     {% endfor %}
   </div>
 
-  <div class="card">
-    <div class="card-header">Bookings</div>
-    <div class="filter-bar">
-      <a href="/admin/dashboard" class="filter-btn {% if not status_filter %}active{% endif %}">All ({{ stats.total }})</a>
-      <a href="/admin/dashboard?status=pending"   class="filter-btn {% if status_filter=='pending' %}active{% endif %}">Pending ({{ stats.pending }})</a>
-      <a href="/admin/dashboard?status=accepted"  class="filter-btn {% if status_filter=='accepted' %}active{% endif %}">Awaiting Payment ({{ stats.accepted }})</a>
-      <a href="/admin/dashboard?status=confirmed" class="filter-btn {% if status_filter=='confirmed' %}active{% endif %}">Confirmed ({{ stats.confirmed }})</a>
-      <a href="/admin/dashboard?status=denied"    class="filter-btn {% if status_filter=='denied' %}active{% endif %}">Denied</a>
-      <a href="/admin/dashboard?status=cancelled" class="filter-btn {% if status_filter=='cancelled' %}active{% endif %}">Cancelled</a>
-    </div>
+  <!-- ── Bookings ── -->
+  <div class="tabs">
+    <a href="/admin/dashboard" class="tab {% if not status_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
+    <a href="/admin/dashboard?status=pending"   class="tab {% if status_filter=='pending'   %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
+    <a href="/admin/dashboard?status=accepted"  class="tab {% if status_filter=='accepted'  %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
+    <a href="/admin/dashboard?status=confirmed" class="tab {% if status_filter=='confirmed' %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
+    <a href="/admin/dashboard?status=denied"    class="tab {% if status_filter=='denied'    %}active{% endif %}">Denied</a>
+    <a href="/admin/dashboard?status=cancelled" class="tab {% if status_filter=='cancelled' %}active{% endif %}">Cancelled</a>
+  </div>
+  <div class="table-card">
     {% if bookings %}
     <table>
-      <thead><tr><th>#</th><th>Customer</th><th>Event Date</th><th>Items</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Client</th>
+          <th>Status</th>
+          <th>Event Dates</th>
+          <th>Items</th>
+          <th>Total</th>
+          <th>Payment</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
       <tbody>
         {% for b in bookings %}
         <tr>
-          <td style="font-weight:700;color:#2b6cb0">#{{ b.id }}</td>
+          <td style="font-weight:700;color:#2563eb;font-size:.83rem">#{{ b.id }}</td>
           <td>
-            <div style="font-weight:600">{{ b.full_name }}</div>
-            <div style="font-size:.8rem;color:#718096">{{ b.email }}</div>
+            <div class="client-cell">
+              <div class="avatar" style="background:{{ b.avatar_color }}">{{ b.avatar_initials }}</div>
+              <div>
+                <div class="client-name">{{ b.full_name }}</div>
+                <div class="client-email">{{ b.email }}</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-{{ b.status }}">{{ b.status | capitalize }}</span></td>
+          <td>
+            <div class="date-range">
+              <span>{{ b.event_start_date }}</span>
+              <span class="date-arrow">→</span>
+              <span>{{ b.event_end_date }}</span>
+            </div>
+          </td>
+          <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;font-size:.8rem">{{ b.items_summary }}</td>
+          <td style="font-weight:700;white-space:nowrap">${{ "%.2f"|format(b.grand_total or 0) }}</td>
+          <td>
+            {% if b.pay_label != '—' %}
+            <span class="pay-badge {{ b.pay_class }}">{{ b.pay_label }}</span>
+            {% else %}
+            <span class="pay-none">—</span>
+            {% endif %}
           </td>
           <td>
-            <div>{{ b.event_start_date }}</div>
-            {% if b.event_end_date != b.event_start_date %}<div style="font-size:.8rem;color:#718096">- {{ b.event_end_date }}</div>{% endif %}
-          </td>
-          <td style="font-size:.82rem;max-width:180px">{{ b.items_summary }}</td>
-          <td style="font-weight:700">${{ "%.2f"|format(b.grand_total or 0) }}</td>
-          <td><span class="badge badge-{{ b.status }}">{{ b.status }}</span></td>
-          <td>
-            <a href="/admin/booking/{{ b.id }}" class="btn btn-view">View</a>
-            {% if b.status == 'pending' %}
-            <form method="POST" action="/admin/booking/{{ b.id }}/accept" style="display:inline">
-              <button class="btn btn-accept" onclick="return confirm('Accept booking #{{ b.id }} and send invoice + payment link to {{ b.email }}?')">Accept</button>
-            </form>
-            <form method="POST" action="/admin/booking/{{ b.id }}/deny" style="display:inline">
-              <button class="btn btn-deny" onclick="return confirm('Deny booking #{{ b.id }}? This will send a rejection email.')">Deny</button>
-            </form>
-            {% endif %}
-            {% if b.status == 'accepted' %}
-            <form method="POST" action="/admin/booking/{{ b.id }}/confirm" style="display:inline">
-              <button class="btn btn-confirm" onclick="return confirm('Manually confirm payment for #{{ b.id }}?')">Mark Paid</button>
-            </form>
-            {% endif %}
-            {% if b.status not in ('denied', 'cancelled') %}
-            <form method="POST" action="/admin/booking/{{ b.id }}/cancel" style="display:inline">
-              <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel</button>
-            </form>
-            {% endif %}
+            <div class="action-btns">
+              <a href="/admin/booking/{{ b.id }}" class="btn btn-view">View</a>
+              {% if b.status == 'pending' %}
+              <form method="POST" action="/admin/booking/{{ b.id }}/accept" style="display:inline">
+                <button class="btn btn-accept" onclick="return confirm('Accept #{{ b.id }}? This emails {{ b.email }} their invoice + Stripe payment link.')">Accept</button>
+              </form>
+              <form method="POST" action="/admin/booking/{{ b.id }}/deny" style="display:inline">
+                <button class="btn btn-deny" onclick="return confirm('Deny booking #{{ b.id }}?')">Deny</button>
+              </form>
+              {% endif %}
+              {% if b.status == 'accepted' %}
+              <form method="POST" action="/admin/booking/{{ b.id }}/confirm" style="display:inline">
+                <button class="btn btn-confirm" onclick="return confirm('Manually mark #{{ b.id }} as paid?')">Mark Paid</button>
+              </form>
+              {% endif %}
+              {% if b.status not in ('denied', 'cancelled') %}
+              <form method="POST" action="/admin/booking/{{ b.id }}/cancel" style="display:inline">
+                <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel</button>
+              </form>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="empty">No bookings found.</div>
+    <div class="empty-state">No bookings found.</div>
     {% endif %}
   </div>
 
@@ -1714,7 +1823,7 @@ def admin_dashboard():
     status_filter = request.args.get("status", "")
     conn = get_db()
     bookings = []
-    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0}
+    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0}
     inventory_status = []
 
     if conn:
@@ -1726,6 +1835,8 @@ def admin_dashboard():
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='confirmed'"); stats["confirmed"] = cur.fetchone()[0]
             cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='confirmed'")
             stats["revenue"] = float(cur.fetchone()[0])
+            cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='accepted'")
+            stats["amount_due"] = float(cur.fetchone()[0])
 
             q = "SELECT * FROM bookings"
             p = []
@@ -1734,12 +1845,28 @@ def admin_dashboard():
             q += " ORDER BY created_at DESC LIMIT 100"
             cur.execute(q, p)
             rows = cur.fetchall()
+            _avatar_colors = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6',
+                               '#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16']
             for row in rows:
                 b = dict(row)
                 items = json.loads(b.get("items_json") or "[]")
                 b["items_summary"] = ", ".join(f"{i['qty']}x {i['name']}" for i in items[:2])
                 if len(items) > 2:
                     b["items_summary"] += f" +{len(items)-2} more"
+                # Payment label + class
+                if b["status"] == "confirmed":
+                    if b.get("final_payment_link"):
+                        b["pay_label"], b["pay_class"] = "Partially Paid", "pay-partial"
+                    else:
+                        b["pay_label"], b["pay_class"] = "Paid", "pay-paid"
+                elif b["status"] == "accepted":
+                    b["pay_label"], b["pay_class"] = "Payment Due", "pay-due"
+                else:
+                    b["pay_label"], b["pay_class"] = "—", "pay-none"
+                # Avatar
+                name = b.get("full_name") or "?"
+                b["avatar_color"]    = _avatar_colors[ord(name[0].lower()) % len(_avatar_colors)]
+                b["avatar_initials"] = name[0].upper()
                 bookings.append(b)
 
             today_str = date.today().isoformat()
