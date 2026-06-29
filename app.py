@@ -159,12 +159,14 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_session_id TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_payment_link TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_reminder_sent BOOLEAN DEFAULT FALSE",
-            "CREATE UNIQUE INDEX IF NOT EXISTS customers_email_idx ON customers (email) WHERE email IS NOT NULL",
         ]
         for m in migrations:
             try:
+                cur.execute("SAVEPOINT mig")
                 cur.execute(m)
+                cur.execute("RELEASE SAVEPOINT mig")
             except Exception as me:
+                cur.execute("ROLLBACK TO SAVEPOINT mig")
                 log.warning(f"Migration warning: {me}")
 
         # Create customers table
@@ -182,6 +184,11 @@ def init_db():
                 zip          VARCHAR(20),
                 notes        TEXT
             )
+        """)
+        # Unique index on email so ON CONFLICT works for upserts
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS customers_email_idx
+            ON customers (email) WHERE email IS NOT NULL
         """)
 
         # Create inventory table
