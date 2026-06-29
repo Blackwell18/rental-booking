@@ -166,6 +166,26 @@ def init_db():
             except Exception as me:
                 log.warning(f"Migration warning: {me}")
 
+        # Create inventory table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inventory (
+                id         VARCHAR(100) PRIMARY KEY,
+                name       VARCHAR(255) NOT NULL,
+                price      DECIMAL(10,2) NOT NULL DEFAULT 0,
+                total      INT NOT NULL DEFAULT 0,
+                sort_order INT NOT NULL DEFAULT 0
+            )
+        """)
+        # Seed from PRODUCTS constant if inventory table is empty
+        cur.execute("SELECT COUNT(*) FROM inventory")
+        if cur.fetchone()[0] == 0:
+            for i, p in enumerate(PRODUCTS):
+                cur.execute(
+                    "INSERT INTO inventory (id, name, price, total, sort_order) VALUES (%s, %s, %s, %s, %s)",
+                    (p["id"], p["name"], p["price"], p["total"], i)
+                )
+            log.info("Inventory seeded from PRODUCTS default list")
+
         conn.commit()
         cur.close()
         conn.close()
@@ -180,6 +200,28 @@ with app.app_context():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  PRODUCT CATALOG — load from DB (falls back to hardcoded PRODUCTS)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_products():
+    """Load product catalog from inventory table; fall back to PRODUCTS constant."""
+    conn = get_db()
+    if not conn:
+        return PRODUCTS
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM inventory ORDER BY sort_order, name")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        if rows:
+            return [dict(r) for r in rows]
+    except Exception as e:
+        log.error(f"get_products error: {e}")
+    return PRODUCTS
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  INVENTORY CHECKING
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -188,7 +230,7 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
     Returns {product_id: available_qty} for a date range.
     Only CONFIRMED bookings lock inventory.
     """
-    available = {p["id"]: p["total"] for p in PRODUCTS}
+    available = {p["id"]: p["total"] for p in get_products()}
     conn = get_db()
     if not conn:
         return available
@@ -1631,7 +1673,7 @@ ADMIN_BOOKING_HTML = """
 def index():
     return render_template_string(FORM_HTML,
         business_name=BUSINESS_NAME,
-        products=PRODUCTS,
+        products=get_products(),
         exact_time_fee=EXACT_TIME_FEE,
         error=None,
         form={},
@@ -1643,7 +1685,7 @@ def availability():
     start = request.args.get("start", "")
     end   = request.args.get("end",   "")
     if not start or not end:
-        return jsonify({p["id"]: p["total"] for p in PRODUCTS})
+        return jsonify({p["id"]: p["total"] for p in get_products()})
     avail = get_available(start, end)
     return jsonify(avail)
 
@@ -1683,15 +1725,16 @@ def submit():
     delivery_location= f.get("delivery_location","").strip()
     notes            = f.get("notes",            "").strip()
 
+    _products = get_products()
     if not email or not full_name:
         return render_template_string(FORM_HTML, business_name=BUSINESS_NAME,
-            products=PRODUCTS, exact_time_fee=EXACT_TIME_FEE,
+            products=_products, exact_time_fee=EXACT_TIME_FEE,
             error="Name and email are required.", form=f), 400
 
     # Check inventory
     avail = get_available(event_start_date, event_end_date)
     order_items, subtotal, errors = [], 0.0, []
-    for p in PRODUCTS:
+    for p in _products:
         qty = int(f.get(f"qty_{p['id']}", 0) or 0)
         qty = max(0, qty)
         if qty == 0:
@@ -1707,7 +1750,7 @@ def submit():
                                  "qty": qty, "unit_price": p["price"], "total": line})
     if errors:
         return render_template_string(FORM_HTML, business_name=BUSINESS_NAME,
-            products=PRODUCTS, exact_time_fee=EXACT_TIME_FEE,
+            products=_products, exact_time_fee=EXACT_TIME_FEE,
             error=" | ".join(errors), form=f), 400
 
     # Delivery
@@ -1793,6 +1836,138 @@ def submit():
     )
 
 
+ADMIN_INVENTORY_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Inventory — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar-brand{font-size:1rem;font-weight:700;color:#111827}
+    .topbar-nav{display:flex;gap:.5rem;align-items:center}
+    .nav-link{color:#6b7280;text-decoration:none;font-size:.85rem;font-weight:500;padding:.38rem .75rem;border-radius:6px;transition:all .12s}
+    .nav-link:hover{background:#f3f4f6;color:#111827}
+    .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;text-decoration:none}
+    .main{max-width:900px;margin:0 auto;padding:1.75rem}
+    .page-title{font-size:1.4rem;font-weight:700;color:#111827;margin-bottom:.35rem}
+    .page-sub{font-size:.88rem;color:#6b7280;margin-bottom:1.5rem}
+    .flash{padding:.75rem 1rem;border-radius:8px;margin-bottom:1.25rem;font-size:.9rem;font-weight:500}
+    .flash-ok{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+    .flash-err{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+    .card{background:white;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:1.5rem}
+    .card-header{padding:.85rem 1.25rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:.88rem;color:#374151;display:flex;justify-content:space-between;align-items:center}
+    table{width:100%;border-collapse:collapse}
+    th{padding:.65rem 1rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e5e7eb;background:#f9fafb}
+    td{padding:.6rem 1rem;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tbody tr:hover td{background:#fafafa}
+    input[type=text],input[type=number]{width:100%;padding:.4rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.86rem;color:#111827;background:white;transition:border .12s}
+    input[type=text]:focus,input[type=number]:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+    input[type=number]{max-width:90px}
+    .btn{display:inline-block;padding:.4rem .85rem;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:all .12s;line-height:1.5}
+    .btn-primary{background:#2563eb;color:white}
+    .btn-primary:hover{background:#1d4ed8}
+    .btn-danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+    .btn-danger:hover{background:#fecaca}
+    .btn-outline{background:white;color:#374151;border:1px solid #d1d5db}
+    .btn-outline:hover{background:#f3f4f6}
+    .add-form{display:grid;grid-template-columns:1fr auto auto auto;gap:.6rem;align-items:center;padding:1rem 1.25rem;background:#f9fafb;border-top:1px solid #e5e7eb}
+    .add-form input{width:100%}
+    .save-bar{display:flex;justify-content:flex-end;gap:.75rem;padding:1rem 1.25rem;border-top:1px solid #e5e7eb;background:#f9fafb}
+    .item-id{font-size:.75rem;color:#9ca3af;font-family:monospace}
+    @media(max-width:600px){
+      .add-form{grid-template-columns:1fr;gap:.5rem}
+      .main{padding:1rem}
+    }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-nav">
+    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+    <a href="/admin/inventory" class="nav-link active">Inventory</a>
+    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+  </div>
+</div>
+<div class="main">
+  <div class="page-title">Inventory</div>
+  <div class="page-sub">Edit item names, rental prices, and total quantities. Changes take effect immediately on the booking form.</div>
+
+  {% if flash_ok %}<div class="flash flash-ok">✓ {{ flash_ok }}</div>{% endif %}
+  {% if flash_err %}<div class="flash flash-err">⚠ {{ flash_err }}</div>{% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <span>Rental Items ({{ products|length }})</span>
+    </div>
+    <form method="POST" action="/admin/inventory/save">
+      <table>
+        <thead>
+          <tr>
+            <th>Item Name</th>
+            <th>Price / Unit</th>
+            <th>Total Qty</th>
+            <th>Remove</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in products %}
+          <tr>
+            <td>
+              <input type="hidden" name="id_{{ loop.index0 }}" value="{{ p.id }}">
+              <input type="text" name="name_{{ loop.index0 }}" value="{{ p.name }}" required>
+            </td>
+            <td>
+              <div style="display:flex;align-items:center;gap:.3rem">
+                <span style="color:#9ca3af;font-size:.9rem">$</span>
+                <input type="number" name="price_{{ loop.index0 }}" value="{{ '%.2f'|format(p.price|float) }}" min="0" step="0.01" required>
+              </div>
+            </td>
+            <td>
+              <input type="number" name="total_{{ loop.index0 }}" value="{{ p.total }}" min="0" step="1" required>
+            </td>
+            <td>
+              <button type="submit" form="del_{{ p.id }}" class="btn btn-danger" onclick="return confirm('Remove {{ p.name }} from inventory?')">Remove</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <input type="hidden" name="count" value="{{ products|length }}">
+      <div class="save-bar">
+        <a href="/admin/dashboard" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+
+    <!-- Delete forms (one per item, outside main form) -->
+    {% for p in products %}
+    <form id="del_{{ p.id }}" method="POST" action="/admin/inventory/delete/{{ p.id }}" style="display:none"></form>
+    {% endfor %}
+
+    <!-- Add new item -->
+    <form method="POST" action="/admin/inventory/add">
+      <div class="add-form">
+        <input type="text" name="name" placeholder="New item name (e.g. Tents 20x20)" required>
+        <div style="display:flex;align-items:center;gap:.3rem">
+          <span style="color:#9ca3af">$</span>
+          <input type="number" name="price" placeholder="Price" min="0" step="0.01" style="max-width:90px" required>
+        </div>
+        <input type="number" name="total" placeholder="Qty" min="1" step="1" style="max-width:70px" required>
+        <button type="submit" class="btn btn-primary">+ Add Item</button>
+      </div>
+    </form>
+  </div>
+</div>
+</body></html>
+"""
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  ROUTES — ADMIN
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1871,7 +2046,7 @@ def admin_dashboard():
 
             today_str = date.today().isoformat()
             avail = get_available(today_str, "2099-12-31")
-            for p2 in PRODUCTS:
+            for p2 in get_products():
                 reserved = p2["total"] - avail.get(p2["id"], p2["total"])
                 inventory_status.append({
                     "name": p2["name"], "total": p2["total"],
