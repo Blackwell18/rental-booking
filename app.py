@@ -1716,6 +1716,11 @@ ADMIN_BOOKING_HTML = """
       </button>
     </form>
     {% endif %}
+    <form method="POST" action="/admin/booking/{{ b.id }}/delete" style="margin-left:auto">
+      <button class="btn" style="background:#1f2937;color:white" onclick="return confirm('Permanently DELETE booking #{{ b.id }}? This cannot be undone. Customer info will be kept.')">
+        Delete Booking
+      </button>
+    </form>
   </div>
 
   {% if b.final_payment_link %}
@@ -2341,6 +2346,24 @@ def cancel_booking(booking_id):
             log.info(f"Booking #{booking_id} cancelled")
         except Exception as e:
             log.error(f"Cancel error: {e}")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/booking/<int:booking_id>/delete", methods=["POST"])
+@admin_required
+def delete_booking(booking_id):
+    """Permanently delete a booking. Customer record in customers table is untouched."""
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM bookings WHERE id=%s", (booking_id,))
+            conn.commit()
+            cur.close()
+            conn.close()
+            log.info(f"Booking #{booking_id} permanently deleted")
+        except Exception as e:
+            log.error(f"Delete booking error: {e}")
     return redirect(url_for("admin_dashboard"))
 
 
