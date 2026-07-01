@@ -1352,6 +1352,8 @@ ADMIN_DASH_HTML = """
     .tab:hover{color:#111827;background:#f9fafb}
     .tab.active{color:#2563eb;border-bottom-color:#2563eb;font-weight:600}
     .table-card{background:white;border:1px solid #e5e7eb;border-radius:0 0 10px 10px;overflow:hidden}
+    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .table-scroll table{min-width:900px}
 
     /* Table */
     table{width:100%;border-collapse:collapse}
@@ -1477,6 +1479,7 @@ ADMIN_DASH_HTML = """
   </div>
   <div class="table-card">
     {% if bookings %}
+    <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -1547,6 +1550,7 @@ ADMIN_DASH_HTML = """
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <div class="empty-state">No bookings found.</div>
     {% endif %}
