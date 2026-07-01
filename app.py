@@ -12,7 +12,7 @@
 """
 
 import os, json, logging, smtplib, secrets
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from functools import wraps
@@ -1473,7 +1473,8 @@ ADMIN_DASH_HTML = """
   {% set dt = ('&date_to=' ~ date_to) if date_to else '' %}
   {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
   <div class="tabs">
-    <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}" class="tab {% if not status_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
+    <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}" class="tab {% if not status_filter and not upcoming_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
+    <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
     <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}"   class="tab {% if status_filter=='pending'   %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
     <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}"  class="tab {% if status_filter=='accepted'  %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
     <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}" class="tab {% if status_filter=='confirmed' %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
@@ -2120,13 +2121,14 @@ def admin_logout():
 @app.route("/admin/dashboard")
 @admin_required
 def admin_dashboard():
-    status_filter = request.args.get("status", "")
-    date_from    = request.args.get("date_from", "")
-    date_to      = request.args.get("date_to", "")
-    pay_filter   = request.args.get("pay_filter", "")   # paid | partial | due | ""
+    status_filter  = request.args.get("status", "")
+    date_from      = request.args.get("date_from", "")
+    date_to        = request.args.get("date_to", "")
+    pay_filter     = request.args.get("pay_filter", "")   # paid | partial | due | ""
+    upcoming_filter = bool(request.args.get("upcoming", ""))
     conn = get_db()
     bookings = []
-    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0}
+    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0, "upcoming": 0}
     inventory_status = []
 
     if conn:
@@ -2140,16 +2142,30 @@ def admin_dashboard():
             stats["revenue"] = float(cur.fetchone()[0])
             cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='accepted'")
             stats["amount_due"] = float(cur.fetchone()[0])
+            # Count upcoming (next 8 days, non-cancelled/denied)
+            today_dt = date.today()
+            in_8_days = (today_dt + timedelta(days=8)).isoformat()
+            cur.execute("""
+                SELECT COUNT(*) FROM bookings
+                WHERE event_start_date >= %s AND event_start_date <= %s
+                  AND status NOT IN ('cancelled','denied')
+            """, (today_dt.isoformat(), in_8_days))
+            stats["upcoming"] = cur.fetchone()[0]
 
             # Build filtered query — filter on event_start_date (the date orders go out)
             wheres = []
             params = []
-            if status_filter:
-                wheres.append("status=%s"); params.append(status_filter)
-            if date_from:
-                wheres.append("event_start_date >= %s"); params.append(date_from)
-            if date_to:
-                wheres.append("event_start_date <= %s"); params.append(date_to)
+            if upcoming_filter:
+                wheres.append("event_start_date >= %s"); params.append(today_dt.isoformat())
+                wheres.append("event_start_date <= %s"); params.append(in_8_days)
+                wheres.append("status NOT IN ('cancelled','denied')")
+            else:
+                if status_filter:
+                    wheres.append("status=%s"); params.append(status_filter)
+                if date_from:
+                    wheres.append("event_start_date >= %s"); params.append(date_from)
+                if date_to:
+                    wheres.append("event_start_date <= %s"); params.append(date_to)
             q = "SELECT * FROM bookings"
             if wheres:
                 q += " WHERE " + " AND ".join(wheres)
@@ -2208,6 +2224,7 @@ def admin_dashboard():
         date_from=date_from,
         date_to=date_to,
         pay_filter=pay_filter,
+        upcoming_filter=upcoming_filter,
     )
 
 
