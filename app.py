@@ -1057,14 +1057,12 @@ FORM_HTML = r"""
 
   <div class="card">
     <h2>Select Your Items</h2>
-    <p class="section-note" id="avail_note">Select your event dates above to see real-time availability.</p>
     {% for p in products %}
     <div class="product-row">
       <div>
         <div class="product-name">{{ p.name }}</div>
         <div class="product-meta">
           <span class="product-price">${{ "%.2f"|format(p.price) }} each</span>
-          <span class="avail-badge ok" id="avail_{{ p.id }}">{{ p.total }} available</span>
         </div>
       </div>
       <div class="qty-control">
@@ -1094,7 +1092,7 @@ function changeQty(id,delta){const i=document.getElementById('qty_'+id);const m=
 function updateTotals(){let sub=0;document.querySelectorAll('.qty-input').forEach(i=>{const qty=parseInt(i.value)||0;const price=parseFloat(i.dataset.price);const id=i.id.replace('qty_','');const line=qty*price;sub+=line;const el=document.getElementById('sub_'+id);el.textContent=qty>0?'$'+line.toFixed(2):'-';el.classList.toggle('has-val',qty>0);});const exact=document.getElementById('exact_time_cb').checked;const ef=exact?EXACT_FEE:0;document.getElementById('t_items').textContent='$'+sub.toFixed(2);document.getElementById('t_exact').textContent=exact?'$'+EXACT_FEE.toFixed(2):'-';document.getElementById('t_grand').textContent='$'+(sub+ef).toFixed(2)+'+';}
 function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
 setVenue('venue');
-function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;document.getElementById('avail_note').textContent='Checking availability...';fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{document.getElementById('avail_note').textContent='Availability updated for your dates.';Object.entries(data).forEach(([id,avail])=>{const input=document.getElementById('qty_'+id);const badge=document.getElementById('avail_'+id);if(!input)return;input.dataset.max=avail;input.max=avail;if(avail===0){badge.textContent='SOLD OUT for these dates';badge.className='avail-badge out';input.value=0;}else if(avail<=3){badge.textContent=avail+' left!';badge.className='avail-badge low';}else{badge.textContent=avail+' available';badge.className='avail-badge ok';}if(parseInt(input.value)>avail){input.value=avail;}});updateTotals();}).catch(()=>{document.getElementById('avail_note').textContent='Could not check availability - please proceed.';});}
+function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{Object.entries(data).forEach(([id,avail])=>{const input=document.getElementById('qty_'+id);if(!input)return;input.dataset.max=avail;input.max=avail;if(parseInt(input.value)>avail){input.value=avail;}});updateTotals();}).catch(()=>{});}
 let distTimer;
 function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';}).catch(()=>{});}},800);}
 // ── Date validation ───────────────────────────────────────────────────────
