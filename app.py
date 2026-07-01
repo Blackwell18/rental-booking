@@ -60,6 +60,13 @@ def _float(key, default):
     except ValueError:
         return float(default)
 
+# ── PWA Icons (base64-encoded PNGs) ──────────────────────────────────────────
+import base64 as _b64
+_ICON_192_B64 = "iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAE8klEQVR4nO3dP05UURiG8YGQkBBjovb0bIFVuAO2QOEarCiIhbWtnYWdKzCxdyVi7CxOcnMzEOWe95zv331+vc7wncfvzDAGTi6vbw5Ar1PvJ4DcCAgSAoKEgCAhIEgICBICgoSAICEgSAgIEgKChIAgISBICAiSM+8nEML51V3Hn/rz893wZ5LOHgPqy+U5f88Ok9pFQKOK2fpAe+ipckBm3fz3CRQuqVpA7tE8af2sisVUJ6CY6TzWnmeZjNIHlKWbI2Vut8QBJU3nSPaFlDKgGums5c0oWUD10lnLmFGagGqns5Yroxyfhe2nnkWWLzn6BsoyxxlSrKK4Ae05nbXgGQW9wqjnSNiBRAwo7LB8xRxLrCss5oziCHidBdpA1PNMoQYVJaBQQ4kvzrj8r7A4s8glyHXmvIGoR+Q+QM+A3L/4GnzH6BYQ9QzkOEyfgKhnOK+ROgREPZO4DNY6IOqZyn68pgFRjwHjIdsFRD1mLEdtFBD1GDMbeJSPMpCURUCsHxc2Y58eEPU4Mhj+3ICox93sI+A1ECQTA2L9BDH1IGYFRD2hzDuOKQFRT0CTDoXXQJCMD4j1E9aMo2EDQTI4INZPcMMPaGRA1JPC2GPiCoNkWECsn0QGHhYbCJIxAbF+0hl1ZGwgSAYExPpJasjBsYEgUQNi/aSmHx8bCBICgkT6AVMx76+XFyc/PrzxfhbH3n/+9enbb+9n8YTzqzvlp1SxgSDpDyjm+kEH5SjZQJAQECQEBEnnu7BcL4Duvzx8/Ppg+YivXpx+v39t+Yii7vdibCBICAiSnoBy3V94pr5jZQNBQkCQEBAkBATJ5oB4BV1Yx+GygSAhIEgICBICgoSAINkWEG/Bytt6xGwgSAgIEgKChIAgISBICAgSAoKEgCAhIEgICBICgoSAICEgSAgIEgKChIAgISBItgWk/DhPpLD1iNlAkBAQJAQECQFBQkCQbA6IN2KFdRwuGwgSAoKEgCAhIEh6AuJ1dEn8qgM4ICBIOgPiFium+0DZQJAQECQEBEl/QLwMKoPfGw83UkAsoQLEQ2QDQUJAkKgBcYulph8fGwiSAQGxhJIacnBsIEjGBMQSSmfUkbGBIBkWEEsokYGHxQaCZGRALKEUxh7T4A1EQ8ENPyCuMEjGB8QSCmvG0bCBIJkSEEsooEmHMmsD0VAo845j4hVGQ0FMPQheA0EyNyCWkLvZRzB9A9GQI4PhW1xhNOTCZuxnBo/h7vbtxe3bC+9nUZPRi2iWkDGzgdu9C6MhM5ajNn0bT0MGjIds/X0gGprKfrwO30ikoUlcBntyeX1j/6iHw+H86s7lcavy+mfp9lEGe2ggx2F6fhZGQ0P4jtH5w1QaErkP0P870W0EvCTayj2dJsp/5wgyjizijCtKQIdIQwku1KD8r7A1rrN/C5VOE2gDLQKOKYKYY4kY0CHqsByFHUisK2yN66wJm04TN6BmzxkFT6cJeoUdSTHKsbJ8ydE30GI/qyhLOk2agJraGeVKp0kWUFMvo4zpNCkDampklDedJnFAzXIAuUrK3s0ifUCLLAupTDpNnYCa9fHEialYNGvVAlpzv90Kd7OoHNDi6CDn9bSHYo7sIqAjj4+5L6kd5vLYHgN6jBS65fgsDGERECQEBAkBQUJAkBAQJAQECQFBQkCQEBAkBAQJAUFCQJAQECR/AWuBXRYBgcQbAAAAAElFTkSuQmCC"
+_ICON_512_B64 = "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAOd0lEQVR4nO3dMY5sVxWF4bJlZCECGIFT5AkQOCYnJUGehIkIEDEeBhNgGIzAImYCEFoQELT13O7XXV1169579t7r+wYADXXO+t+pfoZPvvjq6wsAeT5d/QMAsIYAAIQSAIBQAgAQSgAAQgkAQCgBAAglAAChBAAglAAAhBIAgFACABBKAABCCQBAKAEACCUAAKEEACCUAACEEgCAUAIAEEoAAEIJAEAoAQAIJQAAoQQAIJQAAIQSAIBQAgAQSgAAQgkAQCgBAAglAAChBAAglAAAhBIAgFACABBKAABCCQBAKAEACCUAAKEEACCUAACEEgCAUAIAEEoAAEIJAECoZQH4/rtvVv1bA9SxcAy9AABCCQBAKAEACCUAAKEEACCUAACEEgCAUAIAEEoAAEKtDIB/GBgIt3YGvQAAQgkAQCgBAAglAAChBAAglAAAhBIAgFCLA+AfBQBiLR9ALwCAUAIAEEoAAEIJAEAoAQAItT4Ay38PDnC+CtO3PgAALCEAAKEEACCUAACEKhGACr8MAThNkdErEQAAzicAAKEEACBUlQAU+UYM4Gh15q5KAAA4mQAAhBIAgFACABCqUADq/GIE4CClhq5QAAA4kwAAhKoVgFKPI4B9VZu4WgEA4DQCABBKAABClQtAte/IAHZRcNzKBQCAcwgAQKiKASj4UAJ4RM1ZqxgAAE4gAAChigag5nMJYIOyg1Y0AAAcTQAAQtUNQNlHE8DtKk9Z3QAAcCgBAAhVOgCVn04A7yo+YqUDAMBxBAAgVPUAFH9AAbyl/nxVDwAABxEAgFANAlD/GQXwQovhahAAAI7QIwAtWgrwpMtk9QgAALsIAMDhageg7EMNJO84Sf0CAMAuWgagY2mBwZqOUssAAPC4rgFo2ltgnr5z1DUAADyocQD6VhcYo/UQNQ4AAI/oHYDW7QW66z5BvQMAwGbtA9C9wEBTA8anfQAA2GZCAAZ0GOhlxuxMCAAAGwwJwIwaAy2MGZwhAbgM+kiAyiZNzZwAAHCXUQGYVGagoGEjMyoAANxuWgCG9RmoY968TAsAADcaGIB5lQaWGzksAwNwGfpRAatMnZSZAQDgXWMDMLXYwMkGj8nYAFxGf2zAOWbPyOQAAHDF8ADMrjdwqPEDMjwAl4CPEDhCwnTMDwAAr4oIQELJgR2FjEZEAC4xHyfwuJy5SAkAAC8EBSCn6sBmUUMRFIBL2EcL3CttIrICAMAHcQFIKzxwo8BxiAvAJfJjBq7LnIXEAFxSP2zgVbGDEBoAAHIDENt84LnkKcgNwCX7gwcu8SMQHYBL/McPyVz/9AAAxBIAfwqARC7+RQCeOAoQxZV/IgA/cCAghMv+gQD8yLGA8Vzz5wQAIJQA/IQ/HcBgLvgLAvCSIwIjudof+2z1D1DR99998/mX367+Keb4+59/tfpHIJ31f5UXwOscFxjDdX6LALzJoYEBXOQrBOAaRwdac4WvE4B3OEDQlMv7LgEACCUA7/PnCGjHtb2FANzEYYJGXNgbCcCtHClowVW9nQDcwcGC4lzSuwjAfRwvKMv1vJcA3M0hg4JczA0EYAtHDUpxJbcRgI0cOCjCZdxMALZz7GA51/ARn3zx1derf4be/A9HwyrW/0FeAI9yBGEJV+9xArADBxFO5tLtwv8j2D6ejqOvg+Bopn9HXgB7cjThUK7YvgRgZw4oHMTl2p0A7M8xhd25VkcQgEM4rLAjF+ogAnAURxZ24SodRwAO5ODCg1yiQ/lroMfy10NhG9N/Ai+AMzjKcBdX5hwCcBIHGm7kspxGAM7jWMO7XJMz+R3AqfxKAN5i+s/nBbCAgw4vuBRLCMAajjt84Dqs4iugZXwdBKZ/LS+AxVwAYjn8ywnAeq4BgRz7CnwFVIKvg8hh+uvwAijExWA8h7wUL4BaPAWYyvQX5AVQkavCMI50TV4ARXkKMIPpr8wLoDSXh9Yc4OK8AKrzFKAj09+CF0APrhONOK5deAG04SlAfaa/Fy+AZlwwynI42/EC6MdTgGpMf1MC0JUMUIHpb00AepMBVjH9A/gdwASuIidz5GbwAhjCU4BzmP5JBGAUGeA4pn8eARhIBtiX6Z9KAMaSAR5n+mcTgOFkgG1MfwIBiCAD3M705xCAIDLAdaY/jQDE+XDJlYAndj+WAOTyIMD0hxOAdDKQyfRzEQCe+F4ohN3nOQHgJzwIpjL9fEwAeIUHwRh2nysEgGuUoCm7zy0EgJsoQQt2n7sIAPdRgoLsPtsIABspwXJ2nwcJAI9SgpPZffYiAOzm+TCJwb6MPkcQAA7hWbALu8+hBIBjvZgwPbjO4nMmAeBUvib6mNFnFQFgmdjHgcWnCAGgio9ncUYSzD1lCQB1vTWdNcNg6GlHAOjn+tQelwcTzzACwDRmGm706eofAIA1BAAglAAAhBIAgFACABBKAABCCQBAKAEACCUAAKEEACCUAACEEgCAUAIAEEoAAEIJAEAoAQAIJQAAoQQAIJQAAIQSAIBQAgAQSgAAQgkAQCgBAAglAAChBAAglAAAhBIAgFACABBKAABCCQBAKAEACCUAAKEEACCUAACEEgCAUAIAEEoAAEIJAECo/wO4sn30VF69pwAAAABJRU5ErkJggg=="
+_ICON_192 = _b64.b64decode(_ICON_192_B64)
+_ICON_512 = _b64.b64decode(_ICON_512_B64)
+
 BUSINESS_NAME    = os.getenv("BUSINESS_NAME",    "Rent a Party, LLC")
 BUSINESS_PHONE   = os.getenv("BUSINESS_PHONE",   "")
 BUSINESS_EMAIL   = os.getenv("BUSINESS_EMAIL",   "")
@@ -964,6 +971,13 @@ FORM_HTML = r"""
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Book a Rental — {{ business_name }}</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1222,6 +1236,13 @@ SUCCESS_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Request Received — {{ business_name }}</title>
   <style>
     body{font-family:-apple-system,sans-serif;background:#f0f4f8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
@@ -1253,6 +1274,13 @@ PAYMENT_SUCCESS_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Payment Received — {{ business_name }}</title>
   <style>
     body{font-family:-apple-system,sans-serif;background:#f0f4f8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
@@ -1280,6 +1308,13 @@ ADMIN_LOGIN_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Admin Login — {{ business_name }}</title>
   <style>
     body{font-family:-apple-system,sans-serif;background:#f0f4f8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
@@ -1311,6 +1346,13 @@ ADMIN_DASH_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Admin — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -1589,6 +1631,13 @@ ADMIN_BOOKING_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Booking #{{ b.id }} — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -1966,6 +2015,13 @@ ADMIN_INVENTORY_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Inventory — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -2541,6 +2597,13 @@ ADMIN_CUSTOMERS_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Customers — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -2767,6 +2830,13 @@ ADMIN_CUSTOMER_IMPORT_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Import Customers — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -2926,6 +2996,13 @@ ADMIN_CUSTOMER_EDIT_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Edit Customer — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -3476,6 +3553,52 @@ def admin_customers_import_template():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=customers_template.csv"}
     )
+
+
+# ── PWA Routes ───────────────────────────────────────────────────────────────
+
+@app.route("/manifest.json")
+def pwa_manifest():
+    import json as _json
+    manifest = {
+        "name": BUSINESS_NAME,
+        "short_name": "Rent a Party",
+        "description": "Party rental booking and admin",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#f5f6fa",
+        "theme_color": "#2563eb",
+        "orientation": "portrait-primary",
+        "icons": [
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ]
+    }
+    return Response(_json.dumps(manifest), mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def pwa_sw():
+    sw = """
+const CACHE = 'rap-v1';
+self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => clients.claim());
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+});
+"""
+    return Response(sw, mimetype="application/javascript")
+
+
+@app.route("/icon-192.png")
+def pwa_icon_192():
+    return Response(_ICON_192, mimetype="image/png")
+
+
+@app.route("/icon-512.png")
+def pwa_icon_512():
+    return Response(_ICON_512, mimetype="image/png")
 
 
 @app.route("/cron/final-reminders")
