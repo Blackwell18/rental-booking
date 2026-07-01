@@ -1469,14 +1469,36 @@ ADMIN_DASH_HTML = """
   </div>
 
   <!-- ── Bookings ── -->
+  {% set df = ('&date_from=' ~ date_from) if date_from else '' %}
+  {% set dt = ('&date_to=' ~ date_to) if date_to else '' %}
+  {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
   <div class="tabs">
-    <a href="/admin/dashboard" class="tab {% if not status_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
-    <a href="/admin/dashboard?status=pending"   class="tab {% if status_filter=='pending'   %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
-    <a href="/admin/dashboard?status=accepted"  class="tab {% if status_filter=='accepted'  %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
-    <a href="/admin/dashboard?status=confirmed" class="tab {% if status_filter=='confirmed' %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
-    <a href="/admin/dashboard?status=denied"    class="tab {% if status_filter=='denied'    %}active{% endif %}">Denied</a>
-    <a href="/admin/dashboard?status=cancelled" class="tab {% if status_filter=='cancelled' %}active{% endif %}">Cancelled</a>
+    <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}" class="tab {% if not status_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
+    <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}"   class="tab {% if status_filter=='pending'   %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
+    <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}"  class="tab {% if status_filter=='accepted'  %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
+    <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}" class="tab {% if status_filter=='confirmed' %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
+    <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}"    class="tab {% if status_filter=='denied'    %}active{% endif %}">Denied</a>
+    <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}" class="tab {% if status_filter=='cancelled' %}active{% endif %}">Cancelled</a>
   </div>
+
+  <!-- ── Date Range + Payment Filter ── -->
+  <form method="GET" action="/admin/dashboard" style="background:white;border:1px solid #e5e7eb;border-bottom:none;padding:.65rem 1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center">
+    <input type="hidden" name="status" value="{{ status_filter }}">
+    <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-right:.1rem">Event Date:</label>
+    <input type="date" name="date_from" value="{{ date_from }}" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
+    <span style="font-size:.82rem;color:#9ca3af">to</span>
+    <input type="date" name="date_to" value="{{ date_to }}" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
+    <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.5rem">Payment:</label>
+    <select name="pay_filter" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
+      <option value="" {% if not pay_filter %}selected{% endif %}>All</option>
+      <option value="paid"    {% if pay_filter=='paid'    %}selected{% endif %}>Paid In Full</option>
+      <option value="partial" {% if pay_filter=='partial' %}selected{% endif %}>Partially Paid</option>
+      <option value="due"     {% if pay_filter=='due'     %}selected{% endif %}>Payment Due</option>
+    </select>
+    <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">Filter</button>
+    {% if date_from or date_to or pay_filter %}<a href="/admin/dashboard?status={{ status_filter }}" style="font-size:.78rem;color:#6b7280;text-decoration:none">✕ Clear</a>{% endif %}
+  </form>
+
   <div class="table-card">
     {% if bookings %}
     <div class="table-scroll">
@@ -2099,6 +2121,9 @@ def admin_logout():
 @admin_required
 def admin_dashboard():
     status_filter = request.args.get("status", "")
+    date_from    = request.args.get("date_from", "")
+    date_to      = request.args.get("date_to", "")
+    pay_filter   = request.args.get("pay_filter", "")   # paid | partial | due | ""
     conn = get_db()
     bookings = []
     stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0}
@@ -2116,12 +2141,20 @@ def admin_dashboard():
             cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='accepted'")
             stats["amount_due"] = float(cur.fetchone()[0])
 
-            q = "SELECT * FROM bookings"
-            p = []
+            # Build filtered query — filter on event_start_date (the date orders go out)
+            wheres = []
+            params = []
             if status_filter:
-                q += " WHERE status=%s"; p.append(status_filter)
-            q += " ORDER BY created_at DESC LIMIT 100"
-            cur.execute(q, p)
+                wheres.append("status=%s"); params.append(status_filter)
+            if date_from:
+                wheres.append("event_start_date >= %s"); params.append(date_from)
+            if date_to:
+                wheres.append("event_start_date <= %s"); params.append(date_to)
+            q = "SELECT * FROM bookings"
+            if wheres:
+                q += " WHERE " + " AND ".join(wheres)
+            q += " ORDER BY event_start_date ASC, created_at DESC LIMIT 200"
+            cur.execute(q, params)
             rows = cur.fetchall()
             _avatar_colors = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6',
                                '#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16']
@@ -2136,11 +2169,16 @@ def admin_dashboard():
                     if b.get("final_payment_link"):
                         b["pay_label"], b["pay_class"] = "Partially Paid", "pay-partial"
                     else:
-                        b["pay_label"], b["pay_class"] = "Paid", "pay-paid"
+                        b["pay_label"], b["pay_class"] = "Paid In Full", "pay-paid"
                 elif b["status"] == "accepted":
                     b["pay_label"], b["pay_class"] = "Payment Due", "pay-due"
                 else:
                     b["pay_label"], b["pay_class"] = "—", "pay-none"
+                # Apply pay_filter AFTER labelling
+                if pay_filter:
+                    if pay_filter == "paid" and b["pay_class"] != "pay-paid": continue
+                    if pay_filter == "partial" and b["pay_class"] != "pay-partial": continue
+                    if pay_filter == "due" and b["pay_class"] != "pay-due": continue
                 # Avatar
                 name = b.get("full_name") or "?"
                 b["avatar_color"]    = _avatar_colors[ord(name[0].lower()) % len(_avatar_colors)]
@@ -2167,6 +2205,9 @@ def admin_dashboard():
         stats=stats,
         inventory=inventory_status,
         status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        pay_filter=pay_filter,
     )
 
 
@@ -2557,7 +2598,10 @@ ADMIN_CUSTOMERS_HTML = """
 <div class="main">
   <div class="top-row">
     <div class="page-title">Customers</div>
-    <button class="btn btn-primary" onclick="toggleAdd()">+ Add Customer</button>
+    <div style="display:flex;gap:.6rem;align-items:center">
+      <a href="/admin/customers/import" class="btn btn-outline">⬆ Import CSV</a>
+      <button class="btn btn-primary" onclick="toggleAdd()">+ Add Customer</button>
+    </div>
   </div>
 
   {% if flash_ok %}<div class="flash flash-ok">✓ {{ flash_ok }}</div>{% endif %}
@@ -2696,6 +2740,165 @@ function filterCustomers(){
     var email=row.querySelector('.cust-email').textContent.toLowerCase();
     row.style.display=(name.includes(q)||email.includes(q))?'':'none';
   });
+}
+</script>
+</body></html>
+"""
+
+ADMIN_CUSTOMER_IMPORT_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Import Customers — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar-brand{font-size:1rem;font-weight:700}
+    .topbar-nav{display:flex;gap:.5rem;align-items:center}
+    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px}
+    .nav-link:hover{background:#f3f4f6;color:#111827}
+    .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none}
+    .main{max-width:750px;margin:0 auto;padding:1.75rem}
+    .breadcrumb{font-size:.82rem;color:#9ca3af;margin-bottom:1rem}
+    .breadcrumb a{color:#2563eb;text-decoration:none}
+    .page-title{font-size:1.3rem;font-weight:700;margin-bottom:.35rem}
+    .page-sub{font-size:.88rem;color:#6b7280;margin-bottom:1.5rem}
+    .flash{padding:.75rem 1rem;border-radius:8px;margin-bottom:1.25rem;font-size:.9rem;font-weight:500}
+    .flash-ok{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+    .flash-err{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+    .card{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1.5rem;margin-bottom:1.25rem}
+    .card h3{font-size:.9rem;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.4px;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #f3f4f6}
+    .step{display:flex;gap:1rem;margin-bottom:1rem;align-items:flex-start}
+    .step-num{width:28px;height:28px;border-radius:50%;background:#2563eb;color:white;font-size:.82rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:.1rem}
+    .step-body{flex:1}
+    .step-title{font-weight:600;font-size:.9rem;color:#111827;margin-bottom:.25rem}
+    .step-desc{font-size:.84rem;color:#6b7280;line-height:1.5}
+    code{background:#f3f4f6;padding:.15rem .4rem;border-radius:4px;font-size:.82rem;font-family:monospace}
+    .template-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:7px;padding:.75rem 1rem;font-family:monospace;font-size:.78rem;color:#374151;overflow-x:auto;white-space:nowrap;margin:.5rem 0}
+    .upload-area{border:2px dashed #d1d5db;border-radius:10px;padding:2rem;text-align:center;cursor:pointer;transition:all .15s;background:#fafafa}
+    .upload-area:hover,.upload-area.drag{border-color:#2563eb;background:#eff6ff}
+    .upload-icon{font-size:2rem;margin-bottom:.5rem}
+    .upload-label{font-size:.9rem;font-weight:600;color:#374151;margin-bottom:.25rem}
+    .upload-sub{font-size:.8rem;color:#9ca3af}
+    input[type=file]{display:none}
+    .btn{display:inline-block;padding:.5rem 1.1rem;border-radius:7px;font-size:.86rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:all .12s}
+    .btn-primary{background:#2563eb;color:white}
+    .btn-primary:hover{background:#1d4ed8}
+    .btn-outline{background:white;color:#374151;border:1px solid #d1d5db}
+    .btn-outline:hover{background:#f3f4f6}
+    .btn-sm{padding:.3rem .7rem;font-size:.78rem}
+    .actions{display:flex;gap:.75rem;margin-top:1.25rem;align-items:center}
+    table{width:100%;border-collapse:collapse;font-size:.83rem;margin-top:.75rem}
+    th{padding:.5rem .75rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;border-bottom:1px solid #e5e7eb;background:#f9fafb}
+    td{padding:.5rem .75rem;border-bottom:1px solid #f3f4f6;color:#374151}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-nav">
+    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+    <a href="/admin/inventory" class="nav-link">Inventory</a>
+    <a href="/admin/customers" class="nav-link active">Customers</a>
+    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+  </div>
+</div>
+<div class="main">
+  <div class="breadcrumb"><a href="/admin/customers">Customers</a> › Import</div>
+  <div class="page-title">Import Customers from CSV</div>
+  <div class="page-sub">Upload a spreadsheet of customers exported from Booqable or filled in manually.</div>
+
+  {% if flash_ok %}<div class="flash flash-ok">✓ {{ flash_ok }}</div>{% endif %}
+  {% if flash_err %}<div class="flash flash-err">⚠ {{ flash_err }}</div>{% endif %}
+  {% if results %}
+  <div class="flash flash-ok">
+    ✓ Import complete — {{ results.added }} added, {{ results.updated }} updated, {{ results.skipped }} skipped.
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3>How to Import</h3>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Download the template</div>
+        <div class="step-desc">
+          Click below to download a CSV template with the correct column headers.
+          <br><br>
+          <a href="/admin/customers/import/template" class="btn btn-outline btn-sm">⬇ Download Template</a>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Fill it in</div>
+        <div class="step-desc">
+          Open the template in Google Sheets or Excel. Paste your Booqable customer names, emails, and phone numbers into the matching columns. The required columns are:
+          <div class="template-box">full_name, email, phone, company_name, street, city, state, zip, notes</div>
+          Only <code>full_name</code> is required. Everything else is optional.
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Save as CSV and upload</div>
+        <div class="step-desc">In Google Sheets: File → Download → CSV. In Excel: Save As → CSV. Then upload below.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Upload CSV File</h3>
+    <form method="POST" action="/admin/customers/import" enctype="multipart/form-data">
+      <div class="upload-area" id="dropZone" onclick="document.getElementById('csvFile').click()"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="event.preventDefault();this.classList.remove('drag');handleDrop(event)">
+        <div class="upload-icon">📂</div>
+        <div class="upload-label" id="uploadLabel">Click to choose a CSV file</div>
+        <div class="upload-sub">or drag and drop here</div>
+      </div>
+      <input type="file" id="csvFile" name="csvfile" accept=".csv,text/csv" onchange="showFileName(this)">
+      <div class="actions">
+        <a href="/admin/customers" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Import Customers</button>
+      </div>
+    </form>
+  </div>
+
+  {% if preview %}
+  <div class="card">
+    <h3>Preview (first 5 rows)</h3>
+    <table>
+      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>City</th></tr></thead>
+      <tbody>
+        {% for r in preview %}
+        <tr><td>{{ r.full_name }}</td><td>{{ r.email or '—' }}</td><td>{{ r.phone or '—' }}</td><td>{{ r.city or '—' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+<script>
+function showFileName(input){
+  if(input.files&&input.files[0]){
+    document.getElementById('uploadLabel').textContent='Selected: '+input.files[0].name;
+  }
+}
+function handleDrop(e){
+  const file=e.dataTransfer.files[0];
+  if(file){
+    const dt=new DataTransfer();dt.items.add(file);
+    const inp=document.getElementById('csvFile');
+    inp.files=dt.files;
+    showFileName(inp);
+  }
 }
 </script>
 </body></html>
@@ -3111,6 +3314,151 @@ def admin_customer_delete(customer_id):
     except Exception as e:
         log.error(f"Customer delete error: {e}")
         return redirect(url_for("admin_customers", err=f"Delete failed: {e}"))
+
+
+@app.route("/admin/customers/import", methods=["GET"])
+@admin_required
+def admin_customers_import():
+    return render_template_string(ADMIN_CUSTOMER_IMPORT_HTML,
+        business_name=BUSINESS_NAME,
+        flash_ok=request.args.get("ok"),
+        flash_err=request.args.get("err"),
+        results=None, preview=None)
+
+
+@app.route("/admin/customers/import", methods=["POST"])
+@admin_required
+def admin_customers_import_post():
+    import io, csv as csv_module
+    f = request.files.get("csvfile")
+    if not f or f.filename == "":
+        return redirect(url_for("admin_customers_import", err="No file selected."))
+
+    try:
+        stream = io.StringIO(f.stream.read().decode("utf-8-sig"), newline=None)
+        reader = csv_module.DictReader(stream)
+    except Exception as e:
+        return redirect(url_for("admin_customers_import", err=f"Could not read file: {e}"))
+
+    # Normalise header names (strip whitespace, lowercase)
+    FIELD_MAP = {
+        "full_name": ["full_name", "name", "customer name", "fullname", "full name"],
+        "company_name": ["company_name", "company", "business", "company name"],
+        "email": ["email", "email address", "e-mail"],
+        "phone": ["phone", "phone number", "mobile", "cell"],
+        "street": ["street", "address", "street address", "addr"],
+        "city": ["city"],
+        "state": ["state", "province"],
+        "zip": ["zip", "postal code", "postcode", "zip code"],
+        "notes": ["notes", "note", "comments", "comment"],
+    }
+
+    def find_col(headers, candidates):
+        h_lower = {h.strip().lower(): h for h in headers}
+        for c in candidates:
+            if c in h_lower:
+                return h_lower[c]
+        return None
+
+    rows_parsed = []
+    errors_out = []
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_customers_import", err="Database unavailable."))
+
+    try:
+        cur = conn.cursor()
+        added = updated = skipped = 0
+        preview = []
+
+        for i, row in enumerate(reader):
+            headers = list(row.keys())
+            def g(field):
+                col = find_col(headers, FIELD_MAP[field])
+                return row[col].strip() if col and row.get(col) else None
+
+            full_name = g("full_name")
+            if not full_name:
+                skipped += 1
+                continue
+
+            company_name = g("company_name")
+            email = g("email") or None
+            phone = g("phone") or None
+            street = g("street") or None
+            city = g("city") or None
+            state = g("state") or None
+            zip_code = g("zip") or None
+            notes = g("notes") or None
+
+            if i < 5:
+                preview.append({"full_name": full_name, "email": email, "phone": phone, "city": city})
+
+            try:
+                cur.execute("SAVEPOINT row_import")
+                if email:
+                    cur.execute("""
+                        INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
+                            full_name=EXCLUDED.full_name,
+                            company_name=EXCLUDED.company_name,
+                            phone=EXCLUDED.phone,
+                            street=EXCLUDED.street,
+                            city=EXCLUDED.city,
+                            state=EXCLUDED.state,
+                            zip=EXCLUDED.zip,
+                            notes=COALESCE(EXCLUDED.notes, customers.notes)
+                        RETURNING (xmax = 0) AS inserted
+                    """, (full_name, company_name, email, phone, street, city, state, zip_code, notes))
+                    was_inserted = cur.fetchone()[0]
+                    if was_inserted:
+                        added += 1
+                    else:
+                        updated += 1
+                else:
+                    cur.execute("""
+                        INSERT INTO customers (full_name, company_name, phone, street, city, state, zip, notes)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                    """, (full_name, company_name, phone, street, city, state, zip_code, notes))
+                    added += 1
+                cur.execute("RELEASE SAVEPOINT row_import")
+            except Exception as re:
+                cur.execute("ROLLBACK TO SAVEPOINT row_import")
+                skipped += 1
+                log.warning(f"CSV import row {i+1} skipped: {re}")
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info(f"CSV import: {added} added, {updated} updated, {skipped} skipped")
+
+        results = {"added": added, "updated": updated, "skipped": skipped}
+        return render_template_string(ADMIN_CUSTOMER_IMPORT_HTML,
+            business_name=BUSINESS_NAME,
+            flash_ok=None, flash_err=None,
+            results=results, preview=preview)
+
+    except Exception as e:
+        log.error(f"CSV import error: {e}")
+        return redirect(url_for("admin_customers_import", err=f"Import failed: {e}"))
+
+
+@app.route("/admin/customers/import/template")
+@admin_required
+def admin_customers_import_template():
+    import io, csv as csv_module
+    output = io.StringIO()
+    writer = csv_module.writer(output)
+    writer.writerow(["full_name", "company_name", "email", "phone", "street", "city", "state", "zip", "notes"])
+    writer.writerow(["Jane Smith", "ABC Events LLC", "jane@example.com", "555-123-4567", "123 Main St", "Hartford", "CT", "06101", "VIP client"])
+    csv_bytes = output.getvalue().encode("utf-8")
+    from flask import Response
+    return Response(
+        csv_bytes,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=customers_template.csv"}
+    )
 
 
 @app.route("/cron/final-reminders")
