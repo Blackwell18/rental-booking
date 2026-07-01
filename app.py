@@ -191,6 +191,26 @@ def init_db():
             ON customers (email) WHERE email IS NOT NULL
         """)
 
+        # Import all existing booking customers into customers table (safe to run every time)
+        cur.execute("""
+            INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
+            SELECT DISTINCT ON (email)
+                full_name, company_name, email, phone,
+                renter_street, renter_city, renter_state, renter_zip
+            FROM bookings
+            WHERE email IS NOT NULL
+            ORDER BY email, created_at DESC
+            ON CONFLICT (email) DO UPDATE SET
+                full_name    = EXCLUDED.full_name,
+                company_name = EXCLUDED.company_name,
+                phone        = EXCLUDED.phone,
+                street       = EXCLUDED.street,
+                city         = EXCLUDED.city,
+                state        = EXCLUDED.state,
+                zip          = EXCLUDED.zip
+        """)
+        log.info("Existing booking customers synced to customers table")
+
         # Create inventory table
         cur.execute("""
             CREATE TABLE IF NOT EXISTS inventory (
