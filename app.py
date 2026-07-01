@@ -192,24 +192,30 @@ def init_db():
         """)
 
         # Import all existing booking customers into customers table (safe to run every time)
-        cur.execute("""
-            INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
-            SELECT DISTINCT ON (email)
-                full_name, company_name, email, phone,
-                renter_street, renter_city, renter_state, renter_zip
-            FROM bookings
-            WHERE email IS NOT NULL
-            ORDER BY email, created_at DESC
-            ON CONFLICT (email) DO UPDATE SET
-                full_name    = EXCLUDED.full_name,
-                company_name = EXCLUDED.company_name,
-                phone        = EXCLUDED.phone,
-                street       = EXCLUDED.street,
-                city         = EXCLUDED.city,
-                state        = EXCLUDED.state,
-                zip          = EXCLUDED.zip
-        """)
-        log.info("Existing booking customers synced to customers table")
+        try:
+            cur.execute("SAVEPOINT cust_import")
+            cur.execute("""
+                INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
+                SELECT DISTINCT ON (email)
+                    full_name, company_name, email, phone,
+                    renter_street, renter_city, renter_state, renter_zip
+                FROM bookings
+                WHERE email IS NOT NULL
+                ORDER BY email, created_at DESC
+                ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
+                    full_name    = EXCLUDED.full_name,
+                    company_name = EXCLUDED.company_name,
+                    phone        = EXCLUDED.phone,
+                    street       = EXCLUDED.street,
+                    city         = EXCLUDED.city,
+                    state        = EXCLUDED.state,
+                    zip          = EXCLUDED.zip
+            """)
+            cur.execute("RELEASE SAVEPOINT cust_import")
+            log.info("Existing booking customers synced to customers table")
+        except Exception as ie:
+            cur.execute("ROLLBACK TO SAVEPOINT cust_import")
+            log.warning(f"Customer import warning: {ie}")
 
         # Create inventory table
         cur.execute("""
@@ -1883,7 +1889,7 @@ def submit():
             cust_cur.execute("""
                 INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (email) DO UPDATE SET
+                ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
                     full_name    = EXCLUDED.full_name,
                     company_name = EXCLUDED.company_name,
                     phone        = EXCLUDED.phone,
