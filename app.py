@@ -266,7 +266,13 @@ def get_products():
         cur.close()
         conn.close()
         if rows:
-            return [dict(r) for r in rows]
+            products = []
+            for r in rows:
+                p = dict(r)
+                p["price"] = float(p["price"])
+                p["total"] = int(p["total"])
+                products.append(p)
+            return products
     except Exception as e:
         log.error(f"get_products error: {e}")
     return PRODUCTS
