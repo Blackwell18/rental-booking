@@ -2589,6 +2589,7 @@ ADMIN_CUSTOMERS_HTML = """
           <th>Email</th>
           <th>Phone</th>
           <th>Location</th>
+          <th>Orders</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -2610,6 +2611,21 @@ ADMIN_CUSTOMERS_HTML = """
           <td><a href="tel:{{ c.phone }}" style="color:#374151;text-decoration:none">{{ c.phone or '—' }}</a></td>
           <td style="color:#6b7280;font-size:.82rem">
             {% if c.city %}{{ c.city }}{% if c.state %}, {{ c.state }}{% endif %}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if c.bookings %}
+            <div style="display:flex;flex-wrap:wrap;gap:.3rem">
+              {% for b in c.bookings %}
+              <a href="/admin/booking/{{ b.id }}"
+                 style="display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .5rem;border-radius:5px;font-size:.75rem;font-weight:600;text-decoration:none;
+                        background:{% if b.status=='confirmed' %}#dcfce7;color:#166534{% elif b.status=='pending' %}#fef9c3;color:#854d0e{% elif b.status=='accepted' %}#dbeafe;color:#1e40af{% else %}#f3f4f6;color:#6b7280{% endif %}">
+                #{{ b.id }}
+              </a>
+              {% endfor %}
+            </div>
+            {% else %}
+            <span style="color:#9ca3af;font-size:.8rem">No orders</span>
+            {% endif %}
           </td>
           <td>
             <div class="action-btns">
@@ -2913,6 +2929,16 @@ def admin_customers():
             cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur.execute("SELECT * FROM customers ORDER BY full_name")
             customers = [dict(r) for r in cur.fetchall()]
+            # Attach bookings to each customer matched by email
+            for c in customers:
+                if c.get("email"):
+                    cur.execute("""
+                        SELECT id, event_start_date, grand_total, status
+                        FROM bookings WHERE email=%s ORDER BY created_at DESC
+                    """, (c["email"],))
+                    c["bookings"] = [dict(r) for r in cur.fetchall()]
+                else:
+                    c["bookings"] = []
             cur.close()
             conn.close()
         except Exception as e:
