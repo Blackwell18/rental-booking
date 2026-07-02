@@ -3701,13 +3701,24 @@ ADMIN_CALENDAR_HTML = """
     <a href="https://calendar.google.com/calendar/r/settings/addbyurl" target="_blank" class="btn btn-primary" style="white-space:nowrap">Open Google Calendar</a>
   </div>
 
-  <!-- Legend -->
-  <div class="legend">
-    <div class="leg-item"><div class="leg-dot" style="background:#22c55e"></div>Paid In Full</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#eab308"></div>Partially Paid</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>Payment Due</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#3b82f6"></div>Pending</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#d1d5db"></div>Cancelled/Denied</div>
+  <!-- Filter toggles (click to show/hide each type) -->
+  <div class="legend" style="margin-bottom:1rem">
+    <span style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-right:.25rem">Show:</span>
+    <div class="leg-item filter-btn active" data-filter="paid"      onclick="toggleFilter('paid')"      style="cursor:pointer;border:2px solid #22c55e;border-radius:20px;padding:.25rem .65rem;background:#dcfce7">
+      <div class="leg-dot" style="background:#22c55e"></div>Paid In Full
+    </div>
+    <div class="leg-item filter-btn active" data-filter="partial"   onclick="toggleFilter('partial')"   style="cursor:pointer;border:2px solid #eab308;border-radius:20px;padding:.25rem .65rem;background:#fef9c3">
+      <div class="leg-dot" style="background:#eab308"></div>Partially Paid
+    </div>
+    <div class="leg-item filter-btn active" data-filter="due"       onclick="toggleFilter('due')"       style="cursor:pointer;border:2px solid #ef4444;border-radius:20px;padding:.25rem .65rem;background:#fee2e2">
+      <div class="leg-dot" style="background:#ef4444"></div>Payment Due
+    </div>
+    <div class="leg-item filter-btn active" data-filter="pending"   onclick="toggleFilter('pending')"   style="cursor:pointer;border:2px solid #3b82f6;border-radius:20px;padding:.25rem .65rem;background:#dbeafe">
+      <div class="leg-dot" style="background:#3b82f6"></div>Pending
+    </div>
+    <div class="leg-item filter-btn active" data-filter="cancelled" onclick="toggleFilter('cancelled')" style="cursor:pointer;border:2px solid #d1d5db;border-radius:20px;padding:.25rem .65rem;background:#f3f4f6">
+      <div class="leg-dot" style="background:#d1d5db"></div>Cancelled
+    </div>
   </div>
 
   <!-- Calendar grid -->
@@ -3739,17 +3750,43 @@ var curMonth = today.getMonth();
 
 var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
+// Active filters — all on by default
+var activeFilters = {paid:true, partial:true, due:true, pending:true, cancelled:true};
+
+function payType(b){
+  if(b.status==='confirmed') return b.final_payment_link ? 'partial' : 'paid';
+  if(b.status==='accepted') return 'due';
+  if(b.status==='pending') return 'pending';
+  return 'cancelled';
+}
 function payClass(b){
-  if(b.status==='confirmed') return b.final_payment_link ? 'chip-partial' : 'chip-paid';
-  if(b.status==='accepted') return 'chip-due';
-  if(b.status==='pending') return 'chip-pending';
+  var t = payType(b);
+  if(t==='paid')     return 'chip-paid';
+  if(t==='partial')  return 'chip-partial';
+  if(t==='due')      return 'chip-due';
+  if(t==='pending')  return 'chip-pending';
   return 'chip-cancelled';
 }
 function payLabel(b){
-  if(b.status==='confirmed') return b.final_payment_link ? '⚡ Partial' : '✅ Paid';
-  if(b.status==='accepted') return '💰 Due';
-  if(b.status==='pending') return '⏳ Pending';
+  var t = payType(b);
+  if(t==='paid')    return '✅ Paid';
+  if(t==='partial') return '⚡ Partial';
+  if(t==='due')     return '💰 Due';
+  if(t==='pending') return '⏳ Pending';
   return b.status;
+}
+
+function toggleFilter(key){
+  activeFilters[key] = !activeFilters[key];
+  var btn = document.querySelector('[data-filter="'+key+'"]');
+  if(activeFilters[key]){
+    btn.classList.add('active');
+    btn.style.opacity = '1';
+  } else {
+    btn.classList.remove('active');
+    btn.style.opacity = '0.35';
+  }
+  renderCalendar();
 }
 
 function renderCalendar(){
@@ -3761,10 +3798,10 @@ function renderCalendar(){
   var daysInMonth = new Date(curYear, curMonth+1, 0).getDate();
   var prevDays = new Date(curYear, curMonth, 0).getDate();
 
-  // Build a map: "YYYY-MM-DD" -> [bookings]
+  // Build a map: "YYYY-MM-DD" -> [bookings] — respect active filters
   var map = {};
   bookings.forEach(function(b){
-    // booking spans from start to end date
+    if(!activeFilters[payType(b)]) return;   // skip if filtered out
     var s = new Date(b.event_start_date + 'T00:00:00');
     var e = new Date((b.event_end_date || b.event_start_date) + 'T00:00:00');
     for(var d = new Date(s); d <= e; d.setDate(d.getDate()+1)){
