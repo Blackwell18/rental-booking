@@ -1138,6 +1138,13 @@ FORM_HTML = r"""
       <div class="field"><label>Phone <span class="required">*</span></label><input name="phone" type="tel" required placeholder="(555) 000-0000" value="{{ form.phone or '' }}"></div>
       <div class="field"><label>Email <span class="required">*</span></label><input name="email" type="email" required placeholder="jane@email.com" value="{{ form.email or '' }}"></div>
     </div>
+    <div style="margin-top:1rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
+      <input type="checkbox" name="tax_exempt_request" id="tax_exempt_request" value="1" style="width:18px;height:18px;margin-top:.15rem;accent-color:#16a34a;cursor:pointer;flex-shrink:0">
+      <label for="tax_exempt_request" style="cursor:pointer;font-size:.9rem;color:#166534;font-weight:600;line-height:1.4">
+        I have a Connecticut Tax-Exempt Certificate
+        <span style="display:block;font-weight:400;font-size:.8rem;color:#4b7c5a;margin-top:.1rem">Check this if your organization is tax-exempt. You will need to provide your certificate number to the rental office.</span>
+      </label>
+    </div>
   </div>
 
   <div class="card">
@@ -2095,20 +2102,21 @@ def submit():
     exact_fee   = EXACT_TIME_FEE if exact_delivery else 0.0
     pre_tax_total = round(subtotal + exact_fee + delivery_fee, 2)
 
-    # Check if customer is already tax exempt in our system
-    is_tax_exempt = False
-    tax_check_conn = get_db()
-    if tax_check_conn and email:
-        try:
-            tc = tax_check_conn.cursor()
-            tc.execute("SELECT tax_exempt FROM customers WHERE email=%s", (email,))
-            row = tc.fetchone()
-            if row and row[0]:
-                is_tax_exempt = True
-            tc.close()
-            tax_check_conn.close()
-        except Exception:
-            pass
+    # Check if customer is tax exempt (either from DB record or self-reported on form)
+    is_tax_exempt = f.get("tax_exempt_request") == "1"
+    if not is_tax_exempt:
+        tax_check_conn = get_db()
+        if tax_check_conn and email:
+            try:
+                tc = tax_check_conn.cursor()
+                tc.execute("SELECT tax_exempt FROM customers WHERE email=%s", (email,))
+                row = tc.fetchone()
+                if row and row[0]:
+                    is_tax_exempt = True
+                tc.close()
+                tax_check_conn.close()
+            except Exception:
+                pass
 
     applied_tax_rate = 0.0 if is_tax_exempt else CT_TAX_RATE
     tax_amount  = round(pre_tax_total * applied_tax_rate, 2)
