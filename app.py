@@ -49,6 +49,7 @@ PRODUCTS = [
 
 EXACT_TIME_FEE  = 175.00
 DEPOSIT_PERCENT = 0.25   # 25% deposit required
+CT_TAX_RATE     = 0.0635 # Connecticut sales tax 6.35%
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -168,6 +169,10 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_payment_link TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_reminder_sent BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(5,4) DEFAULT 0",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_exempt BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE customers ADD COLUMN IF NOT EXISTS tax_exempt BOOLEAN DEFAULT FALSE",
         ]
         for m in migrations:
             try:
@@ -636,6 +641,10 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
         balance_line   = ""
         balance_plain  = "Full payment required — no remaining balance."
 
+    tax_amount_val  = float(b.get("tax_amount") or 0)
+    tax_rate_val    = float(b.get("tax_rate") or 0)
+    is_tax_exempt_b = bool(b.get("tax_exempt"))
+
     item_rows = ""
     for it in items:
         item_rows += f"""
@@ -645,6 +654,16 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${it['unit_price']:.2f}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${it['total']:.2f}</td>
         </tr>"""
+
+    if is_tax_exempt_b:
+        tax_row_html  = '<tr><td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#276749">CT Sales Tax <span style="font-size:.76rem;background:#c6f6d5;color:#276749;border-radius:4px;padding:.1rem .35rem;margin-left:.3rem">TAX EXEMPT</span></td><td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0;color:#276749">$0.00</td></tr>'
+        tax_row_plain = "  CT Sales Tax:       $0.00 (TAX EXEMPT)\n"
+    elif tax_amount_val:
+        tax_row_html  = f'<tr><td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096">CT Sales Tax ({tax_rate_val*100:.2f}%)</td><td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0">${tax_amount_val:.2f}</td></tr>'
+        tax_row_plain = f"  CT Sales Tax ({tax_rate_val*100:.2f}%): ${tax_amount_val:.2f}\n"
+    else:
+        tax_row_html  = ""
+        tax_row_plain = ""
 
     payment_btn = f"""
     <div style="text-align:center;margin:1.5rem 0">
@@ -707,6 +726,7 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
           <td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096">Delivery Fee ({b.get('distance_miles','?')} mi)</td>
           <td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0">${b.get('delivery_fee',0):.2f}</td>
         </tr>
+        {tax_row_html}
         <tr style="background:#1a365d;color:white">
           <td colspan="3" style="padding:11px 12px;font-weight:700;font-size:1rem">TOTAL</td>
           <td style="padding:11px 12px;text-align:right;font-weight:700;font-size:1.2rem">${grand_total:.2f}</td>
@@ -757,7 +777,7 @@ EVENT DETAILS
 
 INVOICE
 {"".join(f"  {i['qty']}x {i['name']} @ ${i['unit_price']:.2f} = ${i['total']:.2f}\n" for i in items)}{"  Exact Time Delivery: $175.00\n" if exact else ""}  Delivery Fee: ${b.get('delivery_fee',0):.2f}
-  ─────────────────────────────
+{tax_row_plain}  ─────────────────────────────
   TOTAL: ${grand_total:.2f}
 
 PAYMENT REQUIRED
@@ -835,6 +855,19 @@ def send_final_payment_email(b, remaining_amount, payment_link):
 
     contract_html = build_contract_html(b, remaining_amount)
 
+    f_tax_amount   = float(b.get("tax_amount") or 0)
+    f_tax_rate     = float(b.get("tax_rate") or 0)
+    f_tax_exempt   = bool(b.get("tax_exempt"))
+    if f_tax_exempt:
+        f_tax_row_html  = '<tr><td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#276749">CT Sales Tax <span style="font-size:.76rem;background:#c6f6d5;color:#276749;border-radius:4px;padding:.1rem .35rem;margin-left:.3rem">TAX EXEMPT</span></td><td style="padding:8px 12px;text-align:right;color:#276749;font-weight:600;border-bottom:1px solid #e2e8f0">$0.00</td></tr>'
+        f_tax_row_plain = "  CT Sales Tax:       $0.00 (TAX EXEMPT)\n"
+    elif f_tax_amount:
+        f_tax_row_html  = f'<tr><td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096">CT Sales Tax ({f_tax_rate*100:.2f}%)</td><td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0">${f_tax_amount:.2f}</td></tr>'
+        f_tax_row_plain = f"  CT Sales Tax ({f_tax_rate*100:.2f}%): ${f_tax_amount:.2f}\n"
+    else:
+        f_tax_row_html  = ""
+        f_tax_row_plain = ""
+
     pay_btn = f"""
       <a href="{payment_link}"
          style="display:inline-block;background:linear-gradient(135deg,#c05621,#dd6b20);color:white;padding:1.1rem 2.75rem;border-radius:10px;font-weight:700;font-size:1.15rem;text-decoration:none;letter-spacing:.3px;box-shadow:0 4px 12px rgba(192,86,33,.35)">
@@ -890,6 +923,7 @@ def send_final_payment_email(b, remaining_amount, payment_link):
           <td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096">Delivery Fee</td>
           <td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0">${b.get('delivery_fee',0):.2f}</td>
         </tr>
+        {f_tax_row_html}
         <tr style="background:#f7fafc">
           <td colspan="3" style="padding:9px 12px;border-bottom:1px solid #e2e8f0;color:#718096">Total Invoice</td>
           <td style="padding:9px 12px;text-align:right;border-bottom:1px solid #e2e8f0">${grand_total:.2f}</td>
@@ -952,7 +986,7 @@ Event Time: {event_time} | Setup Time: {setup_time}
 PAYMENT SUMMARY
   Total Invoice:    ${grand_total:.2f}
   Deposit Paid:   - ${deposit_paid:.2f}
-  ──────────────────────────
+{f_tax_row_plain}  ──────────────────────────
   REMAINING DUE:   ${remaining_amount:.2f}
 
 PAY NOW: {payment_link if payment_link else 'Contact us to complete payment.'}
@@ -1173,8 +1207,9 @@ FORM_HTML = r"""
     <div class="total-row"><span>Items Subtotal</span><span id="t_items">$0.00</span></div>
     <div class="total-row"><span>Exact Time Delivery</span><span id="t_exact">-</span></div>
     <div class="total-row"><span>Delivery Fee</span><span id="t_delivery">Calculated after review</span></div>
+    <div class="total-row"><span>CT Sales Tax (6.35%)</span><span id="t_tax">$0.00</span></div>
     <div class="total-row grand"><span>Estimated Total</span><span id="t_grand">$0.00</span></div>
-    <p class="total-note">Final delivery fee confirmed after we verify your address. This is a quote request, not a charge.</p>
+    <p class="total-note">Final delivery fee and tax confirmed after we review your address. This is a quote request, not a charge.</p>
   </div>
 
   <button type="submit" class="submit-btn" id="submitBtn">Send Quote Request</button>
@@ -1182,8 +1217,9 @@ FORM_HTML = r"""
 </div>
 <script>
 const EXACT_FEE = {{ exact_time_fee }};
+const CT_TAX_RATE = 0.0635;
 function changeQty(id,delta){const i=document.getElementById('qty_'+id);const m=parseInt(i.dataset.max);let v=Math.max(0,Math.min(m,parseInt(i.value||0)+delta));i.value=v;updateTotals();}
-function updateTotals(){let sub=0;document.querySelectorAll('.qty-input').forEach(i=>{const qty=parseInt(i.value)||0;const price=parseFloat(i.dataset.price);const id=i.id.replace('qty_','');const line=qty*price;sub+=line;const el=document.getElementById('sub_'+id);el.textContent=qty>0?'$'+line.toFixed(2):'-';el.classList.toggle('has-val',qty>0);});const exact=document.getElementById('exact_time_cb').checked;const ef=exact?EXACT_FEE:0;document.getElementById('t_items').textContent='$'+sub.toFixed(2);document.getElementById('t_exact').textContent=exact?'$'+EXACT_FEE.toFixed(2):'-';document.getElementById('t_grand').textContent='$'+(sub+ef).toFixed(2)+'+';}
+function updateTotals(){let sub=0;document.querySelectorAll('.qty-input').forEach(i=>{const qty=parseInt(i.value)||0;const price=parseFloat(i.dataset.price);const id=i.id.replace('qty_','');const line=qty*price;sub+=line;const el=document.getElementById('sub_'+id);el.textContent=qty>0?'$'+line.toFixed(2):'-';el.classList.toggle('has-val',qty>0);});const exact=document.getElementById('exact_time_cb').checked;const ef=exact?EXACT_FEE:0;const tax=(sub+ef)*CT_TAX_RATE;document.getElementById('t_items').textContent='$'+sub.toFixed(2);document.getElementById('t_exact').textContent=exact?'$'+EXACT_FEE.toFixed(2):'-';document.getElementById('t_tax').textContent='$'+tax.toFixed(2);document.getElementById('t_grand').textContent='$'+(sub+ef+tax).toFixed(2)+'+';}
 function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
 setVenue('venue');
 function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{Object.entries(data).forEach(([id,avail])=>{const input=document.getElementById('qty_'+id);if(!input)return;input.dataset.max=avail;input.max=avail;if(parseInt(input.value)>avail){input.value=avail;}});updateTotals();}).catch(()=>{});}
@@ -1512,12 +1548,14 @@ ADMIN_DASH_HTML = """
     <a href="/admin/inventory" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Inventory</a>
     <a href="/admin/customers" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Customers</a>
     <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
+    <a href="/admin/route" class="nav-link">🗺 Route</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
 
 <div class="main">
   <div class="page-title">Dashboard</div>
+
 
   <!-- ── Metric Cards ── -->
   <div class="metrics">
@@ -1890,6 +1928,11 @@ ADMIN_BOOKING_HTML = """
         <tr><td colspan="3">Exact Time Delivery</td><td style="text-align:right;font-weight:600">$175.00</td></tr>
         {% endif %}
         <tr><td colspan="3">Delivery Fee ({{ b.distance_miles or '?' }} mi)</td><td style="text-align:right;font-weight:600">${{ "%.2f"|format(b.delivery_fee or 0) }}</td></tr>
+        {% if b.tax_exempt %}
+        <tr style="background:#f0fff4"><td colspan="3" style="color:#276749">CT Sales Tax <span style="font-size:.78rem;background:#c6f6d5;color:#276749;border-radius:4px;padding:.1rem .4rem;margin-left:.4rem">TAX EXEMPT</span></td><td style="text-align:right;color:#276749">$0.00</td></tr>
+        {% elif b.tax_amount %}
+        <tr><td colspan="3" style="color:#718096">CT Sales Tax ({{ "%.2f"|format((b.tax_rate or 0)*100) }}%)</td><td style="text-align:right;font-weight:600">${{ "%.2f"|format(b.tax_amount or 0) }}</td></tr>
+        {% endif %}
         <tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
         {% if days_until <= 7 %}
         <tr style="background:#fff5f5"><td colspan="3" style="color:#c53030;font-weight:700">Due Now (event within 7 days — full payment required)</td><td style="text-align:right;font-weight:700;color:#c53030">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
@@ -2050,7 +2093,26 @@ def submit():
     delivery_fee, delivery_note = calc_delivery_fee(miles)
 
     exact_fee   = EXACT_TIME_FEE if exact_delivery else 0.0
-    grand_total = round(subtotal + exact_fee + delivery_fee, 2)
+    pre_tax_total = round(subtotal + exact_fee + delivery_fee, 2)
+
+    # Check if customer is already tax exempt in our system
+    is_tax_exempt = False
+    tax_check_conn = get_db()
+    if tax_check_conn and email:
+        try:
+            tc = tax_check_conn.cursor()
+            tc.execute("SELECT tax_exempt FROM customers WHERE email=%s", (email,))
+            row = tc.fetchone()
+            if row and row[0]:
+                is_tax_exempt = True
+            tc.close()
+            tax_check_conn.close()
+        except Exception:
+            pass
+
+    applied_tax_rate = 0.0 if is_tax_exempt else CT_TAX_RATE
+    tax_amount  = round(pre_tax_total * applied_tax_rate, 2)
+    grand_total = round(pre_tax_total + tax_amount, 2)
 
     # Save to DB
     booking_id = None
@@ -2069,11 +2131,11 @@ def submit():
                     event_street, event_city, event_state, event_zip,
                     exact_time_delivery, delivery_location,
                     delivery_fee, distance_miles,
-                    items_json, items_subtotal, exact_time_fee, grand_total,
+                    items_json, items_subtotal, exact_time_fee, tax_rate, tax_amount, tax_exempt, grand_total,
                     notes
                 ) VALUES (
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                 ) RETURNING id
             """, (
                 full_name, company_name,
@@ -2085,7 +2147,7 @@ def submit():
                 event_street, event_city, event_state, event_zip,
                 exact_delivery, delivery_location,
                 delivery_fee, miles,
-                json.dumps(order_items), subtotal, exact_fee, grand_total,
+                json.dumps(order_items), subtotal, exact_fee, applied_tax_rate, tax_amount, is_tax_exempt, grand_total,
                 notes,
             ))
             booking_id = cur.fetchone()[0]
@@ -2113,6 +2175,7 @@ def submit():
         "distance_miles": miles,
         "items_json": json.dumps(order_items),
         "items_subtotal": subtotal, "exact_time_fee": exact_fee,
+        "tax_rate": applied_tax_rate, "tax_amount": tax_amount, "tax_exempt": is_tax_exempt,
         "grand_total": grand_total, "notes": notes,
     }
     send_owner_email(booking_data)
@@ -2224,6 +2287,7 @@ ADMIN_INVENTORY_HTML = """
     <a href="/admin/inventory" class="nav-link active">Inventory</a>
     <a href="/admin/customers" class="nav-link">Customers</a>
     <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
+    <a href="/admin/route" class="nav-link">🗺 Route</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -2915,6 +2979,7 @@ ADMIN_CUSTOMERS_HTML = """
     <a href="/admin/inventory" class="nav-link">Inventory</a>
     <a href="/admin/customers" class="nav-link active">Customers</a>
     <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
+    <a href="/admin/route" class="nav-link">🗺 Route</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -3013,7 +3078,10 @@ ADMIN_CUSTOMERS_HTML = """
               </div>
             </div>
           </td>
-          <td class="cust-email"><a href="mailto:{{ c.email }}" style="color:#2563eb;text-decoration:none">{{ c.email or '—' }}</a></td>
+          <td class="cust-email">
+            <a href="mailto:{{ c.email }}" style="color:#2563eb;text-decoration:none">{{ c.email or '—' }}</a>
+            {% if c.tax_exempt %}<span style="display:inline-block;margin-left:.4rem;font-size:.7rem;background:#dcfce7;color:#166534;border-radius:4px;padding:.1rem .4rem;font-weight:600">TAX EXEMPT</span>{% endif %}
+          </td>
           <td><a href="tel:{{ c.phone }}" style="color:#374151;text-decoration:none">{{ c.phone or '—' }}</a></td>
           <td style="color:#6b7280;font-size:.82rem">
             {% if c.city %}{{ c.city }}{% if c.state %}, {{ c.state }}{% endif %}{% else %}—{% endif %}
@@ -3134,6 +3202,7 @@ ADMIN_CUSTOMER_IMPORT_HTML = """
     <a href="/admin/inventory" class="nav-link">Inventory</a>
     <a href="/admin/customers" class="nav-link active">Customers</a>
     <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
+    <a href="/admin/route" class="nav-link">🗺 Route</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -3300,6 +3369,7 @@ ADMIN_CUSTOMER_EDIT_HTML = """
     <a href="/admin/inventory" class="nav-link">Inventory</a>
     <a href="/admin/customers" class="nav-link active">Customers</a>
     <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
+    <a href="/admin/route" class="nav-link">🗺 Route</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -3346,6 +3416,17 @@ ADMIN_CUSTOMER_EDIT_HTML = """
         <div class="form-group span2">
           <label>Notes</label>
           <textarea name="notes">{{ c.notes or '' }}</textarea>
+        </div>
+        <div class="form-group span2">
+          <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-weight:600">
+            <input type="checkbox" name="tax_exempt" value="1" {% if c.tax_exempt %}checked{% endif %}
+                   style="width:17px;height:17px;accent-color:#2563eb;cursor:pointer">
+            Tax Exempt
+          </label>
+          <p style="margin:.3rem 0 0;font-size:.8rem;color:#6b7280">
+            Check this if the customer has a valid Connecticut tax-exempt certificate.
+            Tax (6.35% CT) will be automatically removed from all future bookings for this customer.
+          </p>
         </div>
       </div>
       <div class="form-actions">
@@ -3607,9 +3688,10 @@ def admin_customer_save(customer_id):
         return redirect(url_for("admin_customers", err="Database unavailable"))
     try:
         cur = conn.cursor()
+        tax_exempt_val = f.get("tax_exempt") == "1"
         cur.execute("""
             UPDATE customers SET full_name=%s, company_name=%s, email=%s, phone=%s,
-                street=%s, city=%s, state=%s, zip=%s, notes=%s
+                street=%s, city=%s, state=%s, zip=%s, notes=%s, tax_exempt=%s
             WHERE id=%s
         """, (
             full_name,
@@ -3621,6 +3703,7 @@ def admin_customer_save(customer_id):
             f.get("state", "").strip() or None,
             f.get("zip", "").strip() or None,
             f.get("notes", "").strip() or None,
+            tax_exempt_val,
             customer_id,
         ))
         conn.commit()
@@ -3739,6 +3822,7 @@ ADMIN_CALENDAR_HTML = """
     <a href="/admin/inventory" class="nav-link">Inventory</a>
     <a href="/admin/customers" class="nav-link">Customers</a>
     <a href="/admin/calendar" class="nav-link active">📅 Calendar</a>
+    <a href="/admin/route" class="nav-link">🗺 Route</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -4018,96 +4102,413 @@ def admin_customers_import_post():
     if not conn:
         return redirect(url_for("admin_customers_import", err="Database unavailable."))
 
+    headers = reader.fieldnames or []
+    name_col    = find_col(headers, FIELD_MAP["full_name"])
+    company_col = find_col(headers, FIELD_MAP["company_name"])
+    email_col   = find_col(headers, FIELD_MAP["email"])
+    phone_col   = find_col(headers, FIELD_MAP["phone"])
+    street_col  = find_col(headers, FIELD_MAP["street"])
+    city_col    = find_col(headers, FIELD_MAP["city"])
+    state_col   = find_col(headers, FIELD_MAP["state"])
+    zip_col     = find_col(headers, FIELD_MAP["zip"])
+    notes_col   = find_col(headers, FIELD_MAP["notes"])
+
+    if not name_col:
+        return redirect(url_for("admin_customers_import",
+                                err="Could not find a 'name' column in your CSV."))
+
+    for i, row in enumerate(reader, start=2):
+        full_name = row.get(name_col, "").strip()
+        if not full_name:
+            continue
+        rows_parsed.append({
+            "full_name":    full_name,
+            "company_name": row.get(company_col, "").strip() if company_col else None,
+            "email":        row.get(email_col, "").strip() if email_col else None,
+            "phone":        row.get(phone_col, "").strip() if phone_col else None,
+            "street":       row.get(street_col, "").strip() if street_col else None,
+            "city":         row.get(city_col, "").strip() if city_col else None,
+            "state":        row.get(state_col, "").strip() if state_col else None,
+            "zip":          row.get(zip_col, "").strip() if zip_col else None,
+            "notes":        row.get(notes_col, "").strip() if notes_col else None,
+        })
+
+    if not rows_parsed:
+        return redirect(url_for("admin_customers_import", err="No valid rows found in CSV."))
+
     try:
         cur = conn.cursor()
-        added = updated = skipped = 0
-        preview = []
-
-        for i, row in enumerate(reader):
-            headers = list(row.keys())
-            def g(field):
-                col = find_col(headers, FIELD_MAP[field])
-                return row[col].strip() if col and row.get(col) else None
-
-            full_name = g("full_name")
-            if not full_name:
-                skipped += 1
-                continue
-
-            company_name = g("company_name")
-            email = g("email") or None
-            phone = g("phone") or None
-            street = g("street") or None
-            city = g("city") or None
-            state = g("state") or None
-            zip_code = g("zip") or None
-            notes = g("notes") or None
-
-            if i < 5:
-                preview.append({"full_name": full_name, "email": email, "phone": phone, "city": city})
-
-            try:
-                cur.execute("SAVEPOINT row_import")
-                if email:
-                    cur.execute("""
-                        INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
-                            full_name=EXCLUDED.full_name,
-                            company_name=EXCLUDED.company_name,
-                            phone=EXCLUDED.phone,
-                            street=EXCLUDED.street,
-                            city=EXCLUDED.city,
-                            state=EXCLUDED.state,
-                            zip=EXCLUDED.zip,
-                            notes=COALESCE(EXCLUDED.notes, customers.notes)
-                        RETURNING (xmax = 0) AS inserted
-                    """, (full_name, company_name, email, phone, street, city, state, zip_code, notes))
-                    was_inserted = cur.fetchone()[0]
-                    if was_inserted:
-                        added += 1
-                    else:
-                        updated += 1
-                else:
-                    cur.execute("""
-                        INSERT INTO customers (full_name, company_name, phone, street, city, state, zip, notes)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    """, (full_name, company_name, phone, street, city, state, zip_code, notes))
-                    added += 1
-                cur.execute("RELEASE SAVEPOINT row_import")
-            except Exception as re:
-                cur.execute("ROLLBACK TO SAVEPOINT row_import")
-                skipped += 1
-                log.warning(f"CSV import row {i+1} skipped: {re}")
-
+        upserted = 0
+        for r in rows_parsed:
+            cur.execute("""
+                INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
+                    full_name    = EXCLUDED.full_name,
+                    company_name = EXCLUDED.company_name,
+                    phone        = EXCLUDED.phone,
+                    street       = EXCLUDED.street,
+                    city         = EXCLUDED.city,
+                    state        = EXCLUDED.state,
+                    zip          = EXCLUDED.zip,
+                    notes        = EXCLUDED.notes
+            """, (r.get("full_name"), r.get("company_name") or None,
+                  r.get("email") or None, r.get("phone") or None,
+                  r.get("street") or None, r.get("city") or None,
+                  r.get("state") or None, r.get("zip") or None,
+                  r.get("notes") or None))
+            upserted += 1
         conn.commit()
         cur.close()
         conn.close()
-        log.info(f"CSV import: {added} added, {updated} updated, {skipped} skipped")
-
-        results = {"added": added, "updated": updated, "skipped": skipped}
-        return render_template_string(ADMIN_CUSTOMER_IMPORT_HTML,
-            business_name=BUSINESS_NAME,
-            flash_ok=None, flash_err=None,
-            results=results, preview=preview)
-
+        return redirect(url_for("admin_customers", ok=f"{upserted} customer(s) imported successfully!"))
     except Exception as e:
-        log.error(f"CSV import error: {e}")
-        return redirect(url_for("admin_customers_import", err=f"Import failed: {e}"))
+        log.error(f"CSV import DB error: {e}")
+        return redirect(url_for("admin_customers_import", err=f"Database error: {e}"))
 
 
 @app.route("/admin/customers/import/template")
 @admin_required
 def admin_customers_import_template():
-    import io, csv as csv_module
-    output = io.StringIO()
-    writer = csv_module.writer(output)
-    writer.writerow(["full_name", "company_name", "email", "phone", "street", "city", "state", "zip", "notes"])
-    writer.writerow(["Jane Smith", "ABC Events LLC", "jane@example.com", "555-123-4567", "123 Main St", "Hartford", "CT", "06101", "VIP client"])
-    csv_bytes = output.getvalue().encode("utf-8")
     from flask import Response as _R
+    csv_bytes = b"full_name,company_name,email,phone,street,city,state,zip,notes\n"
     return _R(csv_bytes, mimetype="text/csv",
               headers={"Content-Disposition": "attachment; filename=customers_template.csv"})
+
+
+# ── Route Planner ─────────────────────────────────────────────────────────────
+
+DEPOT_ADDRESS = "799 New Haven Rd, Naugatuck, CT 06770"
+
+ADMIN_ROUTE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Route Planner | {{ business_name }}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c}
+  .topbar{background:white;border-bottom:1px solid #e2e8f0;padding:.75rem 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .topbar-brand{font-weight:800;font-size:1.1rem;color:#1a365d}
+  .topbar-nav{display:flex;align-items:center;gap:.25rem}
+  .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s}
+  .nav-link:hover{background:#f3f4f6;color:#374151}
+  .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
+  .logout-btn{color:#e53e3e;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;margin-left:.5rem}
+  .logout-btn:hover{background:#fff5f5}
+  .main{max-width:820px;margin:0 auto;padding:2rem 1.5rem}
+  .page-title{font-size:1.5rem;font-weight:800;color:#1a365d;margin-bottom:1.5rem}
+  .card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:1.25rem}
+  .date-bar{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+  .date-bar label{font-weight:600;color:#374151;font-size:.95rem}
+  .date-bar input[type=date]{border:1.5px solid #cbd5e0;border-radius:8px;padding:.55rem .9rem;font-size:.95rem;color:#1a202c;cursor:pointer;outline:none}
+  .date-bar input[type=date]:focus{border-color:#2563eb}
+  .btn-plan{background:linear-gradient(135deg,#1a365d,#2563eb);color:white;border:none;padding:.6rem 1.4rem;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;transition:opacity .15s}
+  .btn-plan:hover{opacity:.9}
+  .btn-maps{display:inline-flex;align-items:center;gap:.4rem;background:#ea4335;color:white;text-decoration:none;padding:.65rem 1.3rem;border-radius:8px;font-size:.9rem;font-weight:600;margin-top:1rem;transition:opacity .15s}
+  .btn-maps:hover{opacity:.9}
+  #loading{display:none;text-align:center;padding:3rem;color:#6b7280}
+  #loading .spinner{width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 1rem}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #route-output{display:none}
+  .depot-card{background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;border-radius:12px;padding:1.25rem 1.5rem}
+  .depot-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.8px;opacity:.75;font-weight:600}
+  .depot-addr{font-size:1rem;font-weight:700;margin-top:.2rem}
+  .leg{display:flex;align-items:center;gap:.65rem;padding:.5rem 0 .5rem 1.5rem}
+  .leg-line{width:2px;height:26px;background:#cbd5e0;flex-shrink:0}
+  .leg-info{font-size:.8rem;color:#374151;font-weight:600;background:#f0f4f8;border-radius:6px;padding:.22rem .7rem;border:1px solid #e2e8f0;white-space:nowrap}
+  .stop-card{border:1.5px solid #e2e8f0;border-radius:12px;padding:1.25rem 1.5rem;background:white}
+  .stop-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#2563eb;color:white;border-radius:50%;font-size:.78rem;font-weight:700;margin-bottom:.55rem}
+  .stop-name{font-size:1.05rem;font-weight:700;color:#1a365d}
+  .stop-addr{font-size:.85rem;color:#4a5568;margin:.15rem 0 .55rem}
+  .chips{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.55rem}
+  .chip{font-size:.74rem;background:#f0f4f8;color:#4a5568;border-radius:5px;padding:.18rem .55rem;border:1px solid #e2e8f0}
+  .chip.time{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+  .items-line{font-size:.8rem;color:#6b7280;margin-top:.3rem}
+  .stop-links{margin-top:.65rem;display:flex;gap:.75rem;flex-wrap:wrap}
+  .stop-link{font-size:.78rem;font-weight:500;text-decoration:none}
+  .stop-link.maps{color:#ea4335}
+  .stop-link.booking{color:#6b7280}
+  .stop-link:hover{text-decoration:underline}
+  .summary-row{display:flex;gap:1.5rem;flex-wrap:wrap;background:#f0fff4;border:1.5px solid #68d391;border-radius:12px;padding:1.25rem 1.5rem;margin-top:1.25rem}
+  .summary-stat .val{font-size:1.7rem;font-weight:800;color:#276749;line-height:1}
+  .summary-stat .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.5px;color:#4a5568;margin-top:.2rem}
+  .error-msg{background:#fff5f5;border:1px solid #feb2b2;color:#c53030;border-radius:8px;padding:1rem 1.25rem;font-size:.9rem}
+  .no-deliveries{text-align:center;padding:2.5rem;color:#718096}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand">&#127881; {{ business_name }}</div>
+  <div class="topbar-nav">
+    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+    <a href="/admin/inventory" class="nav-link">Inventory</a>
+    <a href="/admin/customers" class="nav-link">Customers</a>
+    <a href="/admin/calendar" class="nav-link">&#128197; Calendar</a>
+    <a href="/admin/route" class="nav-link active">&#128506; Route</a>
+    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+  </div>
+</div>
+<div class="main">
+  <div class="page-title">&#128506; Route Planner</div>
+
+  <div class="card">
+    <div class="date-bar">
+      <label for="rdate">Delivery Date</label>
+      <input type="date" id="rdate" value="{{ today }}">
+      <button class="btn-plan" onclick="planRoute()">Plan Route</button>
+    </div>
+    <p style="font-size:.8rem;color:#9ca3af;margin-top:.75rem">
+      Starting point: <strong style="color:#4a5568">{{ depot }}</strong>
+    </p>
+  </div>
+
+  <div id="loading"><div class="spinner"></div><p>Calculating optimal route&hellip;</p></div>
+  <div id="no-stops" style="display:none" class="card"><div class="no-deliveries">
+    <div style="font-size:2rem;margin-bottom:.6rem">&#128235;</div>
+    <strong>No deliveries on this date</strong>
+    <p style="font-size:.85rem;margin-top:.3rem">Active (pending, accepted, confirmed) bookings for this date will appear here.</p>
+  </div></div>
+  <div id="route-error" style="display:none" class="card"><div class="error-msg" id="route-err-msg"></div></div>
+
+  <div id="route-output">
+    <div class="depot-card">
+      <div class="depot-label">&#127968; Starting Point</div>
+      <div class="depot-addr">{{ depot }}</div>
+    </div>
+    <div id="stops-list"></div>
+    <div class="summary-row" id="summary-row">
+      <div class="summary-stat"><div class="val" id="s-stops">-</div><div class="lbl">Stops</div></div>
+      <div class="summary-stat"><div class="val" id="s-miles">-</div><div class="lbl">Total Miles</div></div>
+      <div class="summary-stat"><div class="val" id="s-time">-</div><div class="lbl">Est. Drive Time</div></div>
+    </div>
+    <a id="gmaps-btn" href="#" target="_blank" rel="noopener" class="btn-maps" style="display:none">
+      &#128205; Open Full Route in Google Maps
+    </a>
+  </div>
+</div>
+<script>
+function esc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmt(m){if(!m&&m!==0)return '?';if(m<60)return m+'m';return Math.floor(m/60)+'h '+(m%60)+'m';}
+
+function planRoute(){
+  var d=document.getElementById('rdate').value;
+  if(!d){alert('Select a date first.');return;}
+  ['route-output','no-stops','route-error'].forEach(function(id){document.getElementById(id).style.display='none';});
+  document.getElementById('loading').style.display='block';
+  fetch('/admin/route/optimize?date='+d)
+    .then(function(r){return r.json();})
+    .then(function(data){
+      document.getElementById('loading').style.display='none';
+      if(data.error){
+        document.getElementById('route-err-msg').textContent=data.error;
+        document.getElementById('route-error').style.display='block';
+        return;
+      }
+      if(!data.stops||data.stops.length===0){
+        document.getElementById('no-stops').style.display='block';
+        return;
+      }
+      renderRoute(data);
+    })
+    .catch(function(e){
+      document.getElementById('loading').style.display='none';
+      document.getElementById('route-err-msg').textContent='Error: '+e.message;
+      document.getElementById('route-error').style.display='block';
+    });
+}
+
+function renderRoute(data){
+  var list=document.getElementById('stops-list');
+  list.innerHTML='';
+  data.stops.forEach(function(s,i){
+    var leg=document.createElement('div');
+    leg.className='leg';
+    var legText=(s.leg_miles!==null&&s.leg_miles!==undefined)
+      ? s.leg_miles+' mi &nbsp;&middot;&nbsp; ~'+fmt(s.leg_minutes)
+      : 'Distance N/A';
+    leg.innerHTML='<div class="leg-line"></div><div class="leg-info">'+legText+'</div>';
+    list.appendChild(leg);
+
+    var card=document.createElement('div');
+    card.className='stop-card';
+    var chips='';
+    if(s.setup_time) chips+='<span class="chip time">&#9201; Setup '+esc(s.setup_time)+'</span>';
+    if(s.event_start_time) chips+='<span class="chip time">&#127881; Start '+esc(s.event_start_time)+'</span>';
+    if(s.phone) chips+='<span class="chip">&#128222; '+esc(s.phone)+'</span>';
+    if(s.email) chips+='<span class="chip">&#9993; '+esc(s.email)+'</span>';
+    var items=s.items&&s.items.length?s.items.map(function(it){return it.qty+'x '+it.name;}).join(', '):'';
+    var mapsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(s.address);
+    card.innerHTML=
+      '<div class="stop-num">'+(i+1)+'</div>'+
+      '<div class="stop-name">'+esc(s.name)+'</div>'+
+      '<div class="stop-addr">'+esc(s.address)+'</div>'+
+      (chips?'<div class="chips">'+chips+'</div>':'')+
+      (items?'<div class="items-line">&#128230; '+esc(items)+'</div>':'')+
+      (s.delivery_location?'<div class="items-line">&#128682; '+esc(s.delivery_location)+'</div>':'')+
+      '<div class="stop-links">'+
+        '<a href="'+mapsUrl+'" target="_blank" rel="noopener" class="stop-link maps">&#128205; Open in Maps</a>'+
+        '<a href="/admin/booking/'+s.booking_id+'" class="stop-link booking">View Booking #'+s.booking_id+'</a>'+
+      '</div>';
+    list.appendChild(card);
+  });
+  document.getElementById('s-stops').textContent=data.stops.length;
+  document.getElementById('s-miles').textContent=data.total_miles!==null?data.total_miles+' mi':'?';
+  document.getElementById('s-time').textContent=fmt(data.total_minutes);
+  var btn=document.getElementById('gmaps-btn');
+  if(data.google_maps_url){btn.href=data.google_maps_url;btn.style.display='inline-flex';}
+  else{btn.style.display='none';}
+  document.getElementById('route-output').style.display='block';
+}
+document.addEventListener('DOMContentLoaded',function(){planRoute();});
+</script>
+</body></html>
+"""
+
+
+@app.route("/admin/route")
+@admin_required
+def admin_route():
+    from datetime import date as _date
+    return render_template_string(ADMIN_ROUTE_HTML,
+        business_name=BUSINESS_NAME,
+        depot=DEPOT_ADDRESS,
+        today=_date.today().isoformat(),
+    )
+
+
+@app.route("/admin/route/optimize")
+@admin_required
+def admin_route_optimize():
+    date_str = request.args.get("date", "")
+    if not date_str:
+        return jsonify({"error": "No date provided"}), 400
+
+    conn = get_db()
+    if not conn:
+        return jsonify({"error": "Database unavailable"}), 500
+
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("""
+            SELECT id, full_name, phone, email,
+                   event_street, event_city, event_state, event_zip,
+                   delivery_location, items_json,
+                   setup_time, event_start_time
+            FROM bookings
+            WHERE event_start_date = %s
+              AND status NOT IN ('cancelled', 'denied')
+              AND (archived IS NULL OR archived = FALSE)
+            ORDER BY id
+        """, (date_str,))
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close()
+        conn.close()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    if not rows:
+        return jsonify({"stops": [], "total_miles": 0, "total_minutes": 0,
+                        "date": date_str, "depot": DEPOT_ADDRESS})
+
+    addresses = []
+    for b in rows:
+        parts = [b.get("event_street",""), b.get("event_city",""),
+                 b.get("event_state",""), b.get("event_zip","")]
+        addresses.append(", ".join(p for p in parts if p).strip(", "))
+
+    all_locs = [DEPOT_ADDRESS] + addresses
+    n = len(all_locs)
+    route_order = list(range(1, n))
+    dur_matrix = None
+    dist_matrix = None
+    optimized = False
+
+    if GOOGLE_MAPS_KEY and n > 1:
+        try:
+            rsp = requests.get(
+                "https://maps.googleapis.com/maps/api/distancematrix/json",
+                params={"origins": "|".join(all_locs),
+                        "destinations": "|".join(all_locs),
+                        "units": "imperial",
+                        "key": GOOGLE_MAPS_KEY},
+                timeout=15,
+            )
+            dm = rsp.json()
+            dur_m, dist_m = [], []
+            for row_data in dm.get("rows", []):
+                dr, distrow = [], []
+                for el in row_data.get("elements", []):
+                    if el.get("status") == "OK":
+                        dr.append(el["duration"]["value"])
+                        distrow.append(el["distance"]["value"])
+                    else:
+                        dr.append(999999)
+                        distrow.append(999999)
+                dur_m.append(dr)
+                dist_m.append(distrow)
+            dur_matrix  = dur_m
+            dist_matrix = dist_m
+
+            unvisited = set(range(1, n))
+            route_order = []
+            current = 0
+            while unvisited:
+                nearest = min(unvisited, key=lambda x: dur_matrix[current][x])
+                route_order.append(nearest)
+                unvisited.remove(nearest)
+                current = nearest
+            optimized = True
+        except Exception as e:
+            log.error(f"Route optimize error: {e}")
+
+    result_stops = []
+    total_miles   = 0.0
+    total_minutes = 0
+    prev_idx = 0
+
+    for step, idx in enumerate(route_order):
+        b = rows[idx - 1]
+        leg_miles = leg_mins = None
+        if dur_matrix and dist_matrix:
+            d_sec = dur_matrix[prev_idx][idx]
+            d_met = dist_matrix[prev_idx][idx]
+            if d_sec < 999999:
+                leg_miles = round(d_met / 1609.344, 1)
+                leg_mins  = max(1, round(d_sec / 60))
+                total_miles   += leg_miles
+                total_minutes += leg_mins
+        result_stops.append({
+            "order":             step + 1,
+            "booking_id":        b["id"],
+            "name":              b.get("full_name", ""),
+            "phone":             str(b.get("phone") or ""),
+            "email":             str(b.get("email") or ""),
+            "address":           addresses[idx - 1],
+            "delivery_location": str(b.get("delivery_location") or ""),
+            "items":             json.loads(b.get("items_json") or "[]"),
+            "setup_time":        str(b.get("setup_time") or ""),
+            "event_start_time":  str(b.get("event_start_time") or ""),
+            "leg_miles":         leg_miles,
+            "leg_minutes":       leg_mins,
+        })
+        prev_idx = idx
+
+    waypoints = [urllib.parse.quote_plus(DEPOT_ADDRESS)]
+    for s in result_stops[:9]:
+        waypoints.append(urllib.parse.quote_plus(s["address"]))
+    maps_url = "https://www.google.com/maps/dir/" + "/".join(waypoints)
+
+    return jsonify({
+        "stops":           result_stops,
+        "total_miles":     round(total_miles, 1),
+        "total_minutes":   total_minutes,
+        "date":            date_str,
+        "optimized":       optimized,
+        "depot":           DEPOT_ADDRESS,
+        "google_maps_url": maps_url,
+    })
 
 
 # ── Calendar Routes ───────────────────────────────────────────────────────────
@@ -4125,26 +4526,25 @@ def admin_calendar():
             cur.execute("""
                 SELECT id, full_name, email, phone,
                        event_start_date, event_end_date,
-                       status, grand_total, final_payment_link
+                       status, grand_total, final_payment_link,
+                       items_json, delivery_location
                 FROM bookings
                 WHERE status NOT IN ('denied')
                   AND (archived IS NULL OR archived = FALSE)
                 ORDER BY event_start_date
             """)
-            for r in cur.fetchall():
-                b = dict(r)
-                b["event_start_date"] = str(b["event_start_date"])[:10] if b["event_start_date"] else ""
-                b["event_end_date"]   = str(b["event_end_date"])[:10]   if b["event_end_date"]   else b["event_start_date"]
-                b["grand_total"]      = float(b["grand_total"] or 0)
-                b["final_payment_link"] = b.get("final_payment_link") or ""
+            for row in cur.fetchall():
+                b = dict(row)
+                b["grand_total"] = float(b.get("grand_total") or 0)
+                b["event_start_date"] = str(b.get("event_start_date") or "")
+                b["event_end_date"]   = str(b.get("event_end_date") or "")
                 bookings.append(b)
             cur.close()
             conn.close()
         except Exception as e:
-            log.error(f"Calendar load error: {e}")
+            log.error(f"Calendar fetch error: {e}")
 
-    base_url = request.host_url.rstrip("/")
-    ics_url = f"{base_url}/calendar.ics"
+    ics_url = request.host_url.rstrip("/") + "/calendar.ics"
     if CALENDAR_KEY:
         ics_url += f"?key={CALENDAR_KEY}"
 
@@ -4182,50 +4582,38 @@ def calendar_ics():
 
     now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     lines = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
+        "BEGIN:VCALENDAR", "VERSION:2.0",
         f"PRODID:-//Rent a Party LLC//Booking Calendar//EN",
         f"X-WR-CALNAME:{BUSINESS_NAME} Bookings",
         "X-WR-TIMEZONE:America/New_York",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
+        "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
     ]
-
     for b in bookings:
         status = b.get("status", "")
         fp     = b.get("final_payment_link")
         if status == "confirmed":
-            label = "✅ Paid In Full" if not fp else "⚡ Partially Paid"
+            label = "Paid In Full" if not fp else "Partially Paid"
         elif status == "accepted":
-            label = "💰 Payment Due"
+            label = "Payment Due"
         elif status == "pending":
-            label = "⏳ Pending"
+            label = "Pending"
         else:
             label = status.capitalize()
-
         try:
             start_str = str(b["event_start_date"])[:10].replace("-", "")
             end_dt    = datetime.strptime(str(b["event_end_date"])[:10], "%Y-%m-%d") + timedelta(days=1)
             end_str   = end_dt.strftime("%Y%m%d")
         except Exception:
             start_str = end_str = now_utc[:8]
-
         uid     = f"booking-{b['id']}@rentaparty"
         summary = f"{label} - {b['full_name']} (#{b['id']})"
         total   = float(b.get("grand_total") or 0)
         desc    = f"Booking #{b['id']} | Total: ${total:.2f} | Status: {status}"
-
         lines += [
-            "BEGIN:VEVENT",
-            f"UID:{uid}",
-            f"DTSTAMP:{now_utc}",
-            f"DTSTART;VALUE=DATE:{start_str}",
-            f"DTEND;VALUE=DATE:{end_str}",
-            f"SUMMARY:{summary}",
-            f"DESCRIPTION:{desc}",
-            "END:VEVENT",
+            "BEGIN:VEVENT", f"UID:{uid}", f"DTSTAMP:{now_utc}",
+            f"DTSTART;VALUE=DATE:{start_str}", f"DTEND;VALUE=DATE:{end_str}",
+            f"SUMMARY:{summary}", f"DESCRIPTION:{desc}", "END:VEVENT",
         ]
-
     lines.append("END:VCALENDAR")
     ics_content = "\r\n".join(lines) + "\r\n"
     return Response(ics_content, mimetype="text/calendar",
@@ -4248,14 +4636,17 @@ def pwa_manifest():
         "icons": [
             {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
             {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
-        ]
+        ],
     }
     return Response(json.dumps(manifest), mimetype="application/manifest+json")
 
 
 @app.route("/sw.js")
 def pwa_sw():
-    sw = "self.addEventListener('install',e=>self.skipWaiting());\nself.addEventListener('activate',e=>clients.claim());\nself.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));});\n"
+    sw = """self.addEventListener('install',e=>self.skipWaiting());
+self.addEventListener('activate',e=>clients.claim());
+self.addEventListener('fetch',e=>{});
+"""
     return Response(sw, mimetype="application/javascript")
 
 
@@ -4269,27 +4660,77 @@ def pwa_icon_512():
     return Response(_ICON_512, mimetype="image/png")
 
 
-# ── Cron ─────────────────────────────────────────────────────────────────────
+# ── Cron / Auto-reminders ─────────────────────────────────────────────────────
 
-@app.route("/cron/final-reminders")
-def cron_final_reminders():
-    if CRON_SECRET and request.args.get("secret") != CRON_SECRET:
-        return jsonify({"error": "Unauthorized"}), 401
+@app.route("/cron/send-reminders")
+def cron_send_reminders():
+    """Called by Render cron job (or external scheduler) once daily."""
+    secret = request.args.get("secret", "")
+    cron_secret = os.getenv("CRON_SECRET", "")
+    if cron_secret and secret != cron_secret:
+        return "Unauthorized", 401
 
-    target_date = (date.today() + timedelta(days=2)).isoformat()
     conn = get_db()
     if not conn:
-        return jsonify({"error": "DB unavailable"}), 500
+        return "DB unavailable", 500
 
     sent = []
-    errors = []
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        target_date = (date.today() + timedelta(days=2)).isoformat()
         cur.execute("""
             SELECT * FROM bookings
             WHERE status = 'confirmed'
               AND event_start_date = %s
               AND (final_reminder_sent IS NULL OR final_reminder_sent = FALSE)
+        """, (target_date,))
+        bookings_due = [dict(r) for r in cur.fetchall()]
+        cur.close()
+        conn.close()
+    except Exception as e:
+        return f"DB error: {e}", 500
+
+    for b in bookings_due:
+        try:
+            grand_total  = float(b.get("grand_total") or 0)
+            remaining    = round(grand_total * 0.75, 2)
+            items_list   = ", ".join(
+                f"{i['qty']}x {i['name']}"
+                for i in json.loads(b.get("items_json") or "[]")
+            )
+            product_name = f"Final Payment — Booking #{b['id']}"
+            payment_link, err = create_stripe_payment_link(
+                b["id"], remaining, b.get("email"), items_list, product_name
+            )
+            if err:
+                log.warning(f"Cron Stripe error #{b['id']}: {err}")
+
+            conn2 = get_db()
+            if conn2:
+                cur2 = conn2.cursor()
+                cur2.execute(
+                    "UPDATE bookings SET final_payment_link=%s, final_reminder_sent=TRUE WHERE id=%s",
+                    (payment_link, b["id"])
+                )
+                conn2.commit()
+                cur2.close()
+                conn2.close()
+
+            b["final_payment_link"] = payment_link
+            send_final_payment_email(b, remaining, payment_link)
+            sent.append(b["id"])
+            log.info(f"Cron: final reminder sent for booking #{b['id']}")
+        except Exception as e:
+            log.error(f"Cron error for booking #{b.get('id')}: {e}")
+
+    return jsonify({"sent": sent, "count": len(sent)})
+
+
+# ── Run ───────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    app.run(debug=False, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+_sent IS NULL OR final_reminder_sent = FALSE)
               AND final_payment_link IS NOT NULL
         """, (target_date,))
         rows = [dict(r) for r in cur.fetchall()]
