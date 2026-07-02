@@ -23,7 +23,7 @@ import psycopg2
 import psycopg2.extras
 import stripe
 from flask import (Flask, request, render_template_string,
-                   redirect, url_for, jsonify, session)
+                   redirect, url_for, jsonify, session, Response)
 from dotenv import load_dotenv
 
 load_dotenv()
