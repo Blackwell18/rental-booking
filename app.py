@@ -832,6 +832,8 @@ def send_final_payment_email(b, remaining_amount, payment_link):
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${it['total']:.2f}</td>
         </tr>"""
 
+    contract_html = build_contract_html(b, remaining_amount)
+
     pay_btn = f"""
       <a href="{payment_link}"
          style="display:inline-block;background:linear-gradient(135deg,#c05621,#dd6b20);color:white;padding:1.1rem 2.75rem;border-radius:10px;font-weight:700;font-size:1.15rem;text-decoration:none;letter-spacing:.3px;box-shadow:0 4px 12px rgba(192,86,33,.35)">
@@ -921,7 +923,20 @@ def send_final_payment_email(b, remaining_amount, payment_link):
       We look forward to making your event a success!
     </p>
 
-    <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">&mdash; The {BUSINESS_NAME} Team</p>
+    <!-- Rental Agreement -->
+    <div style="border-top:2px solid #e2e8f0;padding-top:1.5rem;margin-top:1.5rem">
+      <h3 style="color:#1a365d;font-size:.95rem;font-weight:700;margin:0 0 .4rem;text-transform:uppercase;letter-spacing:.5px">Rental Agreement</h3>
+      <p style="font-size:.82rem;color:#718096;margin:0 0 1rem">
+        As a reminder, your rental is subject to the following terms and conditions.
+        By completing your final payment above, you confirm your agreement to all terms below.
+        No additional signature is required.
+      </p>
+      <div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1.25rem">
+        {contract_html}
+      </div>
+    </div>
+
+    <p style="color:#2d3748;font-weight:600;margin-top:1.75rem">&mdash; The {BUSINESS_NAME} Team</p>
   </div>
 </div></body></html>"""
 
@@ -943,6 +958,37 @@ PAY NOW: {payment_link if payment_link else 'Contact us to complete payment.'}
 
 Failure to make final payment may result in your order being canceled.
 {f"Questions? Call {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}
+
+────────────────────────────────────────────────────────
+RENTAL AGREEMENT — TERMS & CONDITIONS
+────────────────────────────────────────────────────────
+
+NON-REFUNDABLE DEPOSIT AGREEMENT
+Deposit is 25% and is NOT REFUNDABLE under any circumstances.
+- Canceled within 20 days of event: 50% of all items charged.
+- Canceled within 10 days of event: 75% of all items charged.
+- Canceled within 24 hours of event: 100% charge applies.
+- $75/hr fee if Rent a Party LLC is delayed due to Renter negligence.
+- Remaining balance due 48 hours before event; failure to pay may result in cancellation.
+- Person 18+ must be present at time of delivery.
+- No refunds; inclement weather postponements receive store credit.
+
+EQUIPMENT RENTAL TERMS
+1. Equipment returned damaged (beyond normal wear) — Renter pays repair/replacement costs.
+2. Late returns charged at $75/hour after specified return time.
+3. Renter must have venue authorization to use equipment on premises.
+4. Equipment may only be used for its intended purpose.
+5. No additions, attachments, or alterations without prior written consent.
+6. All equipment must be installed to allow removal without damage.
+7. Chairs must be stacked with the black circle facing up; improper stacking = $1/chair fee.
+8. Marquee items: keep dry, do not leave outside overnight, do not stand on them.
+9. Electrical/battery items (speakers, microphones, etc.) must not be left outside overnight or exposed to moisture.
+10. Water damage to any rental item = Renter responsible for full repair/replacement cost.
+11. OVERNIGHT RENTALS: All equipment must be secured in a locked location overnight.
+    Renter is fully responsible for all equipment until returned/picked up by Rent a Party, LLC.
+
+By making final payment you confirm your agreement to all terms above.
+No signature required — payment constitutes acceptance of this agreement.
 
 — {BUSINESS_NAME}"""
 
