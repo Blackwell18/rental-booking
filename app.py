@@ -1551,12 +1551,27 @@ ADMIN_DASH_HTML = """
     {% if date_from or date_to or pay_filter %}<a href="/admin/dashboard?status={{ status_filter }}" style="font-size:.78rem;color:#6b7280;text-decoration:none">✕ Clear</a>{% endif %}
   </form>
 
+  <!-- Bulk action bar (hidden until checkboxes selected) -->
+  <div id="bulkBar" style="display:none;background:#1e3a5f;color:white;padding:.6rem 1rem;display:flex;gap:.75rem;align-items:center;border-radius:8px;margin-bottom:.5rem">
+    <span id="bulkCount" style="font-size:.85rem;font-weight:600"></span>
+    <form method="POST" action="/admin/bookings/bulk-archive" id="bulkArchiveForm">
+      <input type="hidden" name="ids" id="bulkArchiveIds">
+      <button type="button" onclick="bulkAction('archive')" style="background:#f97316;color:white;border:none;border-radius:6px;padding:.3rem .8rem;font-size:.82rem;font-weight:600;cursor:pointer">📦 Archive Selected</button>
+    </form>
+    <form method="POST" action="/admin/bookings/bulk-delete" id="bulkDeleteForm">
+      <input type="hidden" name="ids" id="bulkDeleteIds">
+      <button type="button" onclick="bulkAction('delete')" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:.3rem .8rem;font-size:.82rem;font-weight:600;cursor:pointer">🗑 Delete Selected</button>
+    </form>
+    <button type="button" onclick="clearAll()" style="background:transparent;color:#9ca3af;border:1px solid #4b5563;border-radius:6px;padding:.3rem .8rem;font-size:.82rem;cursor:pointer">✕ Clear</button>
+  </div>
+
   <div class="table-card">
     {% if bookings %}
     <div class="table-scroll">
     <table>
       <thead>
         <tr>
+          <th style="width:36px;padding-left:.75rem"><input type="checkbox" id="selectAll" onchange="toggleAll(this)" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></th>
           <th>#</th>
           <th>Client</th>
           <th>Status</th>
@@ -1569,7 +1584,8 @@ ADMIN_DASH_HTML = """
       </thead>
       <tbody>
         {% for b in bookings %}
-        <tr>
+        <tr id="row-{{ b.id }}">
+          <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
           <td style="font-weight:700;color:#2563eb;font-size:.83rem">#{{ b.id }}</td>
           <td>
             <div class="client-cell">
@@ -1653,6 +1669,52 @@ function submitMgmt(id, sel){
   var f = document.getElementById('mgmt-form-'+id);
   f.action = url;
   f.submit();
+}
+
+function getChecked(){
+  return Array.from(document.querySelectorAll('.row-cb:checked')).map(c=>c.value);
+}
+
+function updateBulkBar(){
+  var ids = getChecked();
+  var bar = document.getElementById('bulkBar');
+  if(ids.length > 0){
+    bar.style.display = 'flex';
+    document.getElementById('bulkCount').textContent = ids.length + ' selected';
+  } else {
+    bar.style.display = 'none';
+  }
+  var all = document.querySelectorAll('.row-cb');
+  document.getElementById('selectAll').indeterminate = ids.length > 0 && ids.length < all.length;
+  document.getElementById('selectAll').checked = ids.length === all.length && all.length > 0;
+}
+
+function toggleAll(cb){
+  document.querySelectorAll('.row-cb').forEach(c => c.checked = cb.checked);
+  updateBulkBar();
+}
+
+function clearAll(){
+  document.querySelectorAll('.row-cb').forEach(c => c.checked = false);
+  document.getElementById('selectAll').checked = false;
+  document.getElementById('bulkBar').style.display = 'none';
+}
+
+function bulkAction(type){
+  var ids = getChecked();
+  if(ids.length === 0) return;
+  var msg = type === 'delete'
+    ? 'Permanently delete ' + ids.length + ' booking(s)? This cannot be undone.'
+    : 'Archive ' + ids.length + ' booking(s)?';
+  if(!confirm(msg)) return;
+  var idStr = ids.join(',');
+  if(type === 'delete'){
+    document.getElementById('bulkDeleteIds').value = idStr;
+    document.getElementById('bulkDeleteForm').submit();
+  } else {
+    document.getElementById('bulkArchiveIds').value = idStr;
+    document.getElementById('bulkArchiveForm').submit();
+  }
 }
 </script>
 </body></html>
@@ -2522,6 +2584,40 @@ def delete_booking(booking_id):
             log.info(f"Booking #{booking_id} permanently deleted")
         except Exception as e:
             log.error(f"Delete booking error: {e}")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/bookings/bulk-archive", methods=["POST"])
+@admin_required
+def bulk_archive_bookings():
+    ids_raw = request.form.get("ids", "")
+    ids = [int(i) for i in ids_raw.split(",") if i.strip().isdigit()]
+    if ids:
+        conn = get_db()
+        if conn:
+            try:
+                cur = conn.cursor()
+                cur.execute("UPDATE bookings SET archived=TRUE WHERE id = ANY(%s)", (ids,))
+                conn.commit(); cur.close(); conn.close()
+            except Exception as e:
+                log.error(f"Bulk archive error: {e}")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/bookings/bulk-delete", methods=["POST"])
+@admin_required
+def bulk_delete_bookings():
+    ids_raw = request.form.get("ids", "")
+    ids = [int(i) for i in ids_raw.split(",") if i.strip().isdigit()]
+    if ids:
+        conn = get_db()
+        if conn:
+            try:
+                cur = conn.cursor()
+                cur.execute("DELETE FROM bookings WHERE id = ANY(%s)", (ids,))
+                conn.commit(); cur.close(); conn.close()
+            except Exception as e:
+                log.error(f"Bulk delete error: {e}")
     return redirect(url_for("admin_dashboard"))
 
 
