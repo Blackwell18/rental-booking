@@ -166,6 +166,7 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_session_id TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_payment_link TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_reminder_sent BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE",
         ]
         for m in migrations:
             try:
@@ -1514,17 +1515,19 @@ ADMIN_DASH_HTML = """
   {% set df = ('&date_from=' ~ date_from) if date_from else '' %}
   {% set dt = ('&date_to=' ~ date_to) if date_to else '' %}
   {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
+  {% set sf = ('&sort=' ~ sort_by) if sort_by and sort_by != 'date' else '' %}
   <div class="tabs">
-    <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}" class="tab {% if not status_filter and not upcoming_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
+    <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if not status_filter and not upcoming_filter and not archived_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
     <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
-    <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}"   class="tab {% if status_filter=='pending'   %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
-    <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}"  class="tab {% if status_filter=='accepted'  %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
-    <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}" class="tab {% if status_filter=='confirmed' %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
-    <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}"    class="tab {% if status_filter=='denied'    %}active{% endif %}">Denied</a>
-    <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}" class="tab {% if status_filter=='cancelled' %}active{% endif %}">Cancelled</a>
+    <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}{{ sf }}"   class="tab {% if status_filter=='pending'   %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
+    <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
+    <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
+    <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    %}active{% endif %}">Denied</a>
+    <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' %}active{% endif %}">Cancelled</a>
+    <a href="/admin/dashboard?archived=1" class="tab {% if archived_filter %}active{% endif %}" style="{% if archived_filter %}color:#9ca3af;border-bottom-color:#9ca3af;{% endif %}">📦&nbsp;Archived</a>
   </div>
 
-  <!-- ── Date Range + Payment Filter ── -->
+  <!-- ── Date Range + Payment Filter + Sort ── -->
   <form method="GET" action="/admin/dashboard" style="background:white;border:1px solid #e5e7eb;border-bottom:none;padding:.65rem 1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center">
     <input type="hidden" name="status" value="{{ status_filter }}">
     <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-right:.1rem">Event Date:</label>
@@ -1538,7 +1541,13 @@ ADMIN_DASH_HTML = """
       <option value="partial" {% if pay_filter=='partial' %}selected{% endif %}>Partially Paid</option>
       <option value="due"     {% if pay_filter=='due'     %}selected{% endif %}>Payment Due</option>
     </select>
-    <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">Filter</button>
+    <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.5rem">Sort:</label>
+    <select name="sort" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
+      <option value="date" {% if sort_by=='date' %}selected{% endif %}>Event Date</option>
+      <option value="name" {% if sort_by=='name' %}selected{% endif %}>Name</option>
+      <option value="id"   {% if sort_by=='id'   %}selected{% endif %}>Booking #</option>
+    </select>
+    <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">Apply</button>
     {% if date_from or date_to or pay_filter %}<a href="/admin/dashboard?status={{ status_filter }}" style="font-size:.78rem;color:#6b7280;text-decoration:none">✕ Clear</a>{% endif %}
   </form>
 
@@ -1609,6 +1618,18 @@ ADMIN_DASH_HTML = """
                 <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel</button>
               </form>
               {% endif %}
+              <!-- Archive / Delete / Unarchive dropdown -->
+              <form method="POST" id="mgmt-form-{{ b.id }}" action="" style="display:inline">
+                <select onchange="submitMgmt({{ b.id }}, this)" style="border:1px solid #d1d5db;border-radius:6px;padding:.28rem .5rem;font-size:.78rem;color:#374151;cursor:pointer;margin-left:.25rem">
+                  <option value="">⚙ More</option>
+                  {% if b.archived %}
+                  <option value="/admin/booking/{{ b.id }}/unarchive">↩ Unarchive</option>
+                  {% else %}
+                  <option value="/admin/booking/{{ b.id }}/archive">📦 Archive</option>
+                  {% endif %}
+                  <option value="/admin/booking/{{ b.id }}/delete" data-confirm="Permanently delete booking #{{ b.id }}? This cannot be undone.">🗑 Delete</option>
+                </select>
+              </form>
             </div>
           </td>
         </tr>
@@ -1622,6 +1643,18 @@ ADMIN_DASH_HTML = """
   </div>
 
 </div>
+<script>
+function submitMgmt(id, sel){
+  var url = sel.value;
+  if(!url){ return; }
+  var opt = sel.options[sel.selectedIndex];
+  var msg = opt.getAttribute('data-confirm') || ('Are you sure?');
+  if(!confirm(msg)){ sel.selectedIndex=0; return; }
+  var f = document.getElementById('mgmt-form-'+id);
+  f.action = url;
+  f.submit();
+}
+</script>
 </body></html>
 """
 
@@ -2177,11 +2210,13 @@ def admin_logout():
 @app.route("/admin/dashboard")
 @admin_required
 def admin_dashboard():
-    status_filter  = request.args.get("status", "")
-    date_from      = request.args.get("date_from", "")
-    date_to        = request.args.get("date_to", "")
-    pay_filter     = request.args.get("pay_filter", "")   # paid | partial | due | ""
+    status_filter   = request.args.get("status", "")
+    date_from       = request.args.get("date_from", "")
+    date_to         = request.args.get("date_to", "")
+    pay_filter      = request.args.get("pay_filter", "")   # paid | partial | due | ""
     upcoming_filter = bool(request.args.get("upcoming", ""))
+    archived_filter = bool(request.args.get("archived", ""))
+    sort_by         = request.args.get("sort", "date")   # date | name | id
     conn = get_db()
     bookings = []
     stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0, "upcoming": 0}
@@ -2215,7 +2250,11 @@ def admin_dashboard():
                 wheres.append("event_start_date >= %s"); params.append(today_dt.isoformat())
                 wheres.append("event_start_date <= %s"); params.append(in_8_days)
                 wheres.append("status NOT IN ('cancelled','denied')")
+                wheres.append("(archived IS NULL OR archived = FALSE)")
+            elif archived_filter:
+                wheres.append("archived = TRUE")
             else:
+                wheres.append("(archived IS NULL OR archived = FALSE)")
                 if status_filter:
                     wheres.append("status=%s"); params.append(status_filter)
                 if date_from:
@@ -2225,7 +2264,10 @@ def admin_dashboard():
             q = "SELECT * FROM bookings"
             if wheres:
                 q += " WHERE " + " AND ".join(wheres)
-            q += " ORDER BY event_start_date ASC, created_at DESC LIMIT 200"
+            # Sort order
+            sort_map = {"name": "full_name ASC", "id": "id DESC", "date": "event_start_date ASC, created_at DESC"}
+            q += " ORDER BY " + sort_map.get(sort_by, "event_start_date ASC, created_at DESC")
+            q += " LIMIT 200"
             cur.execute(q, params)
             rows = cur.fetchall()
             _avatar_colors = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6',
@@ -2281,6 +2323,8 @@ def admin_dashboard():
         date_to=date_to,
         pay_filter=pay_filter,
         upcoming_filter=upcoming_filter,
+        archived_filter=archived_filter,
+        sort_by=sort_by,
     )
 
 
@@ -2479,6 +2523,41 @@ def delete_booking(booking_id):
         except Exception as e:
             log.error(f"Delete booking error: {e}")
     return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/booking/<int:booking_id>/archive", methods=["POST"])
+@admin_required
+def archive_booking(booking_id):
+    """Hide a booking from the main list (soft delete). Can be viewed in Archived tab."""
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE bookings SET archived=TRUE WHERE id=%s", (booking_id,))
+            conn.commit()
+            cur.close()
+            conn.close()
+            log.info(f"Booking #{booking_id} archived")
+        except Exception as e:
+            log.error(f"Archive booking error: {e}")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/booking/<int:booking_id>/unarchive", methods=["POST"])
+@admin_required
+def unarchive_booking(booking_id):
+    """Restore an archived booking back to the main list."""
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE bookings SET archived=FALSE WHERE id=%s", (booking_id,))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"Unarchive booking error: {e}")
+    return redirect(url_for("admin_dashboard", archived=1))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
