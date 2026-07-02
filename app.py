@@ -173,6 +173,7 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(10,2) DEFAULT 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_exempt BOOLEAN DEFAULT FALSE",
             "ALTER TABLE customers ADD COLUMN IF NOT EXISTS tax_exempt BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_status TEXT DEFAULT NULL",
         ]
         for m in migrations:
             try:
@@ -1734,6 +1735,19 @@ ADMIN_DASH_HTML = """
                 <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel</button>
               </form>
               {% endif %}
+              {% if b.delivery_status != 'picked_up' %}
+              <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status" style="display:inline">
+                {% if not b.delivery_status %}
+                <button class="btn" style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;font-size:.75rem"
+                  onclick="return confirm('Mark booking #{{ b.id }} as DELIVERED?')">🚚 Delivered</button>
+                {% elif b.delivery_status == 'delivered' %}
+                <button class="btn" style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd;font-size:.75rem"
+                  onclick="return confirm('Mark booking #{{ b.id }} as PICKED UP?')">✅ Picked Up</button>
+                {% endif %}
+              </form>
+              {% else %}
+              <span style="font-size:.75rem;color:#16a34a;font-weight:600;padding:.28rem .5rem;background:#f0fdf4;border:1px solid #86efac;border-radius:6px">✔ Picked Up</span>
+              {% endif %}
               <!-- Archive / Delete / Unarchive dropdown -->
               <form method="POST" id="mgmt-form-{{ b.id }}" action="" style="display:inline">
                 <select onchange="submitMgmt({{ b.id }}, this)" style="border:1px solid #d1d5db;border-radius:6px;padding:.28rem .5rem;font-size:.78rem;color:#374151;cursor:pointer;margin-left:.25rem">
@@ -1987,6 +2001,19 @@ ADMIN_BOOKING_HTML = """
         Send Final Payment Reminder
       </button>
     </form>
+    {% endif %}
+    {% if b.delivery_status != 'picked_up' %}
+    <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status">
+      {% if not b.delivery_status %}
+      <button class="btn" style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d"
+        onclick="return confirm('Mark this booking as DELIVERED?')">🚚 Mark as Delivered</button>
+      {% elif b.delivery_status == 'delivered' %}
+      <button class="btn" style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd"
+        onclick="return confirm('Mark this booking as PICKED UP?')">✅ Mark as Picked Up</button>
+      {% endif %}
+    </form>
+    {% else %}
+    <span style="padding:.5rem 1rem;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:8px;font-weight:600">✔ Picked Up</span>
     {% endif %}
     <form method="POST" action="/admin/booking/{{ b.id }}/delete" style="margin-left:auto">
       <button class="btn" style="background:#1f2937;color:white" onclick="return confirm('Permanently DELETE booking #{{ b.id }}? This cannot be undone. Customer info will be kept.')">
@@ -2793,6 +2820,34 @@ def unarchive_booking(booking_id):
         except Exception as e:
             log.error(f"Unarchive booking error: {e}")
     return redirect(url_for("admin_dashboard", archived=1))
+
+
+@app.route("/admin/booking/<int:booking_id>/delivery-status", methods=["POST"])
+@admin_required
+def booking_delivery_status(booking_id):
+    """Advance delivery_status: None → delivered → picked_up."""
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT delivery_status FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            current = row[0] if row else None
+            if current is None:
+                new_status = "delivered"
+            elif current == "delivered":
+                new_status = "picked_up"
+            else:
+                new_status = current  # already picked_up, no change
+            cur.execute("UPDATE bookings SET delivery_status=%s WHERE id=%s", (new_status, booking_id))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"Delivery status error: {e}")
+    # Return to wherever admin came from
+    ref = request.referrer or url_for("admin_dashboard")
+    return redirect(ref)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4278,9 +4333,18 @@ ADMIN_ROUTE_HTML = """<!DOCTYPE html>
       <input type="date" id="rdate" value="{{ today }}">
       <button class="btn-plan" onclick="planRoute()">Plan Route</button>
     </div>
-    <p style="font-size:.8rem;color:#9ca3af;margin-top:.75rem">
-      Starting point: <strong style="color:#4a5568">{{ depot }}</strong>
-    </p>
+    <div style="margin-top:.9rem;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem">
+      <label for="depot-select" style="font-size:.85rem;color:#6b7280;font-weight:600;white-space:nowrap">Starting Point:</label>
+      <select id="depot-select" onchange="onDepotChange()" style="flex:1;min-width:220px;padding:.45rem .65rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem;background:#fff;cursor:pointer">
+        <option value="799 New Haven Rd, Naugatuck, CT 06770">799 New Haven Rd, Naugatuck, CT 06770</option>
+        <option value="40 Graham St, Stratford, CT 06615">40 Graham St, Stratford, CT 06615</option>
+        <option value="__custom__">Custom address&hellip;</option>
+      </select>
+    </div>
+    <div id="custom-depot-row" style="display:none;margin-top:.6rem">
+      <input id="custom-depot-input" type="text" placeholder="Enter full address, e.g. 123 Main St, City, CT 00000"
+             style="width:100%;box-sizing:border-box;padding:.5rem .75rem;border:1.5px solid #93c5fd;border-radius:8px;font-size:.9rem">
+    </div>
   </div>
 
   <div id="loading"><div class="spinner"></div><p>Calculating optimal route&hellip;</p></div>
@@ -4294,7 +4358,7 @@ ADMIN_ROUTE_HTML = """<!DOCTYPE html>
   <div id="route-output">
     <div class="depot-card">
       <div class="depot-label">&#127968; Starting Point</div>
-      <div class="depot-addr">{{ depot }}</div>
+      <div class="depot-addr" id="depot-display">{{ depot }}</div>
     </div>
     <div id="stops-list"></div>
     <div class="summary-row" id="summary-row">
@@ -4311,12 +4375,29 @@ ADMIN_ROUTE_HTML = """<!DOCTYPE html>
 function esc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmt(m){if(!m&&m!==0)return '?';if(m<60)return m+'m';return Math.floor(m/60)+'h '+(m%60)+'m';}
 
+function onDepotChange(){
+  var sel=document.getElementById('depot-select');
+  var row=document.getElementById('custom-depot-row');
+  row.style.display=sel.value==='__custom__'?'block':'none';
+  if(sel.value!=='__custom__') document.getElementById('custom-depot-input').value='';
+}
+function getDepot(){
+  var sel=document.getElementById('depot-select');
+  if(sel.value==='__custom__'){
+    var v=document.getElementById('custom-depot-input').value.trim();
+    if(!v){alert('Please enter a custom starting address.');return null;}
+    return v;
+  }
+  return sel.value;
+}
 function planRoute(){
   var d=document.getElementById('rdate').value;
   if(!d){alert('Select a date first.');return;}
+  var depot=getDepot();
+  if(!depot)return;
   ['route-output','no-stops','route-error'].forEach(function(id){document.getElementById(id).style.display='none';});
   document.getElementById('loading').style.display='block';
-  fetch('/admin/route/optimize?date='+d)
+  fetch('/admin/route/optimize?date='+d+'&depot='+encodeURIComponent(depot))
     .then(function(r){return r.json();})
     .then(function(data){
       document.getElementById('loading').style.display='none';
@@ -4339,6 +4420,8 @@ function planRoute(){
 }
 
 function renderRoute(data){
+  var depotEl=document.getElementById('depot-display');
+  if(depotEl&&data.depot)depotEl.textContent=data.depot;
   var list=document.getElementById('stops-list');
   list.innerHTML='';
   data.stops.forEach(function(s,i){
@@ -4403,6 +4486,7 @@ def admin_route_optimize():
     date_str = request.args.get("date", "")
     if not date_str:
         return jsonify({"error": "No date provided"}), 400
+    depot_addr = request.args.get("depot", DEPOT_ADDRESS).strip() or DEPOT_ADDRESS
 
     conn = get_db()
     if not conn:
@@ -4429,7 +4513,7 @@ def admin_route_optimize():
 
     if not rows:
         return jsonify({"stops": [], "total_miles": 0, "total_minutes": 0,
-                        "date": date_str, "depot": DEPOT_ADDRESS})
+                        "date": date_str, "depot": depot_addr})
 
     addresses = []
     for b in rows:
@@ -4437,7 +4521,7 @@ def admin_route_optimize():
                  b.get("event_state",""), b.get("event_zip","")]
         addresses.append(", ".join(p for p in parts if p).strip(", "))
 
-    all_locs = [DEPOT_ADDRESS] + addresses
+    all_locs = [depot_addr] + addresses
     n = len(all_locs)
     route_order = list(range(1, n))
     dur_matrix = None
@@ -4514,7 +4598,7 @@ def admin_route_optimize():
         })
         prev_idx = idx
 
-    waypoints = [urllib.parse.quote_plus(DEPOT_ADDRESS)]
+    waypoints = [urllib.parse.quote_plus(depot_addr)]
     for s in result_stops[:9]:
         waypoints.append(urllib.parse.quote_plus(s["address"]))
     maps_url = "https://www.google.com/maps/dir/" + "/".join(waypoints)
@@ -4525,7 +4609,7 @@ def admin_route_optimize():
         "total_minutes":   total_minutes,
         "date":            date_str,
         "optimized":       optimized,
-        "depot":           DEPOT_ADDRESS,
+        "depot":           depot_addr,
         "google_maps_url": maps_url,
     })
 
