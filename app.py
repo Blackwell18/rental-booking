@@ -4741,28 +4741,3 @@ def cron_send_reminders():
 
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-_sent IS NULL OR final_reminder_sent = FALSE)
-              AND final_payment_link IS NOT NULL
-        """, (target_date,))
-        rows = [dict(r) for r in cur.fetchall()]
-
-        for b in rows:
-            try:
-                send_final_reminder_email(b)
-                cur.execute("UPDATE bookings SET final_reminder_sent=TRUE WHERE id=%s", (b["id"],))
-                sent.append(b["id"])
-            except Exception as e:
-                errors.append({"id": b["id"], "error": str(e)})
-
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    return jsonify({"sent": sent, "errors": errors})
-
-
-if __name__ == "__main__":
-    init_db()
-    app.run(debug=False, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
