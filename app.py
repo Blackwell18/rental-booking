@@ -1464,6 +1464,7 @@ ADMIN_DASH_HTML = """
     <a href="/admin/dashboard" style="color:#2563eb;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .75rem;border-radius:6px;background:#eff6ff">Dashboard</a>
     <a href="/admin/inventory" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Inventory</a>
     <a href="/admin/customers" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Customers</a>
+    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -2168,6 +2169,7 @@ ADMIN_INVENTORY_HTML = """
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link active">Inventory</a>
     <a href="/admin/customers" class="nav-link">Customers</a>
+    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -2847,6 +2849,7 @@ ADMIN_CUSTOMERS_HTML = """
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link">Inventory</a>
     <a href="/admin/customers" class="nav-link active">Customers</a>
+    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -3065,6 +3068,7 @@ ADMIN_CUSTOMER_IMPORT_HTML = """
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link">Inventory</a>
     <a href="/admin/customers" class="nav-link active">Customers</a>
+    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -3230,6 +3234,7 @@ ADMIN_CUSTOMER_EDIT_HTML = """
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link">Inventory</a>
     <a href="/admin/customers" class="nav-link active">Customers</a>
+    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -3585,6 +3590,282 @@ def admin_customer_delete(customer_id):
         return redirect(url_for("admin_customers", err=f"Delete failed: {e}"))
 
 
+ADMIN_CALENDAR_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
+  <title>Calendar — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar-brand{font-size:1rem;font-weight:700}
+    .topbar-nav{display:flex;gap:.5rem;align-items:center}
+    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px}
+    .nav-link:hover{background:#f3f4f6;color:#111827}
+    .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none}
+    .main{max-width:1100px;margin:0 auto;padding:1.5rem 1.25rem}
+    .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem}
+    .page-title{font-size:1.3rem;font-weight:700}
+    .cal-nav{display:flex;align-items:center;gap:.75rem}
+    .cal-nav button{background:white;border:1px solid #d1d5db;color:#374151;padding:.35rem .75rem;border-radius:7px;font-size:.9rem;cursor:pointer;font-weight:600}
+    .cal-nav button:hover{background:#f3f4f6}
+    .cal-month{font-size:1.1rem;font-weight:700;color:#111827;min-width:160px;text-align:center}
+    /* Legend */
+    .legend{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+    .leg-item{display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:#374151;font-weight:500}
+    .leg-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+    /* Google Calendar sync box */
+    .sync-box{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+    .sync-box img{width:24px;height:24px;flex-shrink:0}
+    .sync-text{flex:1;min-width:200px}
+    .sync-title{font-size:.88rem;font-weight:700;color:#111827;margin-bottom:.15rem}
+    .sync-sub{font-size:.78rem;color:#6b7280}
+    .sync-url{font-family:monospace;font-size:.75rem;background:#f3f4f6;padding:.3rem .6rem;border-radius:5px;color:#374151;word-break:break-all;flex:2;min-width:200px}
+    .btn{display:inline-block;padding:.4rem .9rem;border-radius:7px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:all .12s}
+    .btn-primary{background:#2563eb;color:white}
+    .btn-primary:hover{background:#1d4ed8}
+    .btn-outline{background:white;color:#374151;border:1px solid #d1d5db}
+    .btn-outline:hover{background:#f3f4f6}
+    /* Calendar grid */
+    .cal-grid{background:white;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+    .cal-days-header{display:grid;grid-template-columns:repeat(7,1fr);background:#f9fafb;border-bottom:1px solid #e5e7eb}
+    .cal-day-name{padding:.55rem .5rem;text-align:center;font-size:.72rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px}
+    .cal-cells{display:grid;grid-template-columns:repeat(7,1fr)}
+    .cal-cell{border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;min-height:110px;padding:.45rem .4rem;position:relative;cursor:default}
+    .cal-cell:nth-child(7n){border-right:none}
+    .cal-cell.other-month .cell-num{color:#d1d5db}
+    .cal-cell.today{background:#eff6ff}
+    .cal-cell.today .cell-num{background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-weight:700}
+    .cell-num{font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center}
+    .event-chip{font-size:.68rem;font-weight:600;padding:.18rem .4rem;border-radius:4px;margin-bottom:.18rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;line-height:1.35;display:block}
+    .event-chip:hover{opacity:.85;transform:translateY(-1px)}
+    .chip-paid{background:#dcfce7;color:#166534}
+    .chip-partial{background:#fef9c3;color:#854d0e}
+    .chip-due{background:#fee2e2;color:#991b1b}
+    .chip-pending{background:#dbeafe;color:#1e40af}
+    .chip-cancelled{background:#f3f4f6;color:#6b7280}
+    /* Modal */
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
+    .modal-overlay.open{display:flex}
+    .modal{background:white;border-radius:12px;padding:1.5rem;max-width:420px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+    .modal-title{font-size:1rem;font-weight:700;margin-bottom:1rem;color:#111827}
+    .modal-row{display:flex;justify-content:space-between;margin-bottom:.55rem;font-size:.86rem}
+    .modal-label{color:#6b7280;font-weight:500}
+    .modal-val{color:#111827;font-weight:600;text-align:right}
+    .modal-close{margin-top:1rem;width:100%}
+    @media(max-width:600px){.cal-cell{min-height:70px;padding:.3rem .2rem}.event-chip{font-size:.6rem}.sync-box{flex-direction:column;align-items:flex-start}}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-nav">
+    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+    <a href="/admin/inventory" class="nav-link">Inventory</a>
+    <a href="/admin/customers" class="nav-link">Customers</a>
+    <a href="/admin/calendar" class="nav-link active">📅 Calendar</a>
+    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+  </div>
+</div>
+
+<div class="main">
+  <div class="page-header">
+    <div class="page-title">📅 Booking Calendar</div>
+    <div class="cal-nav">
+      <button onclick="changeMonth(-1)">‹</button>
+      <div class="cal-month" id="calMonthLabel"></div>
+      <button onclick="changeMonth(1)">›</button>
+      <button onclick="goToday()" style="font-size:.78rem">Today</button>
+    </div>
+  </div>
+
+  <!-- Google Calendar sync -->
+  <div class="sync-box">
+    <div style="font-size:1.3rem">📆</div>
+    <div class="sync-text">
+      <div class="sync-title">Sync with Google Calendar</div>
+      <div class="sync-sub">Subscribe to this URL in Google Calendar to see all bookings automatically.</div>
+    </div>
+    <span class="sync-url" id="icsUrl">{{ ics_url }}</span>
+    <button class="btn btn-outline" onclick="copyIcs()" style="white-space:nowrap" id="copyBtn">Copy URL</button>
+    <a href="https://calendar.google.com/calendar/r/settings/addbyurl" target="_blank" class="btn btn-primary" style="white-space:nowrap">Open Google Calendar</a>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#22c55e"></div>Paid In Full</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#eab308"></div>Partially Paid</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>Payment Due</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#3b82f6"></div>Pending</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#d1d5db"></div>Cancelled/Denied</div>
+  </div>
+
+  <!-- Calendar grid -->
+  <div class="cal-grid">
+    <div class="cal-days-header">
+      <div class="cal-day-name">Sun</div><div class="cal-day-name">Mon</div>
+      <div class="cal-day-name">Tue</div><div class="cal-day-name">Wed</div>
+      <div class="cal-day-name">Thu</div><div class="cal-day-name">Fri</div>
+      <div class="cal-day-name">Sat</div>
+    </div>
+    <div class="cal-cells" id="calCells"></div>
+  </div>
+</div>
+
+<!-- Event detail modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle"></div>
+    <div id="modalBody"></div>
+    <button class="btn btn-outline modal-close" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script>
+var bookings = {{ bookings_json | safe }};
+var today = new Date();
+var curYear = today.getFullYear();
+var curMonth = today.getMonth();
+
+var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+function payClass(b){
+  if(b.status==='confirmed') return b.final_payment_link ? 'chip-partial' : 'chip-paid';
+  if(b.status==='accepted') return 'chip-due';
+  if(b.status==='pending') return 'chip-pending';
+  return 'chip-cancelled';
+}
+function payLabel(b){
+  if(b.status==='confirmed') return b.final_payment_link ? '⚡ Partial' : '✅ Paid';
+  if(b.status==='accepted') return '💰 Due';
+  if(b.status==='pending') return '⏳ Pending';
+  return b.status;
+}
+
+function renderCalendar(){
+  document.getElementById('calMonthLabel').textContent = MONTHS[curMonth] + ' ' + curYear;
+  var cells = document.getElementById('calCells');
+  cells.innerHTML = '';
+
+  var firstDay = new Date(curYear, curMonth, 1).getDay();
+  var daysInMonth = new Date(curYear, curMonth+1, 0).getDate();
+  var prevDays = new Date(curYear, curMonth, 0).getDate();
+
+  // Build a map: "YYYY-MM-DD" -> [bookings]
+  var map = {};
+  bookings.forEach(function(b){
+    // booking spans from start to end date
+    var s = new Date(b.event_start_date + 'T00:00:00');
+    var e = new Date((b.event_end_date || b.event_start_date) + 'T00:00:00');
+    for(var d = new Date(s); d <= e; d.setDate(d.getDate()+1)){
+      var key = d.toISOString().slice(0,10);
+      if(!map[key]) map[key] = [];
+      map[key].push(b);
+    }
+  });
+
+  var totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+  for(var i = 0; i < totalCells; i++){
+    var cell = document.createElement('div');
+    cell.className = 'cal-cell';
+    var day, month, year, isOther = false;
+    if(i < firstDay){
+      day = prevDays - firstDay + i + 1;
+      month = curMonth - 1; year = curYear;
+      if(month < 0){month=11;year--;}
+      isOther = true;
+    } else if(i >= firstDay + daysInMonth){
+      day = i - firstDay - daysInMonth + 1;
+      month = curMonth + 1; year = curYear;
+      if(month > 11){month=0;year++;}
+      isOther = true;
+    } else {
+      day = i - firstDay + 1;
+      month = curMonth; year = curYear;
+    }
+    if(isOther) cell.classList.add('other-month');
+    var isToday = !isOther && day===today.getDate() && curMonth===today.getMonth() && curYear===today.getFullYear();
+    if(isToday) cell.classList.add('today');
+
+    var numEl = document.createElement('div');
+    numEl.className = 'cell-num';
+    numEl.textContent = day;
+    cell.appendChild(numEl);
+
+    var dateKey = year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    var dayBookings = map[dateKey] || [];
+    var shown = dayBookings.slice(0,3);
+    shown.forEach(function(b){
+      var chip = document.createElement('span');
+      chip.className = 'event-chip ' + payClass(b);
+      chip.textContent = payLabel(b) + ' ' + b.full_name.split(' ')[0];
+      chip.title = b.full_name;
+      chip.onclick = function(){ showModal(b); };
+      cell.appendChild(chip);
+    });
+    if(dayBookings.length > 3){
+      var more = document.createElement('span');
+      more.style.cssText = 'font-size:.65rem;color:#9ca3af;padding:.1rem .3rem;display:block';
+      more.textContent = '+' + (dayBookings.length-3) + ' more';
+      cell.appendChild(more);
+    }
+    cells.appendChild(cell);
+  }
+}
+
+function changeMonth(delta){
+  curMonth += delta;
+  if(curMonth > 11){curMonth=0;curYear++;}
+  if(curMonth < 0){curMonth=11;curYear--;}
+  renderCalendar();
+}
+function goToday(){curYear=today.getFullYear();curMonth=today.getMonth();renderCalendar();}
+
+function showModal(b){
+  document.getElementById('modalTitle').textContent = '#'+b.id+' — '+b.full_name;
+  var rows = [
+    ['Dates', b.event_start_date + (b.event_end_date&&b.event_end_date!==b.event_start_date?' → '+b.event_end_date:'')],
+    ['Status', b.status.charAt(0).toUpperCase()+b.status.slice(1)],
+    ['Payment', b.status==='confirmed'?(b.final_payment_link?'Partially Paid':'Paid In Full'):(b.status==='accepted'?'Payment Due':'—')],
+    ['Total', '$'+parseFloat(b.grand_total||0).toFixed(2)],
+    ['Email', b.email||'—'],
+    ['Phone', b.phone||'—'],
+  ];
+  var html = rows.map(function(r){
+    return '<div class="modal-row"><span class="modal-label">'+r[0]+'</span><span class="modal-val">'+r[1]+'</span></div>';
+  }).join('');
+  html += '<div style="margin-top:.75rem"><a href="/admin/booking/'+b.id+'" class="btn btn-primary" style="display:block;text-align:center">View Full Booking →</a></div>';
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal(){ document.getElementById('modal').classList.remove('open'); }
+
+function copyIcs(){
+  var url = document.getElementById('icsUrl').textContent.trim();
+  navigator.clipboard.writeText(url).then(function(){
+    var btn = document.getElementById('copyBtn');
+    btn.textContent = '✓ Copied!';
+    btn.style.background = '#dcfce7';
+    btn.style.color = '#166534';
+    setTimeout(function(){btn.textContent='Copy URL';btn.style.background='';btn.style.color='';},2000);
+  });
+}
+
+renderCalendar();
+</script>
+</body></html>
+"""
+
 @app.route("/admin/customers/import", methods=["GET"])
 @admin_required
 def admin_customers_import():
@@ -3688,7 +3969,7 @@ def admin_customers_import_post():
                 else:
                     cur.execute("""
                         INSERT INTO customers (full_name, company_name, phone, street, city, state, zip, notes)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     """, (full_name, company_name, phone, street, city, state, zip_code, notes))
                     added += 1
                 cur.execute("RELEASE SAVEPOINT row_import")
@@ -3722,19 +4003,137 @@ def admin_customers_import_template():
     writer.writerow(["full_name", "company_name", "email", "phone", "street", "city", "state", "zip", "notes"])
     writer.writerow(["Jane Smith", "ABC Events LLC", "jane@example.com", "555-123-4567", "123 Main St", "Hartford", "CT", "06101", "VIP client"])
     csv_bytes = output.getvalue().encode("utf-8")
-    from flask import Response
-    return Response(
-        csv_bytes,
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=customers_template.csv"}
+    from flask import Response as _R
+    return _R(csv_bytes, mimetype="text/csv",
+              headers={"Content-Disposition": "attachment; filename=customers_template.csv"})
+
+
+# ── Calendar Routes ───────────────────────────────────────────────────────────
+
+CALENDAR_KEY = os.getenv("CALENDAR_KEY", "")
+
+@app.route("/admin/calendar")
+@admin_required
+def admin_calendar():
+    conn = get_db()
+    bookings = []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("""
+                SELECT id, full_name, email, phone,
+                       event_start_date, event_end_date,
+                       status, grand_total, final_payment_link
+                FROM bookings
+                WHERE status NOT IN ('denied')
+                  AND (archived IS NULL OR archived = FALSE)
+                ORDER BY event_start_date
+            """)
+            for r in cur.fetchall():
+                b = dict(r)
+                b["event_start_date"] = str(b["event_start_date"])[:10] if b["event_start_date"] else ""
+                b["event_end_date"]   = str(b["event_end_date"])[:10]   if b["event_end_date"]   else b["event_start_date"]
+                b["grand_total"]      = float(b["grand_total"] or 0)
+                b["final_payment_link"] = b.get("final_payment_link") or ""
+                bookings.append(b)
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"Calendar load error: {e}")
+
+    base_url = request.host_url.rstrip("/")
+    ics_url = f"{base_url}/calendar.ics"
+    if CALENDAR_KEY:
+        ics_url += f"?key={CALENDAR_KEY}"
+
+    return render_template_string(ADMIN_CALENDAR_HTML,
+        business_name=BUSINESS_NAME,
+        bookings_json=json.dumps(bookings),
+        ics_url=ics_url,
     )
 
 
-# ── PWA Routes ───────────────────────────────────────────────────────────────
+@app.route("/calendar.ics")
+def calendar_ics():
+    key = request.args.get("key", "")
+    if CALENDAR_KEY and key != CALENDAR_KEY:
+        return "Unauthorized", 401
+
+    conn = get_db()
+    bookings = []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("""
+                SELECT id, full_name, event_start_date, event_end_date,
+                       status, grand_total, final_payment_link
+                FROM bookings
+                WHERE status NOT IN ('denied')
+                  AND (archived IS NULL OR archived = FALSE)
+                ORDER BY event_start_date
+            """)
+            bookings = [dict(r) for r in cur.fetchall()]
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"ICS feed error: {e}")
+
+    now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        f"PRODID:-//Rent a Party LLC//Booking Calendar//EN",
+        f"X-WR-CALNAME:{BUSINESS_NAME} Bookings",
+        "X-WR-TIMEZONE:America/New_York",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+    ]
+
+    for b in bookings:
+        status = b.get("status", "")
+        fp     = b.get("final_payment_link")
+        if status == "confirmed":
+            label = "✅ Paid In Full" if not fp else "⚡ Partially Paid"
+        elif status == "accepted":
+            label = "💰 Payment Due"
+        elif status == "pending":
+            label = "⏳ Pending"
+        else:
+            label = status.capitalize()
+
+        try:
+            start_str = str(b["event_start_date"])[:10].replace("-", "")
+            end_dt    = datetime.strptime(str(b["event_end_date"])[:10], "%Y-%m-%d") + timedelta(days=1)
+            end_str   = end_dt.strftime("%Y%m%d")
+        except Exception:
+            start_str = end_str = now_utc[:8]
+
+        uid     = f"booking-{b['id']}@rentaparty"
+        summary = f"{label} - {b['full_name']} (#{b['id']})"
+        total   = float(b.get("grand_total") or 0)
+        desc    = f"Booking #{b['id']} | Total: ${total:.2f} | Status: {status}"
+
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{uid}",
+            f"DTSTAMP:{now_utc}",
+            f"DTSTART;VALUE=DATE:{start_str}",
+            f"DTEND;VALUE=DATE:{end_str}",
+            f"SUMMARY:{summary}",
+            f"DESCRIPTION:{desc}",
+            "END:VEVENT",
+        ]
+
+    lines.append("END:VCALENDAR")
+    ics_content = "\r\n".join(lines) + "\r\n"
+    return Response(ics_content, mimetype="text/calendar",
+                    headers={"Content-Disposition": "inline; filename=bookings.ics"})
+
+
+# ── PWA Routes ────────────────────────────────────────────────────────────────
 
 @app.route("/manifest.json")
 def pwa_manifest():
-    import json as _json
     manifest = {
         "name": BUSINESS_NAME,
         "short_name": "Rent a Party",
@@ -3749,20 +4148,12 @@ def pwa_manifest():
             {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
         ]
     }
-    return Response(_json.dumps(manifest), mimetype="application/manifest+json")
+    return Response(json.dumps(manifest), mimetype="application/manifest+json")
 
 
 @app.route("/sw.js")
 def pwa_sw():
-    sw = """
-const CACHE = 'rap-v1';
-self.addEventListener('install', e => self.skipWaiting());
-self.addEventListener('activate', e => clients.claim());
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-});
-"""
+    sw = "self.addEventListener('install',e=>self.skipWaiting());\nself.addEventListener('activate',e=>clients.claim());\nself.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));});\n"
     return Response(sw, mimetype="application/javascript")
 
 
@@ -3776,19 +4167,13 @@ def pwa_icon_512():
     return Response(_ICON_512, mimetype="image/png")
 
 
+# ── Cron ─────────────────────────────────────────────────────────────────────
+
 @app.route("/cron/final-reminders")
 def cron_final_reminders():
-    """
-    Called daily by an external cron (e.g. cron-job.org).
-    Finds all confirmed bookings whose event is exactly 2 days away
-    and sends them a final payment reminder if not already sent.
-
-    Secure with CRON_SECRET: call as /cron/final-reminders?secret=YOUR_SECRET
-    """
     if CRON_SECRET and request.args.get("secret") != CRON_SECRET:
         return jsonify({"error": "Unauthorized"}), 401
 
-    from datetime import timedelta
     target_date = (date.today() + timedelta(days=2)).isoformat()
     conn = get_db()
     if not conn:
@@ -3803,107 +4188,27 @@ def cron_final_reminders():
             WHERE status = 'confirmed'
               AND event_start_date = %s
               AND (final_reminder_sent IS NULL OR final_reminder_sent = FALSE)
+              AND final_payment_link IS NOT NULL
         """, (target_date,))
-        rows = cur.fetchall()
+        rows = [dict(r) for r in cur.fetchall()]
+
+        for b in rows:
+            try:
+                send_final_reminder_email(b)
+                cur.execute("UPDATE bookings SET final_reminder_sent=TRUE WHERE id=%s", (b["id"],))
+                sent.append(b["id"])
+            except Exception as e:
+                errors.append({"id": b["id"], "error": str(e)})
+
+        conn.commit()
         cur.close()
         conn.close()
-
-        for row in rows:
-            b = dict(row)
-            booking_id   = b["id"]
-            grand_total  = float(b.get("grand_total") or 0)
-            remaining    = round(grand_total * 0.75, 2)
-            items_list   = ", ".join(f"{i['qty']}x {i['name']}" for i in json.loads(b.get("items_json") or "[]"))
-            product_name = f"Final Payment — Booking #{booking_id}"
-
-            payment_link, err = create_stripe_payment_link(
-                booking_id, remaining, b.get("email"), items_list, product_name
-            )
-
-            # Save link + mark reminder sent
-            conn2 = get_db()
-            if conn2:
-                try:
-                    cur2 = conn2.cursor()
-                    cur2.execute(
-                        "UPDATE bookings SET final_payment_link=%s, final_reminder_sent=TRUE WHERE id=%s",
-                        (payment_link, booking_id)
-                    )
-                    conn2.commit()
-                    cur2.close()
-                    conn2.close()
-                except Exception as e:
-                    log.error(f"Cron DB update error #{booking_id}: {e}")
-
-            b["final_payment_link"] = payment_link
-            send_final_payment_email(b, remaining, payment_link)
-            sent.append(booking_id)
-            log.info(f"Auto final reminder sent for booking #{booking_id}")
-
     except Exception as e:
-        log.error(f"Cron error: {e}")
-        errors.append(str(e))
+        return jsonify({"error": str(e)}), 500
 
-    return jsonify({
-        "date_checked": target_date,
-        "reminders_sent": sent,
-        "errors": errors,
-    }), 200
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  ROUTES — PAYMENT SUCCESS
-# ══════════════════════════════════════════════════════════════════════════════
-
-@app.route("/payment/success/<int:booking_id>")
-def payment_success(booking_id):
-    return render_template_string(PAYMENT_SUCCESS_HTML,
-        business_name=BUSINESS_NAME,
-        business_phone=BUSINESS_PHONE,
-        booking_id=booking_id,
-    )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  UTILITY ROUTES
-# ══════════════════════════════════════════════════════════════════════════════
-
-@app.route("/health")
-def health():
-    return jsonify({"status": "running", "time": datetime.now(timezone.utc).isoformat()}), 200
-
-
-@app.route("/test")
-def test():
-    cfg = {
-        "BUSINESS_NAME":     bool(BUSINESS_NAME),
-        "BUSINESS_ADDRESS":  bool(BUSINESS_ADDRESS),
-        "DATABASE_URL":      bool(DATABASE_URL),
-        "GOOGLE_MAPS_KEY":   bool(GOOGLE_MAPS_KEY),
-        "OWNER_EMAIL":       bool(OWNER_EMAIL),
-        "GMAIL_USER":        bool(GMAIL_USER),
-        "GMAIL_APP_PASSWORD":bool(GMAIL_APP_PASSWORD),
-        "ADMIN_PASSWORD":    bool(ADMIN_PASSWORD),
-        "STRIPE_SECRET_KEY": bool(STRIPE_SECRET_KEY),
-        "BASE_URL":          bool(BASE_URL),
-    }
-    db_ok = False
-    if DATABASE_URL:
-        try:
-            c = get_db(); c.close(); db_ok = True
-        except Exception:
-            pass
-    return jsonify({
-        "app":          "Rental Booking & Inventory System v3.0",
-        "status":       "All configured" if all(cfg.values()) else "Some settings missing",
-        "config":       cfg,
-        "db_connected": db_ok,
-        "products":     len(PRODUCTS),
-        "stripe_ready": bool(STRIPE_SECRET_KEY),
-    }), 200
+    return jsonify({"sent": sent, "errors": errors})
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    log.info(f"Starting {BUSINESS_NAME} on port {port}")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    init_db()
+    app.run(debug=False, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
