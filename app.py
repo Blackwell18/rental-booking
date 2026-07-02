@@ -3039,6 +3039,16 @@ ADMIN_CUSTOMERS_HTML = """
         <label>Notes</label>
         <textarea name="notes" placeholder="Any notes about this customer..."></textarea>
       </div>
+      <div style="margin-top:.75rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px">
+        <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-weight:600;color:#166534;font-size:.95rem;text-transform:none;letter-spacing:0">
+          <input type="checkbox" name="tax_exempt" value="1"
+                 style="width:18px;height:18px;accent-color:#16a34a;cursor:pointer">
+          Tax Exempt
+        </label>
+        <p style="margin:.3rem 0 0;font-size:.8rem;color:#4b7c5a">
+          Check if this customer has a valid CT tax-exempt certificate. Tax (6.35%) will be removed from all their bookings.
+        </p>
+      </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="toggleAdd()">Cancel</button>
         <button type="submit" class="btn btn-primary">Save Customer</button>
@@ -3417,15 +3427,14 @@ ADMIN_CUSTOMER_EDIT_HTML = """
           <label>Notes</label>
           <textarea name="notes">{{ c.notes or '' }}</textarea>
         </div>
-        <div class="form-group span2">
-          <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-weight:600">
+        <div class="form-group span2" style="padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px">
+          <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-weight:600;color:#166534;font-size:.95rem;text-transform:none;letter-spacing:0">
             <input type="checkbox" name="tax_exempt" value="1" {% if c.tax_exempt %}checked{% endif %}
-                   style="width:17px;height:17px;accent-color:#2563eb;cursor:pointer">
+                   style="width:18px;height:18px;accent-color:#16a34a;cursor:pointer">
             Tax Exempt
           </label>
-          <p style="margin:.3rem 0 0;font-size:.8rem;color:#6b7280">
-            Check this if the customer has a valid Connecticut tax-exempt certificate.
-            Tax (6.35% CT) will be automatically removed from all future bookings for this customer.
+          <p style="margin:.3rem 0 0;font-size:.8rem;color:#4b7c5a">
+            Check if this customer has a valid CT tax-exempt certificate. Tax (6.35%) will be removed from all their bookings.
           </p>
         </div>
       </div>
@@ -3623,9 +3632,10 @@ def admin_customers_add():
         return redirect(url_for("admin_customers", err="Database unavailable"))
     try:
         cur = conn.cursor()
+        tax_exempt_val = f.get("tax_exempt") == "1"
         cur.execute("""
-            INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes, tax_exempt)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             full_name,
             f.get("company_name", "").strip() or None,
@@ -3636,6 +3646,7 @@ def admin_customers_add():
             f.get("state", "").strip() or None,
             f.get("zip", "").strip() or None,
             f.get("notes", "").strip() or None,
+            tax_exempt_val,
         ))
         conn.commit()
         cur.close()
