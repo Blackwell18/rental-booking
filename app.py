@@ -12,6 +12,7 @@
 """
 
 import os, json, logging, smtplib, secrets
+import urllib.parse
 from datetime import datetime, timezone, date, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -1650,6 +1651,13 @@ ADMIN_DASH_HTML = """
               <span class="date-arrow">→</span>
               <span>{{ b.event_end_date }}</span>
             </div>
+            {% if b.maps_url %}
+            <a href="{{ b.maps_url }}" target="_blank" rel="noopener noreferrer"
+               style="display:inline-flex;align-items:center;gap:.18rem;margin-top:.25rem;font-size:.73rem;color:#2563eb;text-decoration:none;font-weight:500;opacity:.85"
+               title="{{ b.event_street }}, {{ b.event_city }}, {{ b.event_state }} {{ b.event_zip }}">
+              📍 Map
+            </a>
+            {% endif %}
           </td>
           <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;font-size:.8rem">{{ b.items_summary }}</td>
           <td style="font-weight:700;white-space:nowrap">${{ "%.2f"|format(b.grand_total or 0) }}</td>
@@ -2403,6 +2411,17 @@ def admin_dashboard():
                     if pay_filter == "paid" and b["pay_class"] != "pay-paid": continue
                     if pay_filter == "partial" and b["pay_class"] != "pay-partial": continue
                     if pay_filter == "due" and b["pay_class"] != "pay-due": continue
+                # Google Maps URL for delivery address
+                addr_parts = [p for p in [
+                    b.get("event_street","").strip(),
+                    b.get("event_city","").strip(),
+                    b.get("event_state","").strip(),
+                    b.get("event_zip","").strip()
+                ] if p]
+                if addr_parts:
+                    b["maps_url"] = "https://www.google.com/maps/search/?api=1&query=" + urllib.parse.quote_plus(", ".join(addr_parts))
+                else:
+                    b["maps_url"] = ""
                 # Avatar
                 name = b.get("full_name") or "?"
                 b["avatar_color"]    = _avatar_colors[ord(name[0].lower()) % len(_avatar_colors)]
