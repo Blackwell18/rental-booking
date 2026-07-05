@@ -2015,6 +2015,45 @@ ADMIN_BOOKING_HTML = """
   <div class="card"><h2>Notes</h2><p style="color:#4a5568;line-height:1.6">{{ b.notes }}</p></div>
   {% endif %}
 
+  <!-- ── Edit Items ── -->
+  <div class="card">
+    <h2>Edit Items</h2>
+    <form method="POST" action="/admin/booking/{{ b.id }}/update-items">
+      <div id="items-editor" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem">
+        {% for item in items %}
+        <div class="item-row" style="display:flex;gap:.5rem;align-items:center">
+          <input type="text" name="item_name" value="{{ item.name }}" placeholder="Item name"
+                 style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem">
+          <input type="number" name="item_qty" value="{{ item.qty }}" min="1"
+                 style="width:70px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center">
+          <button type="button" onclick="this.closest('.item-row').remove()"
+                  style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700">✕</button>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button type="button" onclick="addItemRow()"
+                style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:6px;padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer">+ Add Item</button>
+        <button type="submit"
+                style="background:#16a34a;color:white;border:none;border-radius:6px;padding:.45rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer">💾 Save Items</button>
+      </div>
+    </form>
+  </div>
+  <script>
+  function addItemRow() {
+    const editor = document.getElementById('items-editor');
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.style = 'display:flex;gap:.5rem;align-items:center';
+    row.innerHTML =
+      '<input type="text" name="item_name" placeholder="Item name" style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem">' +
+      '<input type="number" name="item_qty" value="1" min="1" style="width:70px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center">' +
+      '<button type="button" onclick="this.closest(\'.item-row\').remove()" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700">✕</button>';
+    editor.appendChild(row);
+    row.querySelector('input[name="item_name"]').focus();
+  }
+  </script>
+
   <div class="actions">
     <a href="/admin/dashboard" class="btn btn-back">Back to Dashboard</a>
     {% if b.status == 'pending' %}
@@ -2903,6 +2942,34 @@ def cancel_booking(booking_id):
         except Exception as e:
             log.error(f"Cancel error: {e}")
     return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/booking/<int:booking_id>/update-items", methods=["POST"])
+@admin_required
+def update_booking_items(booking_id):
+    names = request.form.getlist("item_name")
+    qtys  = request.form.getlist("item_qty")
+    items = []
+    for name, qty in zip(names, qtys):
+        name = name.strip()
+        if name:
+            try:
+                q = max(1, int(qty or 1))
+            except Exception:
+                q = 1
+            items.append({"name": name, "qty": q, "unit_price": 0, "total": 0})
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE bookings SET items_json=%s WHERE id=%s",
+                        (json.dumps(items), booking_id))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"Update items error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
 @app.route("/admin/booking/<int:booking_id>/delete", methods=["POST"])
