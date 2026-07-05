@@ -2743,8 +2743,11 @@ def admin_booking(booking_id):
             business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until)
     except Exception as e:
         import traceback
-        log.error(f"Booking {booking_id} render error: {traceback.format_exc()}")
-        return f"<pre style='padding:2rem'>Booking #{booking_id} render error — send this to support:\n\n{traceback.format_exc()}</pre>", 500
+        tb = traceback.format_exc()
+        log.error(f"Booking {booking_id} render error: {tb}")
+        lines = tb.strip().split('\n')
+        short = '\n'.join(lines[-6:])
+        return f"<pre style='padding:2rem;font-size:15px'>Booking #{booking_id} error:\n\n{short}</pre>", 500
 
 
 @app.route("/admin/booking/<int:booking_id>/accept", methods=["POST"])
