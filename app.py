@@ -1785,6 +1785,7 @@ ADMIN_DASH_HTML = """
               <div>
                 <div class="client-name">{{ b.full_name }}</div>
                 <div class="client-email">{{ b.email }}</div>
+                {% if b.phone %}<div style="font-size:.75rem;color:#6b7280;margin-top:.1rem"><a href="tel:{{ b.phone }}" style="color:#6b7280;text-decoration:none">📞 {{ b.phone }}</a></div>{% endif %}
               </div>
             </div>
           </td>
