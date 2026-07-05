@@ -2608,11 +2608,13 @@ def admin_dashboard():
             elif archived_filter:
                 wheres.append("archived = TRUE")
             else:
-                # Default: recent (past 7 days) + future
                 wheres.append("(archived IS NULL OR archived = FALSE)")
-                wheres.append("(event_start_date >= %s OR event_start_date IS NULL)"); params.append(seven_days_ago)
                 if status_filter:
+                    # Status tab: show ALL bookings with that status, no date restriction
                     wheres.append("status=%s"); params.append(status_filter)
+                else:
+                    # Default "All" view: recent (past 7 days) + future only
+                    wheres.append("(event_start_date >= %s OR event_start_date IS NULL)"); params.append(seven_days_ago)
                 if date_from:
                     wheres.append("event_start_date >= %s"); params.append(date_from)
                 if date_to:
@@ -2632,7 +2634,7 @@ def admin_dashboard():
                 "created":   "created_at DESC",
             }
             q += " ORDER BY " + sort_map.get(sort_by, "event_start_date ASC NULLS LAST, created_at DESC")
-            q += " LIMIT 200"
+            q += " LIMIT 1000"
             cur.execute(q, params)
             rows = cur.fetchall()
             _avatar_colors = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6',
