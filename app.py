@@ -2131,6 +2131,39 @@ ADMIN_BOOKING_HTML = """
   <div class="card"><h2>Notes</h2><p style="color:#4a5568;line-height:1.6">{{ b.notes }}</p></div>
   {% endif %}
 
+  <!-- ── Custom Stripe Payment Link ── -->
+  {% if request.args.get('custom_link') %}
+  <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
+    <div style="font-weight:700;color:#15803d;margin-bottom:.35rem">✅ Payment link created &amp; emailed to {{ b.email }}</div>
+    <div style="font-size:.82rem;color:#6b7280;margin-bottom:.4rem">Copy this link to share it another way:</div>
+    <div style="display:flex;gap:.5rem;align-items:center">
+      <input id="custom-link-val" type="text" value="{{ request.args.get('custom_link') }}" readonly
+             style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.82rem;background:#f9fafb;color:#374151">
+      <button type="button" onclick="var i=document.getElementById('custom-link-val');i.select();document.execCommand('copy');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
+              style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.4rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600;white-space:nowrap">Copy</button>
+    </div>
+  </div>
+  {% endif %}
+  <div class="card">
+    <h2>Send Custom Payment Link</h2>
+    <p style="color:#6b7280;font-size:.88rem;margin-bottom:1rem">Create a Stripe payment link for any amount and email it directly to the customer.</p>
+    <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem">Amount ($)</label>
+        <input type="number" name="amount" min="0.50" step="0.01" placeholder="0.00" required
+               style="width:130px;border:1px solid #d1d5db;border-radius:6px;padding:.45rem .65rem;font-size:1rem;font-weight:600">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem">Label (optional)</label>
+        <input type="text" name="label" placeholder="e.g. Deposit, Balance…"
+               style="width:220px;border:1px solid #d1d5db;border-radius:6px;padding:.45rem .65rem;font-size:.9rem">
+      </div>
+      <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.5rem 1.25rem;font-size:.9rem;font-weight:700;cursor:pointer;height:38px">
+        💳 Create &amp; Send Link
+      </button>
+    </form>
+  </div>
+
   <!-- ── Edit Items ── -->
   <datalist id="inv-list">
     {% for p in products %}<option value="{{ p.name }}">{% endfor %}
@@ -3346,6 +3379,79 @@ def update_booking_items(booking_id):
         except Exception as e:
             log.error(f"Update items error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/custom-stripe-link", methods=["POST"])
+@admin_required
+def custom_stripe_link(booking_id):
+    """Create a Stripe payment link for a custom amount and email it to the customer."""
+    try:
+        amount = float(request.form.get("amount") or 0)
+    except Exception:
+        amount = 0
+    if amount <= 0:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+
+    label = (request.form.get("label") or "").strip() or f"Payment — Booking #{booking_id}"
+
+    # Fetch booking for customer email / name
+    b = None
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row:
+                b = _row(row)
+        except Exception as e:
+            log.error(f"Custom link fetch error: {e}")
+
+    if not b:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+
+    items_desc = ", ".join(f"{i['qty']}x {i['name']}" for i in json.loads(b.get("items_json") or "[]"))
+    payment_link, err = create_stripe_payment_link(booking_id, amount, b.get("email"), items_desc, label)
+
+    if err:
+        log.warning(f"Custom Stripe link error for #{booking_id}: {err}")
+
+    # Email the link to the customer
+    if payment_link and b.get("email"):
+        first = (b.get("full_name") or "").split()[0] or "there"
+        subject = f"Payment Link — {label} | {BUSINESS_NAME}"
+        html = f"""
+<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)">
+  <div style="background:linear-gradient(135deg,#1e40af,#2563eb);padding:1.5rem 2rem;color:white;text-align:center">
+    <h2 style="margin:0;font-size:1.2rem">{BUSINESS_NAME}</h2>
+    <p style="margin:.4rem 0 0;opacity:.88;font-size:.95rem">Payment Request</p>
+  </div>
+  <div style="padding:1.75rem 2rem">
+    <p style="color:#2d3748;font-size:1.05rem;margin-bottom:.75rem">Hi <strong>{first}</strong>,</p>
+    <p style="color:#4a5568;line-height:1.7;margin-bottom:1.5rem">
+      A payment link has been created for your booking. Please use the button below to complete your payment.
+    </p>
+    <div style="background:#eff6ff;border:2px solid #bfdbfe;border-radius:12px;padding:1.5rem;text-align:center;margin-bottom:1.5rem">
+      <p style="font-size:.85rem;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0 0 .3rem">{label}</p>
+      <p style="font-size:2.75rem;font-weight:800;color:#1e40af;margin:.2rem 0 1rem;line-height:1">${amount:.2f}</p>
+      <a href="{payment_link}"
+         style="display:inline-block;background:linear-gradient(135deg,#1e40af,#2563eb);color:white;padding:1rem 2.5rem;border-radius:10px;font-weight:700;font-size:1.1rem;text-decoration:none">
+        Pay ${amount:.2f} Now
+      </a>
+      <p style="margin:.6rem 0 0;font-size:.8rem;color:#6b7280">Secure payment powered by Stripe</p>
+    </div>
+    <p style="font-size:.85rem;color:#718096">Booking #{booking_id} &bull; {BUSINESS_NAME}</p>
+  </div>
+</div>
+</body></html>"""
+        plain = f"Hi {first},\n\nPayment of ${amount:.2f} is due for your booking.\n\nPay here: {payment_link}\n\n— {BUSINESS_NAME}"
+        _send_email(b.get("email"), subject, html, plain)
+        log.info(f"Custom payment link sent for #{booking_id}: ${amount:.2f}")
+
+    link_param = urllib.parse.quote(payment_link or "", safe="")
+    return redirect(url_for("admin_booking", booking_id=booking_id) + f"?custom_link={link_param}")
 
 
 @app.route("/admin/booking/<int:booking_id>/delete", methods=["POST"])
