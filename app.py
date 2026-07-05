@@ -1881,6 +1881,119 @@ function bulkAction(type){
 """
 
 
+ADMIN_BOOKING_EDIT_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Edit Booking #{{ b.id }} — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
+    header{background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;padding:1.25rem 2rem;display:flex;justify-content:space-between;align-items:center}
+    header h1{font-size:1.2rem}
+    .container{max-width:800px;margin:0 auto;padding:1.5rem 1rem}
+    .card{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:1.5rem;margin-bottom:1.5rem}
+    .card h2{font-size:.95rem;font-weight:700;color:#2b6cb0;border-bottom:2px solid #ebf4ff;padding-bottom:.5rem;margin-bottom:1rem;text-transform:uppercase;letter-spacing:.4px}
+    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem}
+    .field-grid.single{grid-template-columns:1fr}
+    .field-grid.triple{grid-template-columns:1fr 1fr 1fr}
+    label{display:block;font-size:.78rem;font-weight:600;color:#6b7280;margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.3px}
+    input,select,textarea{width:100%;border:1px solid #d1d5db;border-radius:7px;padding:.5rem .75rem;font-size:.92rem;color:#1a202c;background:white}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    textarea{resize:vertical;min-height:80px}
+    .actions{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.5rem}
+    .btn{padding:.65rem 1.4rem;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;display:inline-block}
+    .btn-save{background:#16a34a;color:white}
+    .btn-cancel{background:#f0f4f8;color:#4a5568;text-decoration:none}
+    a{color:#2b6cb0}
+  </style>
+</head>
+<body>
+<header>
+  <h1>✏️ Edit Booking #{{ b.id }} — {{ b.full_name }}</h1>
+  <a href="/admin/booking/{{ b.id }}" style="color:white;text-decoration:none;font-size:.9rem">← Cancel</a>
+</header>
+<div class="container">
+<form method="POST" action="/admin/booking/{{ b.id }}/edit">
+
+  <div class="card">
+    <h2>Customer</h2>
+    <div class="field-grid">
+      <div><label>Full Name</label><input name="full_name" value="{{ b.full_name or '' }}"></div>
+      <div><label>Company</label><input name="company_name" value="{{ b.company_name or '' }}"></div>
+      <div><label>Email</label><input name="email" type="email" value="{{ b.email or '' }}"></div>
+      <div><label>Phone</label><input name="phone" value="{{ b.phone or '' }}"></div>
+      <div><label>Street</label><input name="renter_street" value="{{ b.renter_street or '' }}"></div>
+      <div><label>City</label><input name="renter_city" value="{{ b.renter_city or '' }}"></div>
+      <div><label>State</label><input name="renter_state" value="{{ b.renter_state or '' }}"></div>
+      <div><label>ZIP</label><input name="renter_zip" value="{{ b.renter_zip or '' }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Event</h2>
+    <div class="field-grid">
+      <div><label>Start Date</label><input name="event_start_date" type="date" value="{{ b.event_start_date or '' }}"></div>
+      <div><label>End Date</label><input name="event_end_date" type="date" value="{{ b.event_end_date or '' }}"></div>
+      <div><label>Start Time</label><input name="event_start_time" type="time" value="{{ b.event_start_time or '' }}"></div>
+      <div><label>End Time</label><input name="event_end_time" type="time" value="{{ b.event_end_time or '' }}"></div>
+      <div><label>Setup Time</label><input name="setup_time" type="time" value="{{ b.setup_time or '' }}"></div>
+      <div><label>Venue Type</label>
+        <select name="venue_type">
+          <option value="venue" {% if b.venue_type=='venue' %}selected{% endif %}>Venue</option>
+          <option value="backyard" {% if b.venue_type=='backyard' %}selected{% endif %}>Backyard</option>
+          <option value="park" {% if b.venue_type=='park' %}selected{% endif %}>Park</option>
+          <option value="other" {% if b.venue_type=='other' %}selected{% endif %}>Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-grid" style="margin-top:.75rem">
+      <div><label>Event Street</label><input name="event_street" value="{{ b.event_street or '' }}"></div>
+      <div><label>Event City</label><input name="event_city" value="{{ b.event_city or '' }}"></div>
+      <div><label>Event State</label><input name="event_state" value="{{ b.event_state or '' }}"></div>
+      <div><label>Event ZIP</label><input name="event_zip" value="{{ b.event_zip or '' }}"></div>
+      <div class="single" style="grid-column:1/-1"><label>Delivery Location / Notes on Venue</label><input name="delivery_location" value="{{ b.delivery_location or '' }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Financials & Status</h2>
+    <div class="field-grid">
+      <div><label>Status</label>
+        <select name="status">
+          <option value="pending"   {% if b.status=='pending'   %}selected{% endif %}>Pending</option>
+          <option value="accepted"  {% if b.status=='accepted'  %}selected{% endif %}>Accepted (Awaiting Payment)</option>
+          <option value="confirmed" {% if b.status=='confirmed' %}selected{% endif %}>Confirmed (Paid)</option>
+          <option value="denied"    {% if b.status=='denied'    %}selected{% endif %}>Denied</option>
+          <option value="cancelled" {% if b.status=='cancelled' %}selected{% endif %}>Cancelled</option>
+        </select>
+      </div>
+      <div><label>Grand Total ($)</label><input name="grand_total" type="number" step="0.01" value="{{ b.grand_total or 0 }}"></div>
+      <div><label>Amount Paid ($)</label><input name="amount_paid" type="number" step="0.01" value="{{ b.amount_paid or 0 }}"></div>
+      <div><label>Delivery Fee ($)</label><input name="delivery_fee" type="number" step="0.01" value="{{ b.delivery_fee or 0 }}"></div>
+      <div><label>Late Night Fee ($)</label><input name="late_night_fee" type="number" step="0.01" value="{{ b.late_night_fee or 0 }}"></div>
+      <div><label>Distance (miles)</label><input name="distance_miles" type="number" step="0.1" value="{{ b.distance_miles or '' }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Notes</h2>
+    <div class="field-grid single">
+      <div><textarea name="notes">{{ b.notes or '' }}</textarea></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="submit" class="btn btn-save">💾 Save Changes</button>
+    <a href="/admin/booking/{{ b.id }}" class="btn btn-cancel">Cancel</a>
+  </div>
+</form>
+</div>
+</body></html>
+"""
+
+
 ADMIN_BOOKING_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -1932,7 +2045,10 @@ ADMIN_BOOKING_HTML = """
 <body>
 <header>
   <h1>Booking #{{ b.id }}</h1>
-  <a href="/admin/dashboard" style="color:white;text-decoration:none;font-size:.9rem">Back to Dashboard</a>
+  <div style="display:flex;gap:.75rem;align-items:center">
+    <a href="/admin/booking/{{ b.id }}/edit" style="background:rgba(255,255,255,.15);color:white;text-decoration:none;font-size:.85rem;font-weight:600;padding:.4rem .9rem;border-radius:7px;border:1px solid rgba(255,255,255,.3)">✏️ Edit Booking</a>
+    <a href="/admin/dashboard" style="color:white;text-decoration:none;font-size:.9rem">Back to Dashboard</a>
+  </div>
 </header>
 <div class="container">
 
@@ -2965,6 +3081,82 @@ def cancel_booking(booking_id):
         except Exception as e:
             log.error(f"Cancel error: {e}")
     return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/booking/<int:booking_id>/edit", methods=["GET", "POST"])
+@admin_required
+def edit_booking(booking_id):
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_dashboard"))
+    if request.method == "GET":
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if not row:
+                return "Booking not found", 404
+            b = _row(row)
+        except Exception as e:
+            log.error(f"Edit booking fetch: {e}")
+            return redirect(url_for("admin_dashboard"))
+        return render_template_string(ADMIN_BOOKING_EDIT_HTML, business_name=BUSINESS_NAME, b=b)
+    # POST — save changes
+    f = request.form
+    fields = {
+        "full_name":        f.get("full_name","").strip(),
+        "company_name":     f.get("company_name","").strip(),
+        "email":            f.get("email","").strip(),
+        "phone":            f.get("phone","").strip(),
+        "renter_street":    f.get("renter_street","").strip(),
+        "renter_city":      f.get("renter_city","").strip(),
+        "renter_state":     f.get("renter_state","").strip(),
+        "renter_zip":       f.get("renter_zip","").strip(),
+        "event_start_date": f.get("event_start_date","").strip() or None,
+        "event_end_date":   f.get("event_end_date","").strip() or None,
+        "event_start_time": f.get("event_start_time","").strip(),
+        "event_end_time":   f.get("event_end_time","").strip(),
+        "setup_time":       f.get("setup_time","").strip(),
+        "venue_type":       f.get("venue_type","venue"),
+        "event_street":     f.get("event_street","").strip(),
+        "event_city":       f.get("event_city","").strip(),
+        "event_state":      f.get("event_state","").strip(),
+        "event_zip":        f.get("event_zip","").strip(),
+        "delivery_location":f.get("delivery_location","").strip(),
+        "status":           f.get("status","pending"),
+        "grand_total":      float(f.get("grand_total") or 0),
+        "amount_paid":      float(f.get("amount_paid") or 0),
+        "delivery_fee":     float(f.get("delivery_fee") or 0),
+        "late_night_fee":   float(f.get("late_night_fee") or 0),
+        "distance_miles":   float(f.get("distance_miles") or 0) or None,
+        "notes":            f.get("notes","").strip(),
+    }
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE bookings SET
+              full_name=%(full_name)s, company_name=%(company_name)s,
+              email=%(email)s, phone=%(phone)s,
+              renter_street=%(renter_street)s, renter_city=%(renter_city)s,
+              renter_state=%(renter_state)s, renter_zip=%(renter_zip)s,
+              event_start_date=%(event_start_date)s, event_end_date=%(event_end_date)s,
+              event_start_time=%(event_start_time)s, event_end_time=%(event_end_time)s,
+              setup_time=%(setup_time)s, venue_type=%(venue_type)s,
+              event_street=%(event_street)s, event_city=%(event_city)s,
+              event_state=%(event_state)s, event_zip=%(event_zip)s,
+              delivery_location=%(delivery_location)s,
+              status=%(status)s, grand_total=%(grand_total)s,
+              amount_paid=%(amount_paid)s, delivery_fee=%(delivery_fee)s,
+              late_night_fee=%(late_night_fee)s, distance_miles=%(distance_miles)s,
+              notes=%(notes)s
+            WHERE id=%(id)s
+        """, {**fields, "id": booking_id})
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"Edit booking save: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
 @app.route("/admin/booking/<int:booking_id>/update-items", methods=["POST"])
