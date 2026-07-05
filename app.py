@@ -2145,7 +2145,9 @@ ADMIN_BOOKING_HTML = """
                  placeholder="Type to search inventory…"
                  style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem">
           <input type="number" name="item_qty" value="{{ item.qty }}" min="1"
-                 style="width:72px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center">
+                 style="width:62px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center" title="Qty">
+          <input type="number" name="item_price" value="{{ item.unit_price or 0 }}" min="0" step="0.01"
+                 style="width:80px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center" placeholder="Price" title="Unit Price">
           <button type="button" onclick="this.closest('.item-row').remove()"
                   style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700">✕</button>
         </div>
@@ -2160,33 +2162,58 @@ ADMIN_BOOKING_HTML = """
     </form>
   </div>
   <script>
+  // Price lookup map from inventory
+  var _invPrices = {};
+  {% for p in products %}_invPrices[{{ p.name|tojson }}] = {{ p.price|float }};{% endfor %}
+
+  function makePriceInput(val) {
+    var p = document.createElement('input');
+    p.type = 'number'; p.name = 'item_price'; p.min = '0'; p.step = '0.01';
+    p.value = val || '0'; p.placeholder = 'Price'; p.title = 'Unit Price';
+    p.style.cssText = 'width:80px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center';
+    return p;
+  }
+
+  // Auto-fill price when selecting from datalist
+  document.getElementById('items-editor').addEventListener('change', function(e) {
+    if (e.target.name === 'item_name') {
+      var row = e.target.closest('.item-row');
+      if (!row) return;
+      var priceInput = row.querySelector('input[name="item_price"]');
+      var price = _invPrices[e.target.value];
+      if (priceInput && price !== undefined && parseFloat(priceInput.value) === 0) {
+        priceInput.value = price.toFixed(2);
+      }
+    }
+  });
+
   document.getElementById('add-item-btn').addEventListener('click', function() {
     var editor = document.getElementById('items-editor');
     var row = document.createElement('div');
     row.className = 'item-row';
-    row.style.display = 'flex';
-    row.style.gap = '.5rem';
-    row.style.alignItems = 'center';
+    row.style.cssText = 'display:flex;gap:.5rem;align-items:center';
     var nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.name = 'item_name';
+    nameInput.type = 'text'; nameInput.name = 'item_name';
     nameInput.setAttribute('list', 'inv-list');
     nameInput.placeholder = 'Type to search inventory…';
     nameInput.style.cssText = 'flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem';
     var qtyInput = document.createElement('input');
-    qtyInput.type = 'number';
-    qtyInput.name = 'item_qty';
-    qtyInput.value = '1';
-    qtyInput.min = '1';
-    qtyInput.style.cssText = 'width:72px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center';
+    qtyInput.type = 'number'; qtyInput.name = 'item_qty'; qtyInput.value = '1'; qtyInput.min = '1';
+    qtyInput.style.cssText = 'width:62px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center';
+    qtyInput.title = 'Qty';
+    var priceInput = makePriceInput(0);
+    // Auto-fill price when name typed/selected
+    nameInput.addEventListener('change', function() {
+      var price = _invPrices[nameInput.value];
+      if (price !== undefined && parseFloat(priceInput.value) === 0) {
+        priceInput.value = price.toFixed(2);
+      }
+    });
     var removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.textContent = '✕';
+    removeBtn.type = 'button'; removeBtn.textContent = '✕';
     removeBtn.style.cssText = 'background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700';
     removeBtn.addEventListener('click', function() { row.remove(); });
-    row.appendChild(nameInput);
-    row.appendChild(qtyInput);
-    row.appendChild(removeBtn);
+    row.appendChild(nameInput); row.appendChild(qtyInput); row.appendChild(priceInput); row.appendChild(removeBtn);
     editor.appendChild(row);
     nameInput.focus();
   });
@@ -2912,6 +2939,13 @@ def admin_booking(booking_id):
                     items = items_raw if isinstance(items_raw, list) else []
                 except Exception:
                     items = []
+                # Auto-fill prices from inventory for items missing unit_price
+                _prod_map = {p["name"].lower(): float(p.get("price") or 0) for p in get_products()}
+                for item in items:
+                    if not item.get("unit_price"):
+                        price = _prod_map.get((item.get("name") or "").lower(), 0)
+                        item["unit_price"] = price
+                        item["total"] = round(price * int(item.get("qty") or 1), 2)
             cur.close()
             conn.close()
         except Exception as e:
@@ -3162,17 +3196,29 @@ def edit_booking(booking_id):
 @app.route("/admin/booking/<int:booking_id>/update-items", methods=["POST"])
 @admin_required
 def update_booking_items(booking_id):
-    names = request.form.getlist("item_name")
-    qtys  = request.form.getlist("item_qty")
+    names  = request.form.getlist("item_name")
+    qtys   = request.form.getlist("item_qty")
+    prices = request.form.getlist("item_price")
+    # Pad prices list in case it's shorter
+    while len(prices) < len(names):
+        prices.append("0")
+    # Build product price map as fallback
+    _prod_map = {p["name"].lower(): float(p.get("price") or 0) for p in get_products()}
     items = []
-    for name, qty in zip(names, qtys):
+    for name, qty, price in zip(names, qtys, prices):
         name = name.strip()
         if name:
             try:
                 q = max(1, int(qty or 1))
             except Exception:
                 q = 1
-            items.append({"name": name, "qty": q, "unit_price": 0, "total": 0})
+            try:
+                up = float(price or 0)
+            except Exception:
+                up = 0
+            if up == 0:
+                up = _prod_map.get(name.lower(), 0)
+            items.append({"name": name, "qty": q, "unit_price": up, "total": round(up * q, 2)})
     conn = get_db()
     if conn:
         try:
