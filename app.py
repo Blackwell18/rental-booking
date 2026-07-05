@@ -1585,25 +1585,6 @@ ADMIN_DASH_HTML = """
     </div>
   </div>
 
-  <!-- ── Inventory ── -->
-  <div class="section-title">Inventory</div>
-  <div class="inv-grid">
-    {% for item in inventory %}
-    {% set pct = ((item.reserved / item.total * 100) | int) if item.total > 0 else 0 %}
-    <div class="inv-card">
-      <div class="inv-name" title="{{ item.name }}">{{ item.name }}</div>
-      <div class="inv-meta">
-        <span class="inv-reserved">{{ item.reserved }} reserved</span>
-        <span class="{% if item.available == 0 %}inv-avail-zero{% elif item.available <= 3 %}inv-avail-low{% else %}inv-avail-ok{% endif %}">
-          {{ item.available }}/{{ item.total }}{% if item.available == 0 %} SOLD OUT{% endif %}
-        </span>
-      </div>
-      <div class="inv-bar">
-        <div class="inv-fill" style="width:{{ pct }}%;background:{% if pct >= 100 %}#ef4444{% elif pct >= 70 %}#f59e0b{% else %}#10b981{% endif %}"></div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
 
   <!-- ── Bookings ── -->
   {% set df = ('&date_from=' ~ date_from) if date_from else '' %}
