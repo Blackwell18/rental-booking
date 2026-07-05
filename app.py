@@ -2717,7 +2717,11 @@ def admin_booking(booking_id):
             row = cur.fetchone()
             if row:
                 b = dict(row)
-                items = json.loads(b.get("items_json") or "[]")
+                try:
+                    items_raw = json.loads(b.get("items_json") or "[]")
+                    items = items_raw if isinstance(items_raw, list) else []
+                except Exception:
+                    items = []
             cur.close()
             conn.close()
         except Exception as e:
@@ -2734,8 +2738,13 @@ def admin_booking(booking_id):
     except Exception:
         pass
 
-    return render_template_string(ADMIN_BOOKING_HTML,
-        business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until)
+    try:
+        return render_template_string(ADMIN_BOOKING_HTML,
+            business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until)
+    except Exception as e:
+        import traceback
+        log.error(f"Booking {booking_id} render error: {traceback.format_exc()}")
+        return f"<pre style='padding:2rem'>Booking #{booking_id} render error — send this to support:\n\n{traceback.format_exc()}</pre>", 500
 
 
 @app.route("/admin/booking/<int:booking_id>/accept", methods=["POST"])
