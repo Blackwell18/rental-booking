@@ -196,6 +196,13 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_status TEXT DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS late_night_fee DECIMAL(10,2) DEFAULT 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS amount_paid DECIMAL(10,2) DEFAULT 0",
+            # Clean up literal 'None' strings left by Booqable import
+            "UPDATE bookings SET phone         = NULL WHERE phone         = 'None'",
+            "UPDATE bookings SET renter_street = NULL WHERE renter_street = 'None'",
+            "UPDATE bookings SET renter_city   = NULL WHERE renter_city   = 'None'",
+            "UPDATE bookings SET renter_state  = NULL WHERE renter_state  = 'None'",
+            "UPDATE bookings SET renter_zip    = NULL WHERE renter_zip    = 'None'",
+            "UPDATE bookings SET company_name  = NULL WHERE company_name  = 'None'",
         ]
         for m in migrations:
             try:
@@ -2130,11 +2137,17 @@ ADMIN_BOOKING_HTML = """
   <div class="card">
     <h2>Customer</h2>
     <div class="row">
-      <span class="k">Name</span><span class="v">{{ b.full_name }}</span>
-      {% if b.company_name %}<span class="k">Company</span><span class="v">{{ b.company_name }}</span>{% endif %}
-      <span class="k">Address</span><span class="v">{{ b.renter_street }}, {{ b.renter_city }}, {{ b.renter_state }} {{ b.renter_zip }}</span>
-      <span class="k">Phone</span><span class="v"><a href="tel:{{ b.phone }}">{{ b.phone }}</a></span>
-      <span class="k">Email</span><span class="v"><a href="mailto:{{ b.email }}">{{ b.email }}</a></span>
+      <span class="k">Name</span><span class="v">{{ b.full_name or '—' }}</span>
+      {% if b.company_name and b.company_name != 'None' %}<span class="k">Company</span><span class="v">{{ b.company_name }}</span>{% endif %}
+      {% set _addr_parts = [] %}
+      {% if b.renter_street and b.renter_street != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_street] %}{% endif %}
+      {% if b.renter_city and b.renter_city != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_city] %}{% endif %}
+      {% if b.renter_state and b.renter_state != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_state] %}{% endif %}
+      {% if b.renter_zip and b.renter_zip != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_zip] %}{% endif %}
+      <span class="k">Address</span><span class="v">{{ _addr_parts|join(', ') or '—' }}</span>
+      {% set _phone = b.phone if (b.phone and b.phone != 'None') else '' %}
+      <span class="k">Phone</span><span class="v">{% if _phone %}<a href="tel:{{ _phone }}">{{ _phone }}</a>{% else %}—{% endif %}</span>
+      <span class="k">Email</span><span class="v">{% if b.email %}<a href="mailto:{{ b.email }}">{{ b.email }}</a>{% else %}—{% endif %}</span>
     </div>
   </div>
 
@@ -5185,6 +5198,104 @@ def admin_customers_import_template():
     csv_bytes = b"full_name,company_name,email,phone,street,city,state,zip,notes\n"
     return _R(csv_bytes, mimetype="text/csv",
               headers={"Content-Disposition": "attachment; filename=customers_template.csv"})
+
+
+# ── Booqable Phone Sync ───────────────────────────────────────
+
+@app.route("/admin/booqable-sync", methods=["GET", "POST"])
+@admin_required
+def booqable_sync():
+    """Pull phone numbers from Booqable API and update matching bookings/customers."""
+    result = None
+    if request.method == "POST":
+        token    = (request.form.get("token") or "").strip()
+        tenant   = (request.form.get("tenant") or "rentapartyct").strip()
+        if not token:
+            result = {"error": "Bearer token is required."}
+        else:
+            updated = 0
+            errors  = []
+            try:
+                headers = {"Authorization": f"Bearer {token}",
+                           "Content-Type": "application/json"}
+                base = f"https://{tenant}.booqable.com/api/boomerang"
+                # Fetch up to 500 customers (paginate if needed)
+                page = 1
+                customers = []
+                while True:
+                    r = requests.get(f"{base}/customers",
+                                     headers=headers,
+                                     params={"page[number]": page, "page[size]": 100},
+                                     timeout=15)
+                    if r.status_code != 200:
+                        errors.append(f"Booqable API error {r.status_code}: {r.text[:200]}")
+                        break
+                    data = r.json().get("data", [])
+                    if not data:
+                        break
+                    customers.extend(data)
+                    if len(data) < 100:
+                        break
+                    page += 1
+
+                # Update bookings + customers tables by matching email
+                conn = get_db()
+                if conn and customers:
+                    cur = conn.cursor()
+                    for c in customers:
+                        attrs = c.get("attributes", {})
+                        email = (attrs.get("email") or "").strip().lower()
+                        phone = (attrs.get("phone") or attrs.get("mobile_phone") or "").strip()
+                        name  = (attrs.get("name") or "").strip()
+                        if not phone or not email:
+                            continue
+                        # Update bookings table
+                        cur.execute("""
+                            UPDATE bookings SET phone=%s
+                            WHERE LOWER(email)=%s AND (phone IS NULL OR phone = '' OR phone = 'None')
+                        """, (phone, email))
+                        # Update customers table
+                        cur.execute("""
+                            UPDATE customers SET phone=%s
+                            WHERE LOWER(email)=%s AND (phone IS NULL OR phone = '' OR phone = 'None')
+                        """, (phone, email))
+                        updated += cur.rowcount
+                    conn.commit()
+                    cur.close(); conn.close()
+                result = {"ok": True, "customers_fetched": len(customers), "records_updated": updated, "errors": errors}
+            except Exception as e:
+                result = {"error": str(e)}
+
+    # Simple page
+    nav = '<a href="/admin/dashboard" style="color:#2563eb;font-size:.85rem">← Back to Dashboard</a>'
+    form_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Booqable Phone Sync</title>
+<style>*{{box-sizing:border-box;margin:0;padding:0}}body{{font-family:-apple-system,sans-serif;background:#f5f6fa;padding:2rem}}
+.card{{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1.5rem;max-width:540px;margin:0 auto}}
+h1{{font-size:1.2rem;font-weight:700;margin-bottom:.25rem}}p{{color:#6b7280;font-size:.88rem;margin-bottom:1.25rem}}
+label{{display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem}}
+input{{width:100%;border:1px solid #d1d5db;border-radius:6px;padding:.5rem .75rem;font-size:.9rem;margin-bottom:.85rem}}
+button{{background:#2563eb;color:white;border:none;border-radius:6px;padding:.6rem 1.5rem;font-size:.9rem;font-weight:700;cursor:pointer}}
+.ok{{background:#dcfce7;color:#166534;border:1px solid #bbf7d0;border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;font-size:.88rem}}
+.err{{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;font-size:.88rem}}
+</style></head><body>
+<div class="card">
+  <div style="margin-bottom:1rem">{nav}</div>
+  <h1>Booqable Phone Sync</h1>
+  <p>Fetches phone numbers from your Booqable account and fills them in for matching bookings. Get a fresh Bearer token from Booqable → Network tab.</p>
+  {'<div class="ok">✅ Fetched ' + str(result.get("customers_fetched",0)) + ' customers, updated ' + str(result.get("records_updated",0)) + ' records.</div>' if result and result.get("ok") else ''}
+  {'<div class="err">⚠ ' + result.get("error","") + '</div>' if result and result.get("error") else ''}
+  <form method="POST">
+    <label>Booqable Subdomain (e.g. rentapartyct)</label>
+    <input name="tenant" value="rentapartyct" required>
+    <label>Bearer Token (from Network tab)</label>
+    <input name="token" placeholder="Paste token here…" required>
+    <button type="submit">🔄 Sync Phone Numbers</button>
+  </form>
+</div>
+</body></html>"""
+    return form_html
 
 
 # ── Route Planner ─────────────────────────────────────────────────────────────
