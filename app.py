@@ -175,6 +175,7 @@ def init_db():
             "ALTER TABLE customers ADD COLUMN IF NOT EXISTS tax_exempt BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_status TEXT DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS late_night_fee DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS amount_paid DECIMAL(10,2) DEFAULT 0",
         ]
         for m in migrations:
             try:
@@ -2637,8 +2638,14 @@ def admin_dashboard():
                 if len(items) > 2:
                     b["items_summary"] += f" +{len(items)-2} more"
                 # Payment label + class
+                paid    = float(b.get("amount_paid") or 0)
+                total   = float(b.get("grand_total") or 0)
                 if b["status"] == "confirmed":
-                    if b.get("final_payment_link"):
+                    if paid > 0 and paid < total - 0.01:
+                        owed = total - paid
+                        b["pay_label"] = f"Partial — ${owed:,.2f} owed"
+                        b["pay_class"] = "pay-partial"
+                    elif b.get("final_payment_link"):
                         b["pay_label"], b["pay_class"] = "Partially Paid", "pay-partial"
                     else:
                         b["pay_label"], b["pay_class"] = "Paid In Full", "pay-paid"
@@ -4254,7 +4261,7 @@ function showModal(b){
   var rows = [
     ['Dates', b.event_start_date + (b.event_end_date&&b.event_end_date!==b.event_start_date?' → '+b.event_end_date:'')],
     ['Status', b.status.charAt(0).toUpperCase()+b.status.slice(1)],
-    ['Payment', b.status==='confirmed'?(b.final_payment_link?'Partially Paid':'Paid In Full'):(b.status==='accepted'?'Payment Due':'—')],
+    ['Payment', b.status==='confirmed'?(b.amount_paid>0&&b.amount_paid<b.grand_total-0.01?'Partial — $'+(b.grand_total-b.amount_paid).toFixed(2)+' owed':(b.final_payment_link?'Partially Paid':'Paid In Full')):(b.status==='accepted'?'Payment Due':'—')],
     ['Total', '$'+parseFloat(b.grand_total||0).toFixed(2)],
     ['Email', b.email||'—'],
     ['Phone', b.phone||'—'],
@@ -4851,9 +4858,16 @@ def calendar_ics():
     ]
     for b in bookings:
         status = b.get("status", "")
+        paid   = float(b.get("amount_paid") or 0)
+        total  = float(b.get("grand_total") or 0)
         fp     = b.get("final_payment_link")
         if status == "confirmed":
-            label = "Paid In Full" if not fp else "Partially Paid"
+            if paid > 0 and paid < total - 0.01:
+                label = f"Partial — ${total - paid:,.2f} owed"
+            elif fp:
+                label = "Partially Paid"
+            else:
+                label = "Paid In Full"
         elif status == "accepted":
             label = "Payment Due"
         elif status == "pending":
