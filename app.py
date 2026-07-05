@@ -174,6 +174,7 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_exempt BOOLEAN DEFAULT FALSE",
             "ALTER TABLE customers ADD COLUMN IF NOT EXISTS tax_exempt BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_status TEXT DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS late_night_fee DECIMAL(10,2) DEFAULT 0",
         ]
         for m in migrations:
             try:
@@ -1193,8 +1194,13 @@ FORM_HTML = r"""
 
   <div class="card">
     <h2>Select Your Items</h2>
+    <div style="margin-bottom:1rem">
+      <input type="text" id="item_search" placeholder="🔍 Search items..." oninput="filterItems(this.value)"
+        style="width:100%;padding:.6rem .9rem;border:1.5px solid #cbd5e0;border-radius:8px;font-size:.95rem;box-sizing:border-box;outline:none"
+        onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#cbd5e0'">
+    </div>
     {% for p in products %}
-    <div class="product-row">
+    <div class="product-row" data-name="{{ p.name | lower }}">
       <div>
         <div class="product-name">{{ p.name }}</div>
         <div class="product-meta">
@@ -1211,9 +1217,15 @@ FORM_HTML = r"""
     {% endfor %}
   </div>
 
+  <input type="hidden" name="late_night_fee" id="late_night_fee_input" value="0">
+  <div id="late_night_notice" style="display:none;margin:.75rem 0;padding:.75rem 1rem;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:8px;font-size:.88rem;color:#92400e">
+    <strong>⏰ Late Night / Early Morning Fee: $125.00</strong><br>
+    Your pickup or dropoff time falls between 11:30 PM – 7:00 AM. A $125 fee applies for pickups or deliveries outside of standard hours.
+  </div>
   <div class="total-bar">
     <div class="total-row"><span>Items Subtotal</span><span id="t_items">$0.00</span></div>
     <div class="total-row"><span>Exact Time Delivery</span><span id="t_exact">-</span></div>
+    <div class="total-row" id="t_latenight_row" style="display:none"><span>Late Night / Early Morning Fee</span><span id="t_latenight">$125.00</span></div>
     <div class="total-row"><span>Delivery Fee</span><span id="t_delivery">Calculated after review</span></div>
     <div class="total-row"><span>CT Sales Tax (6.35%)</span><span id="t_tax">$0.00</span></div>
     <div class="total-row grand"><span>Estimated Total</span><span id="t_grand">$0.00</span></div>
@@ -1225,9 +1237,48 @@ FORM_HTML = r"""
 </div>
 <script>
 const EXACT_FEE = {{ exact_time_fee }};
+const LATE_NIGHT_FEE = 125;
 const CT_TAX_RATE = 0.0635;
 function changeQty(id,delta){const i=document.getElementById('qty_'+id);const m=parseInt(i.dataset.max);let v=Math.max(0,Math.min(m,parseInt(i.value||0)+delta));i.value=v;updateTotals();}
-function updateTotals(){let sub=0;document.querySelectorAll('.qty-input').forEach(i=>{const qty=parseInt(i.value)||0;const price=parseFloat(i.dataset.price);const id=i.id.replace('qty_','');const line=qty*price;sub+=line;const el=document.getElementById('sub_'+id);el.textContent=qty>0?'$'+line.toFixed(2):'-';el.classList.toggle('has-val',qty>0);});const exact=document.getElementById('exact_time_cb').checked;const ef=exact?EXACT_FEE:0;const exemptCb=document.getElementById('tax_exempt_request');const exempt=exemptCb&&exemptCb.checked;const tax=exempt?0:(sub+ef)*CT_TAX_RATE;const taxEl=document.getElementById('t_tax');taxEl.textContent='$'+tax.toFixed(2);taxEl.style.color=exempt?'#16a34a':'';const taxLbl=taxEl.previousElementSibling;if(taxLbl)taxLbl.textContent=exempt?'CT Sales Tax (EXEMPT)':'CT Sales Tax (6.35%)';document.getElementById('t_items').textContent='$'+sub.toFixed(2);document.getElementById('t_exact').textContent=exact?'$'+EXACT_FEE.toFixed(2):'-';document.getElementById('t_grand').textContent='$'+(sub+ef+tax).toFixed(2)+'+';}
+function isLateNight(timeStr){
+  if(!timeStr) return false;
+  const [h,m]=timeStr.split(':').map(Number);
+  const mins=h*60+m;
+  // 23:30 = 1410, 07:00 = 420
+  return mins>=1410||mins<420;
+}
+function checkLateNightFee(){
+  const endTime=document.querySelector('[name="event_end_time"]').value;
+  const late=isLateNight(endTime);
+  document.getElementById('late_night_notice').style.display=late?'block':'none';
+  document.getElementById('t_latenight_row').style.display=late?'flex':'none';
+  document.getElementById('late_night_fee_input').value=late?LATE_NIGHT_FEE:0;
+  return late?LATE_NIGHT_FEE:0;
+}
+function filterItems(q){
+  q=q.toLowerCase().trim();
+  document.querySelectorAll('.product-row').forEach(row=>{
+    row.style.display=(!q||row.dataset.name.includes(q))?'':'none';
+  });
+}
+function updateTotals(){
+  let sub=0;
+  document.querySelectorAll('.qty-input').forEach(i=>{const qty=parseInt(i.value)||0;const price=parseFloat(i.dataset.price);const id=i.id.replace('qty_','');const line=qty*price;sub+=line;const el=document.getElementById('sub_'+id);el.textContent=qty>0?'$'+line.toFixed(2):'-';el.classList.toggle('has-val',qty>0);});
+  const exact=document.getElementById('exact_time_cb').checked;
+  const ef=exact?EXACT_FEE:0;
+  const lf=checkLateNightFee();
+  const exemptCb=document.getElementById('tax_exempt_request');
+  const exempt=exemptCb&&exemptCb.checked;
+  const tax=exempt?0:(sub+ef+lf)*CT_TAX_RATE;
+  const taxEl=document.getElementById('t_tax');
+  taxEl.textContent='$'+tax.toFixed(2);
+  taxEl.style.color=exempt?'#16a34a':'';
+  const taxLbl=taxEl.previousElementSibling;
+  if(taxLbl)taxLbl.textContent=exempt?'CT Sales Tax (EXEMPT)':'CT Sales Tax (6.35%)';
+  document.getElementById('t_items').textContent='$'+sub.toFixed(2);
+  document.getElementById('t_exact').textContent=exact?'$'+EXACT_FEE.toFixed(2):'-';
+  document.getElementById('t_grand').textContent='$'+(sub+ef+lf+tax).toFixed(2)+'+';
+}
 function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
 setVenue('venue');
 function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{Object.entries(data).forEach(([id,avail])=>{const input=document.getElementById('qty_'+id);if(!input)return;input.dataset.max=avail;input.max=avail;if(parseInt(input.value)>avail){input.value=avail;}});updateTotals();}).catch(()=>{});}
@@ -1278,6 +1329,7 @@ endTimeEl.addEventListener('change', function() {
     this.value = '';
     showTimeError('Event end time must be after the start time.');
   }
+  updateTotals();
 });
 
 setupTimeEl.addEventListener('change', function() {
@@ -2114,7 +2166,20 @@ def submit():
     delivery_fee, delivery_note = calc_delivery_fee(miles)
 
     exact_fee   = EXACT_TIME_FEE if exact_delivery else 0.0
-    pre_tax_total = round(subtotal + exact_fee + delivery_fee, 2)
+    late_night_fee = float(f.get("late_night_fee") or 0)
+    # Validate server-side: check end time actually falls in late night window
+    def _is_late_night(t):
+        if not t: return False
+        try:
+            h, m = map(int, t.strip().split(':')[:2])
+            mins = h * 60 + m
+            return mins >= 23*60+30 or mins < 7*60
+        except: return False
+    if late_night_fee and not _is_late_night(event_end_time):
+        late_night_fee = 0.0
+    if _is_late_night(event_end_time):
+        late_night_fee = 125.0
+    pre_tax_total = round(subtotal + exact_fee + late_night_fee + delivery_fee, 2)
 
     # Check if customer is tax exempt (either from DB record or self-reported on form)
     is_tax_exempt = f.get("tax_exempt_request") == "1"
@@ -2153,11 +2218,11 @@ def submit():
                     event_street, event_city, event_state, event_zip,
                     exact_time_delivery, delivery_location,
                     delivery_fee, distance_miles,
-                    items_json, items_subtotal, exact_time_fee, tax_rate, tax_amount, tax_exempt, grand_total,
+                    items_json, items_subtotal, exact_time_fee, late_night_fee, tax_rate, tax_amount, tax_exempt, grand_total,
                     notes
                 ) VALUES (
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                 ) RETURNING id
             """, (
                 full_name, company_name,
@@ -2169,7 +2234,7 @@ def submit():
                 event_street, event_city, event_state, event_zip,
                 exact_delivery, delivery_location,
                 delivery_fee, miles,
-                json.dumps(order_items), subtotal, exact_fee, applied_tax_rate, tax_amount, is_tax_exempt, grand_total,
+                json.dumps(order_items), subtotal, exact_fee, late_night_fee, applied_tax_rate, tax_amount, is_tax_exempt, grand_total,
                 notes,
             ))
             booking_id = cur.fetchone()[0]
