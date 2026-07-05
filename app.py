@@ -1592,13 +1592,14 @@ ADMIN_DASH_HTML = """
   {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
   {% set sf = ('&sort=' ~ sort_by) if sort_by and sort_by != 'date' else '' %}
   <div class="tabs">
-    <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if not status_filter and not upcoming_filter and not archived_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
+    <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
     <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
-    <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}{{ sf }}"   class="tab {% if status_filter=='pending'   %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
-    <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
-    <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
-    <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    %}active{% endif %}">Denied</a>
-    <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' %}active{% endif %}">Cancelled</a>
+    <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}{{ sf }}"   class="tab {% if status_filter=='pending'   and not past_filter %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
+    <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
+    <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' and not past_filter %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
+    <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    and not past_filter %}active{% endif %}">Denied</a>
+    <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' and not past_filter %}active{% endif %}">Cancelled</a>
+    <a href="/admin/dashboard?past=1" class="tab {% if past_filter %}active{% endif %}" style="{% if past_filter %}color:#6366f1;border-bottom-color:#6366f1;{% endif %}">🕓&nbsp;Past&nbsp;({{ stats.past }})</a>
     <a href="/admin/dashboard?archived=1" class="tab {% if archived_filter %}active{% endif %}" style="{% if archived_filter %}color:#9ca3af;border-bottom-color:#9ca3af;{% endif %}">📦&nbsp;Archived</a>
   </div>
 
@@ -2414,10 +2415,11 @@ def admin_dashboard():
     pay_filter      = request.args.get("pay_filter", "")   # paid | partial | due | ""
     upcoming_filter = bool(request.args.get("upcoming", ""))
     archived_filter = bool(request.args.get("archived", ""))
+    past_filter     = bool(request.args.get("past", ""))
     sort_by         = request.args.get("sort", "date")   # date | name | id
     conn = get_db()
     bookings = []
-    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0, "upcoming": 0}
+    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0}
     inventory_status = []
 
     if conn:
@@ -2433,6 +2435,7 @@ def admin_dashboard():
             stats["amount_due"] = float(cur.fetchone()[0])
             # Count upcoming (next 8 days, non-cancelled/denied)
             today_dt = date.today()
+            seven_days_ago = (today_dt - timedelta(days=7)).isoformat()
             in_8_days = (today_dt + timedelta(days=8)).isoformat()
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
@@ -2440,6 +2443,13 @@ def admin_dashboard():
                   AND status NOT IN ('cancelled','denied')
             """, (today_dt.isoformat(), in_8_days))
             stats["upcoming"] = cur.fetchone()[0]
+            # Count past (older than 7 days ago)
+            cur.execute("""
+                SELECT COUNT(*) FROM bookings
+                WHERE (event_start_date < %s OR event_start_date IS NULL)
+                  AND (archived IS NULL OR archived = FALSE)
+            """, (seven_days_ago,))
+            stats["past"] = cur.fetchone()[0]
 
             # Build filtered query — filter on event_start_date (the date orders go out)
             wheres = []
@@ -2449,10 +2459,18 @@ def admin_dashboard():
                 wheres.append("event_start_date <= %s"); params.append(in_8_days)
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
+            elif past_filter:
+                wheres.append("(event_start_date < %s OR event_start_date IS NULL)")
+                params.append(seven_days_ago)
+                wheres.append("(archived IS NULL OR archived = FALSE)")
+                if status_filter:
+                    wheres.append("status=%s"); params.append(status_filter)
             elif archived_filter:
                 wheres.append("archived = TRUE")
             else:
+                # Default: recent (past 7 days) + future
                 wheres.append("(archived IS NULL OR archived = FALSE)")
+                wheres.append("(event_start_date >= %s OR event_start_date IS NULL)"); params.append(seven_days_ago)
                 if status_filter:
                     wheres.append("status=%s"); params.append(status_filter)
                 if date_from:
@@ -2533,6 +2551,7 @@ def admin_dashboard():
         pay_filter=pay_filter,
         upcoming_filter=upcoming_filter,
         archived_filter=archived_filter,
+        past_filter=past_filter,
         sort_by=sort_by,
     )
 
