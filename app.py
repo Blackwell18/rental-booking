@@ -322,9 +322,13 @@ def get_products():
 def get_available(start_date_str, end_date_str, exclude_id=None):
     """
     Returns {product_id: available_qty} for a date range.
-    Only CONFIRMED bookings lock inventory.
+    Locks inventory for both CONFIRMED (paid in full) and ACCEPTED (deposit paid / partially paid).
+    Also matches items by name for Booqable-imported bookings that lack a product id.
     """
-    available = {p["id"]: p["total"] for p in get_products()}
+    products   = get_products()
+    available  = {p["id"]: p["total"] for p in products}
+    # Build name → id map so name-only items (e.g. Booqable imports) are matched
+    name_to_id = {p["name"].lower(): p["id"] for p in products}
     conn = get_db()
     if not conn:
         return available
@@ -332,7 +336,7 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         query = """
             SELECT items_json FROM bookings
-            WHERE status = 'confirmed'
+            WHERE status IN ('confirmed', 'accepted')
               AND event_start_date <= %s
               AND event_end_date   >= %s
         """
@@ -348,9 +352,10 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
             try:
                 items = json.loads(row["items_json"] or "[]")
                 for item in items:
-                    pid = item.get("id")
-                    qty = item.get("qty", 0)
-                    if pid in available:
+                    # Match by product id first, fall back to name lookup
+                    pid = item.get("id") or name_to_id.get((item.get("name") or "").lower())
+                    qty = int(item.get("qty") or 0)
+                    if pid and pid in available and qty > 0:
                         available[pid] = max(0, available[pid] - qty)
             except Exception:
                 pass
