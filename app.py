@@ -2168,12 +2168,34 @@ ADMIN_BOOKING_HTML = """
         {% elif b.tax_amount %}
         <tr><td colspan="3" style="color:#718096">CT Sales Tax ({{ "%.2f"|format((b.tax_rate or 0)*100) }}%)</td><td style="text-align:right;font-weight:600">${{ "%.2f"|format(b.tax_amount or 0) }}</td></tr>
         {% endif %}
-        <tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
-        {% if days_until <= 7 %}
-        <tr style="background:#fff5f5"><td colspan="3" style="color:#c53030;font-weight:700">Due Now (event within 7 days — full payment required)</td><td style="text-align:right;font-weight:700;color:#c53030">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
+        <tr class="total-row"><td colspan="3">GRAND TOTAL</td><td style="text-align:right">${{ "%.2f"|format(b.grand_total or 0) }}</td></tr>
+        {% set paid = (b.amount_paid or 0)|float %}
+        {% set total = (b.grand_total or 0)|float %}
+        {% set balance = [total - paid, 0]|max %}
+        {% if paid > 0 %}
+        <tr style="background:#f0fff4">
+          <td colspan="3" style="color:#276749;font-weight:700">✅ Amount Paid</td>
+          <td style="text-align:right;font-weight:700;color:#276749">- ${{ "%.2f"|format(paid) }}</td>
+        </tr>
+        {% if balance > 0.01 %}
+        <tr style="background:#fff5f5">
+          <td colspan="3" style="color:#c53030;font-weight:700">⚠️ Balance Due</td>
+          <td style="text-align:right;font-weight:700;color:#c53030">${{ "%.2f"|format(balance) }}</td>
+        </tr>
         {% else %}
-        <tr style="background:#f0fff4"><td colspan="3" style="color:#276749;font-weight:700">25% Deposit Due Now</td><td style="text-align:right;font-weight:700;color:#276749">${{ "%.2f"|format((b.grand_total or 0) * 0.25) }}</td></tr>
-        <tr><td colspan="3" style="color:#718096">Remaining Balance (due 48 hrs before event)</td><td style="text-align:right;color:#718096">${{ "%.2f"|format((b.grand_total or 0) * 0.75) }}</td></tr>
+        <tr style="background:#f0fff4">
+          <td colspan="4" style="color:#276749;font-weight:700;text-align:center">✅ Paid In Full</td>
+        </tr>
+        {% endif %}
+        {% elif b.status == 'confirmed' %}
+        <tr style="background:#f0fff4">
+          <td colspan="4" style="color:#276749;font-weight:700;text-align:center">✅ Paid In Full</td>
+        </tr>
+        {% elif b.status == 'accepted' %}
+        <tr style="background:#fffbeb">
+          <td colspan="3" style="color:#92400e;font-weight:700">⏳ Balance Due</td>
+          <td style="text-align:right;font-weight:700;color:#92400e">${{ "%.2f"|format(total) }}</td>
+        </tr>
         {% endif %}
       </tbody>
     </table>
@@ -3096,21 +3118,39 @@ def admin_dashboard():
                 paid    = float(b.get("amount_paid") or 0)
                 total   = float(b.get("grand_total") or 0)
                 notes   = (b.get("notes") or "")
+
+                # Try to pull paid amount from Booqable notes when amount_paid not set
+                # Notes format: "Paid: $75.11 of $300.44"
+                if paid == 0 and "Paid: $" in notes:
+                    import re as _re
+                    _m = _re.search(r'Paid: \$([0-9]+\.?[0-9]*)', notes)
+                    if _m:
+                        try:
+                            paid = float(_m.group(1))
+                        except Exception:
+                            pass
+
+                owed = round(total - paid, 2) if total > 0 else 0
+
                 if b["status"] == "confirmed":
                     if "Payment: payment_due" in notes:
                         b["pay_label"], b["pay_class"] = "Payment Due", "pay-due"
-                    elif paid > 0 and paid < total - 0.01:
-                        owed = total - paid
+                    elif paid > 0 and owed > 0.01:
                         b["pay_label"] = f"Partial — ${owed:,.2f} owed"
                         b["pay_class"] = "pay-partial"
-                    elif "Payment: partially_paid" in notes:
-                        b["pay_label"], b["pay_class"] = "Partially Paid", "pay-partial"
-                    elif b.get("final_payment_link"):
-                        b["pay_label"], b["pay_class"] = "Partially Paid", "pay-partial"
-                    else:
+                    elif paid > 0 or b.get("final_payment_link") is None:
                         b["pay_label"], b["pay_class"] = "Paid In Full", "pay-paid"
+                    else:
+                        # final_payment_link set but no amount_paid → estimate 75% remaining
+                        est_owed = round(total * 0.75, 2)
+                        b["pay_label"] = f"Partial — ${est_owed:,.2f} owed"
+                        b["pay_class"] = "pay-partial"
                 elif b["status"] == "accepted":
-                    b["pay_label"], b["pay_class"] = "Payment Due", "pay-due"
+                    if paid > 0 and owed > 0.01:
+                        b["pay_label"] = f"Partial — ${owed:,.2f} owed"
+                        b["pay_class"] = "pay-partial"
+                    else:
+                        b["pay_label"], b["pay_class"] = "Payment Due", "pay-due"
                 else:
                     b["pay_label"], b["pay_class"] = "—", "pay-none"
                 # Apply pay_filter AFTER labelling
