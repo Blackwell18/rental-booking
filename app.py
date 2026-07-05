@@ -2512,10 +2512,10 @@ def admin_dashboard():
                     if pay_filter == "due" and b["pay_class"] != "pay-due": continue
                 # Google Maps URL for delivery address
                 addr_parts = [p for p in [
-                    b.get("event_street","").strip(),
-                    b.get("event_city","").strip(),
-                    b.get("event_state","").strip(),
-                    b.get("event_zip","").strip()
+                    (b.get("event_street") or "").strip(),
+                    (b.get("event_city") or "").strip(),
+                    (b.get("event_state") or "").strip(),
+                    (b.get("event_zip") or "").strip()
                 ] if p]
                 if addr_parts:
                     b["maps_url"] = "https://www.google.com/maps/search/?api=1&query=" + urllib.parse.quote_plus(", ".join(addr_parts))
