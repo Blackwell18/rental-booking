@@ -1590,7 +1590,7 @@ ADMIN_DASH_HTML = """
   {% set df = ('&date_from=' ~ date_from) if date_from else '' %}
   {% set dt = ('&date_to=' ~ date_to) if date_to else '' %}
   {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
-  {% set sf = ('&sort=' ~ sort_by) if sort_by and sort_by != 'date' else '' %}
+  {% set sf = ('&sort=' ~ sort_by) if sort_by else '' %}
   <div class="tabs">
     <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
     <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
@@ -1619,9 +1619,14 @@ ADMIN_DASH_HTML = """
     </select>
     <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.5rem">Sort:</label>
     <select name="sort" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
-      <option value="date" {% if sort_by=='date' %}selected{% endif %}>Event Date</option>
-      <option value="name" {% if sort_by=='name' %}selected{% endif %}>Name</option>
-      <option value="id"   {% if sort_by=='id'   %}selected{% endif %}>Booking #</option>
+      <option value="date"      {% if sort_by=='date'      %}selected{% endif %}>Event Date ↑</option>
+      <option value="date_desc" {% if sort_by=='date_desc' %}selected{% endif %}>Event Date ↓</option>
+      <option value="name"      {% if sort_by=='name'      %}selected{% endif %}>Client A→Z</option>
+      <option value="name_desc" {% if sort_by=='name_desc' %}selected{% endif %}>Client Z→A</option>
+      <option value="id"        {% if sort_by=='id'        %}selected{% endif %}>Booking # ↓</option>
+      <option value="id_asc"    {% if sort_by=='id_asc'    %}selected{% endif %}>Booking # ↑</option>
+      <option value="total"     {% if sort_by=='total'     %}selected{% endif %}>Total ↓</option>
+      <option value="created"   {% if sort_by=='created'   %}selected{% endif %}>Date Added ↓</option>
     </select>
     <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">Apply</button>
     {% if date_from or date_to or pay_filter %}<a href="/admin/dashboard?status={{ status_filter }}" style="font-size:.78rem;color:#6b7280;text-decoration:none">✕ Clear</a>{% endif %}
@@ -2481,8 +2486,17 @@ def admin_dashboard():
             if wheres:
                 q += " WHERE " + " AND ".join(wheres)
             # Sort order
-            sort_map = {"name": "full_name ASC", "id": "id DESC", "date": "event_start_date ASC, created_at DESC"}
-            q += " ORDER BY " + sort_map.get(sort_by, "event_start_date ASC, created_at DESC")
+            sort_map = {
+                "date":      "event_start_date ASC NULLS LAST, created_at DESC",
+                "date_desc": "event_start_date DESC NULLS LAST, created_at DESC",
+                "name":      "full_name ASC",
+                "name_desc": "full_name DESC",
+                "id":        "id DESC",
+                "id_asc":    "id ASC",
+                "total":     "grand_total DESC NULLS LAST",
+                "created":   "created_at DESC",
+            }
+            q += " ORDER BY " + sort_map.get(sort_by, "event_start_date ASC NULLS LAST, created_at DESC")
             q += " LIMIT 200"
             cur.execute(q, params)
             rows = cur.fetchall()
