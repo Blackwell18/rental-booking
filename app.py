@@ -1983,7 +1983,7 @@ ADMIN_BOOKING_HTML = """
       <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit</th><th style="text-align:right">Total</th></tr></thead>
       <tbody>
         {% for item in items %}
-        <tr><td>{{ item.name }}</td><td style="text-align:center">{{ item.qty }}</td><td style="text-align:right">${{ "%.2f"|format(item.unit_price) }}</td><td style="text-align:right;font-weight:600">${{ "%.2f"|format(item.total) }}</td></tr>
+        <tr><td>{{ item.name }}</td><td style="text-align:center">{{ item.qty }}</td><td style="text-align:right">{% if item.unit_price is not none and item.unit_price != '' %} ${{ "%.2f"|format(item.unit_price|float) }}{% else %}—{% endif %}</td><td style="text-align:right;font-weight:600">{% if item.total is not none and item.total != '' %}${{ "%.2f"|format(item.total|float) }}{% else %}—{% endif %}</td></tr>
         {% endfor %}
         {% if b.exact_time_delivery %}
         <tr><td colspan="3">Exact Time Delivery</td><td style="text-align:right;font-weight:600">$175.00</td></tr>
