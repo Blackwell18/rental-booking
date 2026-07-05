@@ -5209,7 +5209,10 @@ def booqable_sync():
     result = None
     if request.method == "POST":
         token    = (request.form.get("token") or "").strip()
-        tenant   = (request.form.get("tenant") or "rentapartyct").strip()
+        tenant   = (request.form.get("tenant") or "eminent-rental").strip()
+        # Strip full domain if user pasted the whole URL or domain
+        tenant = tenant.replace("https://", "").replace("http://", "")
+        tenant = tenant.split(".booqable.com")[0].split("/")[0]
         if not token:
             result = {"error": "Bearer token is required."}
         else:
@@ -5287,10 +5290,10 @@ button{{background:#2563eb;color:white;border:none;border-radius:6px;padding:.6r
   {'<div class="ok">✅ Fetched ' + str(result.get("customers_fetched",0)) + ' customers, updated ' + str(result.get("records_updated",0)) + ' records.</div>' if result and result.get("ok") else ''}
   {'<div class="err">⚠ ' + result.get("error","") + '</div>' if result and result.get("error") else ''}
   <form method="POST">
-    <label>Booqable Subdomain (e.g. rentapartyct)</label>
-    <input name="tenant" value="rentapartyct" required>
+    <label>Booqable Subdomain (just the part before .booqable.com)</label>
+    <input name="tenant" value="eminent-rental" required>
     <label>Bearer Token (from Network tab)</label>
-    <input name="token" placeholder="Paste token here…" required>
+    <input name="token" placeholder="Paste token here…" required autocomplete="off">
     <button type="submit">🔄 Sync Phone Numbers</button>
   </form>
 </div>
