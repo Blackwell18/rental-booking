@@ -2646,11 +2646,16 @@ def admin_dashboard():
                 # Payment label + class
                 paid    = float(b.get("amount_paid") or 0)
                 total   = float(b.get("grand_total") or 0)
+                notes   = (b.get("notes") or "")
                 if b["status"] == "confirmed":
-                    if paid > 0 and paid < total - 0.01:
+                    if "Payment: payment_due" in notes:
+                        b["pay_label"], b["pay_class"] = "Payment Due", "pay-due"
+                    elif paid > 0 and paid < total - 0.01:
                         owed = total - paid
                         b["pay_label"] = f"Partial — ${owed:,.2f} owed"
                         b["pay_class"] = "pay-partial"
+                    elif "Payment: partially_paid" in notes:
+                        b["pay_label"], b["pay_class"] = "Partially Paid", "pay-partial"
                     elif b.get("final_payment_link"):
                         b["pay_label"], b["pay_class"] = "Partially Paid", "pay-partial"
                     else:
