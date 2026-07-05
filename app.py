@@ -168,6 +168,20 @@ def init_db():
             )
         """)
 
+        # Payment links tracker table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS payment_links (
+                id             SERIAL PRIMARY KEY,
+                booking_id     INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+                label          TEXT,
+                amount         DECIMAL(10,2),
+                url            TEXT,
+                stripe_link_id TEXT,
+                status         VARCHAR(20) DEFAULT 'active',
+                created_at     TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
         # Migrations: add new columns to existing tables (safe to run every time)
         migrations = [
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_payment_link TEXT",
@@ -382,24 +396,21 @@ def calc_delivery_fee(miles):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def create_stripe_payment_link(booking_id, deposit_amount, customer_email, items_desc, product_name=None):
-    """Create a Stripe Payment Link. Returns (url, error)."""
+    """Create a Stripe Payment Link. Returns (url, stripe_link_id, error)."""
     if not STRIPE_SECRET_KEY:
         log.warning("STRIPE_SECRET_KEY not set — cannot create payment link")
-        return None, "Stripe not configured"
+        return None, None, "Stripe not configured"
     try:
         name = product_name or f"25% Deposit — Booking #{booking_id}"
-        # Create a product for this booking
         product = stripe.Product.create(
             name=name,
             description=(items_desc[:500] if items_desc else "Rental deposit"),
         )
-        # Create a one-time price
         price = stripe.Price.create(
-            unit_amount=int(round(deposit_amount * 100)),  # cents
+            unit_amount=int(round(deposit_amount * 100)),
             currency="usd",
             product=product.id,
         )
-        # Build payment link kwargs
         kwargs = {
             "line_items": [{"price": price.id, "quantity": 1}],
             "metadata": {"booking_id": str(booking_id)},
@@ -411,10 +422,46 @@ def create_stripe_payment_link(booking_id, deposit_amount, customer_email, items
             }
         link = stripe.PaymentLink.create(**kwargs)
         log.info(f"Stripe Payment Link created for booking #{booking_id}: {link.url}")
-        return link.url, None
+        return link.url, link.id, None
     except Exception as e:
         log.error(f"Stripe Payment Link error: {e}")
-        return None, str(e)
+        return None, None, str(e)
+
+
+def save_payment_link(booking_id, label, amount, url, stripe_link_id):
+    """Record a payment link in the payment_links table."""
+    conn = get_db()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO payment_links (booking_id, label, amount, url, stripe_link_id, status)
+            VALUES (%s, %s, %s, %s, %s, 'active')
+        """, (booking_id, label, amount, url, stripe_link_id))
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"save_payment_link error: {e}")
+
+
+def get_payment_links(booking_id):
+    """Return all payment links for a booking, newest first."""
+    conn = get_db()
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("""
+            SELECT id, label, amount, url, stripe_link_id, status, created_at
+            FROM payment_links WHERE booking_id=%s ORDER BY created_at DESC
+        """, (booking_id,))
+        rows = [_row(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return rows
+    except Exception as e:
+        log.error(f"get_payment_links error: {e}")
+        return []
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2131,6 +2178,59 @@ ADMIN_BOOKING_HTML = """
   <div class="card"><h2>Notes</h2><p style="color:#4a5568;line-height:1.6">{{ b.notes }}</p></div>
   {% endif %}
 
+  <!-- ── Payment Links History ── -->
+  {% if payment_links %}
+  <div class="card">
+    <h2>Payment Links Sent</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:.88rem">
+      <thead>
+        <tr style="background:#f8fafc;text-align:left">
+          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Label</th>
+          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Amount</th>
+          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Sent</th>
+          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Status</th>
+          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Link</th>
+          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pl in payment_links %}
+        <tr style="border-bottom:1px solid #f1f5f9">
+          <td style="padding:.55rem .75rem;color:#1a202c;font-weight:500">{{ pl.label or '—' }}</td>
+          <td style="padding:.55rem .75rem;font-weight:700;color:#1a202c">${{ "%.2f"|format(pl.amount or 0) }}</td>
+          <td style="padding:.55rem .75rem;color:#6b7280;font-size:.82rem">{{ (pl.created_at or '')|string|truncate(16, True, '') }}</td>
+          <td style="padding:.55rem .75rem">
+            {% if pl.status == 'active' %}
+            <span style="background:#dcfce7;color:#166534;font-size:.78rem;font-weight:700;padding:.2rem .55rem;border-radius:20px">Active</span>
+            {% else %}
+            <span style="background:#fee2e2;color:#991b1b;font-size:.78rem;font-weight:700;padding:.2rem .55rem;border-radius:20px">Cancelled</span>
+            {% endif %}
+          </td>
+          <td style="padding:.55rem .75rem">
+            {% if pl.url and pl.status == 'active' %}
+            <a href="{{ pl.url }}" target="_blank" style="color:#2563eb;font-size:.82rem;word-break:break-all">Open ↗</a>
+            {% else %}
+            <span style="color:#9ca3af;font-size:.82rem">—</span>
+            {% endif %}
+          </td>
+          <td style="padding:.55rem .75rem">
+            {% if pl.status == 'active' %}
+            <form method="POST" action="/admin/payment-link/{{ pl.id }}/cancel" style="margin:0">
+              <button type="submit"
+                      onclick="return confirm('Cancel this payment link? The customer will no longer be able to pay using it.')"
+                      style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">
+                🚫 Cancel Link
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   <!-- ── Custom Stripe Payment Link ── -->
   {% if request.args.get('custom_link') %}
   <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
@@ -3103,7 +3203,7 @@ def admin_booking(booking_id):
     try:
         return render_template_string(ADMIN_BOOKING_HTML,
             business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until,
-            products=get_products())
+            products=get_products(), payment_links=get_payment_links(booking_id))
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
         return "Error rendering booking — please contact support.", 500
@@ -3174,11 +3274,13 @@ def accept_booking(booking_id):
         pass
 
     # Create Stripe Payment Link
-    payment_link, stripe_error = create_stripe_payment_link(
+    payment_link, plink_id, stripe_error = create_stripe_payment_link(
         booking_id, charge_amount, b.get("email"), stripe_desc, product_name
     )
     if stripe_error:
         log.warning(f"Stripe error for #{booking_id}: {stripe_error}")
+    if payment_link:
+        save_payment_link(booking_id, product_name, charge_amount, payment_link, plink_id)
 
     # Update DB: status -> accepted, store payment link
     conn = get_db()
@@ -3412,10 +3514,12 @@ def custom_stripe_link(booking_id):
         return redirect(url_for("admin_booking", booking_id=booking_id))
 
     items_desc = ", ".join(f"{i['qty']}x {i['name']}" for i in json.loads(b.get("items_json") or "[]"))
-    payment_link, err = create_stripe_payment_link(booking_id, amount, b.get("email"), items_desc, label)
+    payment_link, plink_id, err = create_stripe_payment_link(booking_id, amount, b.get("email"), items_desc, label)
 
     if err:
         log.warning(f"Custom Stripe link error for #{booking_id}: {err}")
+    if payment_link:
+        save_payment_link(booking_id, label, amount, payment_link, plink_id)
 
     # Email the link to the customer
     if payment_link and b.get("email"):
@@ -3452,6 +3556,50 @@ def custom_stripe_link(booking_id):
 
     link_param = urllib.parse.quote(payment_link or "", safe="")
     return redirect(url_for("admin_booking", booking_id=booking_id) + f"?custom_link={link_param}")
+
+
+@app.route("/admin/payment-link/<int:link_id>/cancel", methods=["POST"])
+@admin_required
+def cancel_payment_link(link_id):
+    """Deactivate a Stripe Payment Link and mark it cancelled in DB."""
+    # Fetch the link record so we know booking_id and stripe_link_id
+    conn = get_db()
+    booking_id = None
+    stripe_link_id = None
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT booking_id, stripe_link_id FROM payment_links WHERE id=%s", (link_id,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row:
+                booking_id     = row["booking_id"]
+                stripe_link_id = row["stripe_link_id"]
+        except Exception as e:
+            log.error(f"Cancel link fetch error: {e}")
+
+    # Deactivate in Stripe
+    if stripe_link_id and STRIPE_SECRET_KEY:
+        try:
+            stripe.PaymentLink.modify(stripe_link_id, active=False)
+            log.info(f"Stripe link {stripe_link_id} deactivated")
+        except Exception as e:
+            log.warning(f"Stripe deactivate error for {stripe_link_id}: {e}")
+
+    # Mark cancelled in DB
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE payment_links SET status='cancelled' WHERE id=%s", (link_id,))
+            conn.commit()
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Cancel link DB error: {e}")
+
+    if booking_id:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+    return redirect(url_for("admin_dashboard"))
 
 
 @app.route("/admin/booking/<int:booking_id>/delete", methods=["POST"])
@@ -3661,11 +3809,13 @@ def send_final_reminder(booking_id):
     items_list      = ", ".join(f"{i['qty']}x {i['name']}" for i in json.loads(b.get("items_json") or "[]"))
     product_name    = f"Final Payment — Booking #{booking_id}"
 
-    payment_link, err = create_stripe_payment_link(
+    payment_link, plink_id, err = create_stripe_payment_link(
         booking_id, remaining, b.get("email"), items_list, product_name
     )
     if err:
         log.warning(f"Stripe error for final payment #{booking_id}: {err}")
+    if payment_link:
+        save_payment_link(booking_id, product_name, remaining, payment_link, plink_id)
 
     # Save final payment link to DB
     conn = get_db()
@@ -5552,11 +5702,13 @@ def cron_send_reminders():
                 for i in json.loads(b.get("items_json") or "[]")
             )
             product_name = f"Final Payment — Booking #{b['id']}"
-            payment_link, err = create_stripe_payment_link(
+            payment_link, plink_id, err = create_stripe_payment_link(
                 b["id"], remaining, b.get("email"), items_list, product_name
             )
             if err:
                 log.warning(f"Cron Stripe error #{b['id']}: {err}")
+            if payment_link:
+                save_payment_link(b["id"], product_name, remaining, payment_link, plink_id)
 
             conn2 = get_db()
             if conn2:
