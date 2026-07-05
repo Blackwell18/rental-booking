@@ -1649,9 +1649,9 @@ ADMIN_DASH_HTML = """
   {% set df = ('&date_from=' ~ date_from) if date_from else '' %}
   {% set dt = ('&date_to=' ~ date_to) if date_to else '' %}
   {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
-  {% set sf = ('&sort=' ~ sort_by) if sort_by else '' %}
+  {% set sf = ('&sort=' ~ sort_by) if (sort_by and sort_by != 'date') else '' %}
   <div class="tabs">
-    <a href="/admin/dashboard{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
+    <a href="/admin/dashboard" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
     <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
     <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}{{ sf }}"   class="tab {% if status_filter=='pending'   and not past_filter %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
     <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
