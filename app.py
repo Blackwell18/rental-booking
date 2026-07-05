@@ -11,7 +11,7 @@
 ╚══════════════════════════════════════════════════════════════╝
 """
 
-import os, json, logging, smtplib, secrets
+import os, json, logging, smtplib, secrets, decimal
 import urllib.parse
 from datetime import datetime, timezone, date, timedelta
 from email.mime.text import MIMEText
@@ -68,6 +68,12 @@ _ICON_192_B64 = "iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAAE8klEQVR4nO3dP05
 _ICON_512_B64 = "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"
 _ICON_192 = _b64.b64decode(_ICON_192_B64)
 _ICON_512 = _b64.b64decode(_ICON_512_B64)
+
+def _row(row):
+    """Convert a psycopg2 DictRow to a plain dict, converting Decimal→float."""
+    if row is None:
+        return None
+    return {k: float(v) if isinstance(v, decimal.Decimal) else v for k, v in dict(row).items()}
 
 BUSINESS_NAME    = os.getenv("BUSINESS_NAME",    "Rent a Party, LLC")
 BUSINESS_PHONE   = os.getenv("BUSINESS_PHONE",   "")
@@ -2632,7 +2638,7 @@ def admin_dashboard():
             _avatar_colors = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6',
                                '#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16']
             for row in rows:
-                b = dict(row)
+                b = _row(row)
                 items = json.loads(b.get("items_json") or "[]")
                 b["items_summary"] = ", ".join(f"{i['qty']}x {i['name']}" for i in items[:2])
                 if len(items) > 2:
@@ -2716,8 +2722,7 @@ def admin_booking(booking_id):
             cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
             row = cur.fetchone()
             if row:
-                import decimal as _dec
-                b = {k: float(v) if isinstance(v, _dec.Decimal) else v for k, v in dict(row).items()}
+                b = _row(row)
                 try:
                     items_raw = json.loads(b.get("items_json") or "[]")
                     items = items_raw if isinstance(items_raw, list) else []
@@ -2743,9 +2748,8 @@ def admin_booking(booking_id):
         return render_template_string(ADMIN_BOOKING_HTML,
             business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until)
     except Exception as e:
-        import traceback
-        log.error(f"Booking {booking_id} render error: {traceback.format_exc()}")
-        return f"<pre style='padding:2rem;font-size:18px'>Booking #{booking_id} error:\n\n{type(e).__name__}: {e}</pre>", 500
+        log.error(f"Booking {booking_id} render error: {e}")
+        return "Error rendering booking — please contact support.", 500
 
 
 @app.route("/admin/booking/<int:booking_id>/accept", methods=["POST"])
@@ -2764,7 +2768,7 @@ def accept_booking(booking_id):
         cur.close()
         conn.close()
         if row:
-            b = dict(row)
+            b = _row(row)
     except Exception as e:
         log.error(f"Accept fetch error: {e}")
         return redirect(url_for("admin_dashboard"))
@@ -2844,7 +2848,7 @@ def deny_booking(booking_id):
         cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
         row = cur.fetchone()
         if row:
-            b = dict(row)
+            b = _row(row)
             cur2 = conn.cursor()
             cur2.execute("UPDATE bookings SET status='denied' WHERE id=%s", (booking_id,))
             conn.commit()
@@ -3080,7 +3084,7 @@ def send_final_reminder(booking_id):
         cur.close()
         conn.close()
         if row:
-            b = dict(row)
+            b = _row(row)
     except Exception as e:
         log.error(f"Final reminder fetch error: {e}")
         return redirect(url_for("admin_booking", booking_id=booking_id))
@@ -3907,7 +3911,7 @@ def admin_customer_edit(customer_id):
             cur.execute("SELECT * FROM customers WHERE id=%s", (customer_id,))
             row = cur.fetchone()
             if row:
-                c = dict(row)
+                c = _row(row)
                 # Load bookings by matching email
                 if c.get("email"):
                     cur.execute(
@@ -4812,7 +4816,7 @@ def admin_calendar():
                 ORDER BY event_start_date
             """)
             for row in cur.fetchall():
-                b = dict(row)
+                b = _row(row)
                 b["grand_total"] = float(b.get("grand_total") or 0)
                 b["event_start_date"] = str(b.get("event_start_date") or "")
                 b["event_end_date"]   = str(b.get("event_end_date") or "")
