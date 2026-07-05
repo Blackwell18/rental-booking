@@ -2385,6 +2385,57 @@ ADMIN_INVENTORY_HTML = """
   {% if flash_ok %}<div class="flash flash-ok">✓ {{ flash_ok }}</div>{% endif %}
   {% if flash_err %}<div class="flash flash-err">⚠ {{ flash_err }}</div>{% endif %}
 
+  <!-- ── Availability Checker ── -->
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-header">📅 Check Availability</div>
+    <div style="padding:1.1rem 1.25rem">
+      <div style="display:flex;gap:.75rem;margin-bottom:.9rem">
+        <button type="button" id="btn_single" onclick="setMode('single')"
+          style="padding:.35rem .9rem;border-radius:6px;font-size:.83rem;font-weight:600;cursor:pointer;border:1.5px solid #2563eb;background:#2563eb;color:white">Single Day</button>
+        <button type="button" id="btn_range" onclick="setMode('range')"
+          style="padding:.35rem .9rem;border-radius:6px;font-size:.83rem;font-weight:600;cursor:pointer;border:1.5px solid #d1d5db;background:white;color:#374151">Date Range</button>
+      </div>
+      <form method="GET" action="/admin/inventory" style="display:flex;flex-wrap:wrap;gap:.65rem;align-items:flex-end">
+        <div>
+          <label style="display:block;font-size:.75rem;font-weight:600;color:#6b7280;margin-bottom:.25rem">Date</label>
+          <input type="date" name="check_from" id="check_from" value="{{ check_from }}"
+            style="border:1px solid #d1d5db;border-radius:6px;padding:.38rem .6rem;font-size:.86rem">
+        </div>
+        <div id="to_wrapper" style="display:none">
+          <label style="display:block;font-size:.75rem;font-weight:600;color:#6b7280;margin-bottom:.25rem">To</label>
+          <input type="date" name="check_to" id="check_to" value="{{ check_to }}"
+            style="border:1px solid #d1d5db;border-radius:6px;padding:.38rem .6rem;font-size:.86rem">
+        </div>
+        <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.42rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;align-self:flex-end">Check</button>
+        {% if check_from %}<a href="/admin/inventory" style="align-self:flex-end;font-size:.82rem;color:#6b7280;text-decoration:none;padding:.42rem .5rem">✕ Clear</a>{% endif %}
+      </form>
+    </div>
+    {% if avail_data %}
+    <div style="border-top:1px solid #e5e7eb;padding:.75rem 1.25rem .5rem">
+      <div style="font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.6rem">
+        Availability for {{ check_from }}{% if check_to and check_to != check_from %} → {{ check_to }}{% endif %}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.6rem">
+        {% for item in avail_data %}
+        {% set pct = ((item.reserved / item.total * 100)|int) if item.total > 0 else 0 %}
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:.65rem .85rem;background:{% if item.available == 0 %}#fef2f2{% elif item.available <= 2 %}#fffbeb{% else %}#f0fdf4{% endif %}">
+          <div style="font-size:.84rem;font-weight:600;color:#111827;margin-bottom:.3rem">{{ item.name }}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:.78rem;color:#6b7280">{{ item.reserved }} reserved</span>
+            <span style="font-size:.88rem;font-weight:700;color:{% if item.available == 0 %}#dc2626{% elif item.available <= 2 %}#d97706{% else %}#16a34a{% endif %}">
+              {{ item.available }}/{{ item.total }} avail{% if item.available == 0 %} — SOLD OUT{% endif %}
+            </span>
+          </div>
+          <div style="height:4px;background:#e5e7eb;border-radius:2px;margin-top:.4rem">
+            <div style="height:4px;border-radius:2px;width:{{ pct }}%;background:{% if pct>=100 %}#ef4444{% elif pct>=70 %}#f59e0b{% else %}#10b981{% endif %}"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
   <div class="card">
     <div class="card-header">
       <span>Rental Items ({{ products|length }})</span>
@@ -2448,6 +2499,18 @@ ADMIN_INVENTORY_HTML = """
     </form>
   </div>
 </div>
+<script>
+function setMode(m){
+  const isRange=m==='range';
+  document.getElementById('to_wrapper').style.display=isRange?'block':'none';
+  const bs=document.getElementById('btn_single').style;
+  const br=document.getElementById('btn_range').style;
+  bs.background=isRange?'white':'#2563eb'; bs.color=isRange?'#374151':'white'; bs.borderColor=isRange?'#d1d5db':'#2563eb';
+  br.background=isRange?'#2563eb':'white'; br.color=isRange?'white':'#374151'; br.borderColor=isRange?'#2563eb':'#d1d5db';
+  if(!isRange) document.getElementById('check_to').value='';
+}
+{% if check_to and check_to != check_from %}setMode('range');{% else %}setMode('single');{% endif %}
+</script>
 </body></html>
 """
 
@@ -3620,12 +3683,28 @@ ADMIN_CUSTOMER_EDIT_HTML = """
 @app.route("/admin/inventory")
 @admin_required
 def admin_inventory():
-    products = get_products()
+    products  = get_products()
     flash_ok  = request.args.get("ok",  "")
     flash_err = request.args.get("err", "")
+    check_from = request.args.get("check_from", "")
+    check_to   = request.args.get("check_to",   "")
+    avail_data = []
+    if check_from:
+        end = check_to if check_to else check_from
+        avail = get_available(check_from, end)
+        for p in products:
+            avail_qty = avail.get(p["id"], p["total"])
+            avail_data.append({
+                "name":      p["name"],
+                "total":     p["total"],
+                "available": avail_qty,
+                "reserved":  p["total"] - avail_qty,
+            })
     return render_template_string(ADMIN_INVENTORY_HTML,
         business_name=BUSINESS_NAME, products=products,
-        flash_ok=flash_ok, flash_err=flash_err)
+        flash_ok=flash_ok, flash_err=flash_err,
+        check_from=check_from, check_to=check_to,
+        avail_data=avail_data)
 
 
 @app.route("/admin/inventory/save", methods=["POST"])
