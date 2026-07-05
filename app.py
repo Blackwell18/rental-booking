@@ -5218,6 +5218,7 @@ def booqable_sync():
         else:
             updated = 0
             errors  = []
+            debug_info = []
             try:
                 headers = {"Authorization": f"Bearer {token}",
                            "Content-Type": "application/json"}
@@ -5228,12 +5229,20 @@ def booqable_sync():
                 while True:
                     r = requests.get(f"{base}/customers",
                                      headers=headers,
-                                     params={"page[number]": page, "page[size]": 100},
+                                     params={"page[number]": page, "page[per]": 100},
                                      timeout=15)
+                    debug_info.append(f"Page {page}: HTTP {r.status_code}, URL: {r.url}")
                     if r.status_code != 200:
-                        errors.append(f"Booqable API error {r.status_code}: {r.text[:200]}")
+                        errors.append(f"Booqable API error {r.status_code}: {r.text[:400]}")
                         break
-                    data = r.json().get("data", [])
+                    try:
+                        rjson = r.json()
+                    except Exception:
+                        errors.append(f"Bad JSON: {r.text[:200]}")
+                        break
+                    data = rjson.get("data", [])
+                    meta = rjson.get("meta", {})
+                    debug_info.append(f"  → {len(data)} records, meta: {str(meta)[:200]}")
                     if not data:
                         break
                     customers.extend(data)
@@ -5265,9 +5274,9 @@ def booqable_sync():
                         updated += cur.rowcount
                     conn.commit()
                     cur.close(); conn.close()
-                result = {"ok": True, "customers_fetched": len(customers), "records_updated": updated, "errors": errors}
+                result = {"ok": True, "customers_fetched": len(customers), "records_updated": updated, "errors": errors, "debug": debug_info}
             except Exception as e:
-                result = {"error": str(e)}
+                result = {"error": str(e), "debug": debug_info}
 
     # Simple page
     nav = '<a href="/admin/dashboard" style="color:#2563eb;font-size:.85rem">← Back to Dashboard</a>'
@@ -5289,6 +5298,7 @@ button{{background:#2563eb;color:white;border:none;border-radius:6px;padding:.6r
   <p>Fetches phone numbers from your Booqable account and fills them in for matching bookings. Get a fresh Bearer token from Booqable → Network tab.</p>
   {'<div class="ok">✅ Fetched ' + str(result.get("customers_fetched",0)) + ' customers, updated ' + str(result.get("records_updated",0)) + ' records.</div>' if result and result.get("ok") else ''}
   {'<div class="err">⚠ ' + result.get("error","") + '</div>' if result and result.get("error") else ''}
+  {'<pre style=\'background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:.75rem;font-size:.75rem;overflow-x:auto;margin-bottom:1rem;white-space:pre-wrap\'>' + chr(10).join(result.get("debug",[])) + '</pre>' if result and result.get("debug") else ''}
   <form method="POST">
     <label>Booqable Subdomain (just the part before .booqable.com)</label>
     <input name="tenant" value="eminent-rental" required>
