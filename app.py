@@ -2222,8 +2222,9 @@ ADMIN_BOOKING_HTML = """
   <div class="actions">
     <a href="/admin/dashboard" class="btn btn-back">Back to Dashboard</a>
     {% if b.status == 'pending' %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/accept">
-      <button class="btn btn-accept" onclick="return confirm('Accept this booking? This will create a Stripe payment link and email {{ b.email }} with their invoice, contract, and payment instructions.')">
+    <form id="accept-form" method="POST" action="/admin/booking/{{ b.id }}/accept">
+      <input type="hidden" name="custom_amount" id="accept-amount-input">
+      <button type="button" class="btn btn-accept" id="accept-btn">
         Accept — Send Invoice & Payment Link
       </button>
     </form>
@@ -2246,8 +2247,9 @@ ADMIN_BOOKING_HTML = """
     </form>
     {% endif %}
     {% if b.status == 'confirmed' %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
-      <button class="btn btn-reminder" onclick="return confirm('Send final payment reminder to {{ b.email }}? This will create a new Stripe link for the remaining 75% balance.')">
+    <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
+      <input type="hidden" name="custom_amount" id="final-amount-input">
+      <button type="button" class="btn btn-reminder" id="final-btn">
         Send Final Payment Reminder
       </button>
     </form>
@@ -2279,6 +2281,109 @@ ADMIN_BOOKING_HTML = """
   </div>
   {% endif %}
 </div>
+
+<!-- ── Payment Amount Modal ── -->
+<div id="payment-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:14px;padding:2rem;width:min(420px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h2 id="modal-title" style="margin:0 0 .35rem;font-size:1.2rem;color:#1a202c">Send Stripe Payment Link</h2>
+    <p id="modal-subtitle" style="margin:0 0 1.25rem;font-size:.9rem;color:#718096"></p>
+    <label style="display:block;font-size:.85rem;font-weight:600;color:#374151;margin-bottom:.4rem">Amount to charge ($)</label>
+    <input id="modal-amount" type="number" min="0.01" step="0.01"
+           style="width:100%;box-sizing:border-box;border:2px solid #d1d5db;border-radius:8px;padding:.6rem .85rem;font-size:1.25rem;font-weight:700;color:#1a202c;margin-bottom:.3rem">
+    <p style="font-size:.78rem;color:#9ca3af;margin:0 0 1.5rem">You can change this to any amount — the customer will be charged exactly what you enter.</p>
+    <div style="display:flex;gap:.75rem">
+      <button id="modal-confirm" style="flex:1;background:#16a34a;color:white;border:none;border-radius:8px;padding:.7rem;font-size:.95rem;font-weight:700;cursor:pointer">
+        ✓ Send Payment Link
+      </button>
+      <button onclick="document.getElementById('payment-modal').style.display='none'"
+              style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:.7rem 1.25rem;font-size:.95rem;cursor:pointer">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var grandTotal = parseFloat('{{ b.grand_total or 0 }}') || 0;
+  var eventDate  = '{{ b.event_start_date or "" }}';
+  var modal      = document.getElementById('payment-modal');
+  var amountIn   = document.getElementById('modal-amount');
+  var confirmBtn = document.getElementById('modal-confirm');
+  var activeForm = null;
+  var activeHidden = null;
+
+  function daysUntil(dateStr) {
+    if (!dateStr) return 999;
+    var d = new Date(dateStr + 'T00:00:00');
+    var today = new Date(); today.setHours(0,0,0,0);
+    return Math.round((d - today) / 86400000);
+  }
+
+  function openModal(title, subtitle, suggestedAmount, form, hiddenInput) {
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-subtitle').textContent = subtitle;
+    amountIn.value = suggestedAmount.toFixed(2);
+    activeForm = form;
+    activeHidden = hiddenInput;
+    modal.style.display = 'flex';
+    amountIn.focus();
+    amountIn.select();
+  }
+
+  // Accept button
+  var acceptBtn = document.getElementById('accept-btn');
+  if (acceptBtn) {
+    acceptBtn.addEventListener('click', function() {
+      var days = daysUntil(eventDate);
+      var suggested = days <= 7 ? grandTotal : Math.round(grandTotal * 0.25 * 100) / 100;
+      var label = days <= 7 ? 'Full payment (event within 7 days)' : '25% deposit suggested';
+      openModal(
+        'Accept Booking — Set Payment Amount',
+        'Grand total: $' + grandTotal.toFixed(2) + ' | ' + label,
+        suggested,
+        document.getElementById('accept-form'),
+        document.getElementById('accept-amount-input')
+      );
+    });
+  }
+
+  // Final payment button
+  var finalBtn = document.getElementById('final-btn');
+  if (finalBtn) {
+    finalBtn.addEventListener('click', function() {
+      var suggested = Math.round(grandTotal * 0.75 * 100) / 100;
+      openModal(
+        'Send Final Payment Reminder',
+        'Grand total: $' + grandTotal.toFixed(2) + ' | Remaining 75% suggested',
+        suggested,
+        document.getElementById('final-form'),
+        document.getElementById('final-amount-input')
+      );
+    });
+  }
+
+  // Confirm button submits the active form
+  confirmBtn.addEventListener('click', function() {
+    var amt = parseFloat(amountIn.value);
+    if (!amt || amt <= 0) { amountIn.style.borderColor='#ef4444'; return; }
+    activeHidden.value = amt.toFixed(2);
+    modal.style.display = 'none';
+    activeForm.submit();
+  });
+
+  // Close on backdrop click
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+
+  // Enter key confirms
+  amountIn.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') confirmBtn.click();
+  });
+})();
+</script>
+
 </body></html>
 """
 
@@ -3025,6 +3130,16 @@ def accept_booking(booking_id):
         stripe_desc    = items_desc
         log.info(f"Booking #{booking_id}: {days_until} days away — requiring 25% deposit ${charge_amount:.2f}")
 
+    # Override with admin-specified amount if provided
+    try:
+        custom = float(request.form.get("custom_amount") or 0)
+        if custom > 0:
+            charge_amount = round(custom, 2)
+            product_name  = f"Payment — Booking #{booking_id}"
+            log.info(f"Booking #{booking_id}: admin overrode charge to ${charge_amount:.2f}")
+    except Exception:
+        pass
+
     # Create Stripe Payment Link
     payment_link, stripe_error = create_stripe_payment_link(
         booking_id, charge_amount, b.get("email"), stripe_desc, product_name
@@ -3429,6 +3544,14 @@ def send_final_reminder(booking_id):
 
     grand_total     = float(b.get("grand_total") or 0)
     remaining       = round(grand_total * 0.75, 2)
+    # Override with admin-specified amount if provided
+    try:
+        custom = float(request.form.get("custom_amount") or 0)
+        if custom > 0:
+            remaining = round(custom, 2)
+            log.info(f"Booking #{booking_id}: admin overrode final payment to ${remaining:.2f}")
+    except Exception:
+        pass
     items_list      = ", ".join(f"{i['qty']}x {i['name']}" for i in json.loads(b.get("items_json") or "[]"))
     product_name    = f"Final Payment — Booking #{booking_id}"
 
