@@ -2016,27 +2016,27 @@ ADMIN_BOOKING_HTML = """
   {% endif %}
 
   <!-- ── Edit Items ── -->
+  <datalist id="inv-list">
+    {% for p in products %}<option value="{{ p.name }}">{% endfor %}
+  </datalist>
   <div class="card">
     <h2>Edit Items</h2>
     <form method="POST" action="/admin/booking/{{ b.id }}/update-items">
       <div id="items-editor" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem">
         {% for item in items %}
-        <div class="item-row" style="display:flex;gap:.5rem;align-items:flex-start">
-          <div style="flex:1;position:relative">
-            <input type="text" name="item_name" value="{{ item.name }}" placeholder="Type to search items…"
-                   autocomplete="off"
-                   style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem;box-sizing:border-box">
-            <div class="ac-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.12);z-index:50;max-height:200px;overflow-y:auto;margin-top:2px"></div>
-          </div>
+        <div class="item-row" style="display:flex;gap:.5rem;align-items:center">
+          <input type="text" name="item_name" value="{{ item.name }}" list="inv-list"
+                 placeholder="Type to search inventory…"
+                 style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem">
           <input type="number" name="item_qty" value="{{ item.qty }}" min="1"
                  style="width:72px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center">
           <button type="button" onclick="this.closest('.item-row').remove()"
-                  style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700;margin-top:1px">✕</button>
+                  style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700">✕</button>
         </div>
         {% endfor %}
       </div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-        <button type="button" onclick="addItemRow()"
+        <button type="button" id="add-item-btn"
                 style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:6px;padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer">+ Add Item</button>
         <button type="submit"
                 style="background:#16a34a;color:white;border:none;border-radius:6px;padding:.45rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer">💾 Save Items</button>
@@ -2044,50 +2044,36 @@ ADMIN_BOOKING_HTML = """
     </form>
   </div>
   <script>
-  const AC_PRODUCTS = {{ products | tojson }};
-
-  function setupAutocomplete(inp) {
-    const drop = inp.parentElement.querySelector('.ac-drop');
-    function renderDrop(matches) {
-      if (!matches.length) { drop.style.display='none'; return; }
-      drop.innerHTML = matches.map(p =>
-        '<div class="ac-opt" data-name="'+p.name.replace(/"/g,'&quot;')+'" style="padding:.45rem .75rem;cursor:pointer;font-size:.88rem;border-bottom:1px solid #f3f4f6;color:#1a202c">'+p.name+'</div>'
-      ).join('');
-      drop.style.display = 'block';
-      drop.querySelectorAll('.ac-opt').forEach(opt => {
-        opt.onmousedown = e => { e.preventDefault(); inp.value = opt.dataset.name; drop.style.display='none'; };
-        opt.onmouseover = () => opt.style.background='#eff6ff';
-        opt.onmouseout  = () => opt.style.background='';
-      });
-    }
-    inp.addEventListener('focus', () => renderDrop(inp.value.trim() ? AC_PRODUCTS.filter(p=>p.name.toLowerCase().includes(inp.value.toLowerCase())) : AC_PRODUCTS));
-    inp.addEventListener('input', () => {
-      const q = inp.value.toLowerCase().trim();
-      renderDrop(q ? AC_PRODUCTS.filter(p=>p.name.toLowerCase().includes(q)) : AC_PRODUCTS);
-    });
-    inp.addEventListener('blur', () => setTimeout(()=>drop.style.display='none', 200));
-  }
-
-  function addItemRow() {
-    const editor = document.getElementById('items-editor');
-    const row = document.createElement('div');
+  document.getElementById('add-item-btn').addEventListener('click', function() {
+    var editor = document.getElementById('items-editor');
+    var row = document.createElement('div');
     row.className = 'item-row';
-    row.style.cssText = 'display:flex;gap:.5rem;align-items:flex-start';
-    row.innerHTML =
-      '<div style="flex:1;position:relative">' +
-        '<input type="text" name="item_name" placeholder="Type to search items…" autocomplete="off" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem;box-sizing:border-box">' +
-        '<div class="ac-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.12);z-index:50;max-height:200px;overflow-y:auto;margin-top:2px"></div>' +
-      '</div>' +
-      '<input type="number" name="item_qty" value="1" min="1" style="width:72px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center">' +
-      '<button type="button" onclick="this.closest(\'.item-row\').remove()" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700;margin-top:1px">✕</button>';
+    row.style.display = 'flex';
+    row.style.gap = '.5rem';
+    row.style.alignItems = 'center';
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.name = 'item_name';
+    nameInput.setAttribute('list', 'inv-list');
+    nameInput.placeholder = 'Type to search inventory…';
+    nameInput.style.cssText = 'flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem';
+    var qtyInput = document.createElement('input');
+    qtyInput.type = 'number';
+    qtyInput.name = 'item_qty';
+    qtyInput.value = '1';
+    qtyInput.min = '1';
+    qtyInput.style.cssText = 'width:72px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center';
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = '✕';
+    removeBtn.style.cssText = 'background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700';
+    removeBtn.addEventListener('click', function() { row.remove(); });
+    row.appendChild(nameInput);
+    row.appendChild(qtyInput);
+    row.appendChild(removeBtn);
     editor.appendChild(row);
-    const inp = row.querySelector('input[name="item_name"]');
-    setupAutocomplete(inp);
-    inp.focus();
-  }
-
-  // Init autocomplete on all existing rows
-  document.querySelectorAll('#items-editor input[name="item_name"]').forEach(setupAutocomplete);
+    nameInput.focus();
+  });
   </script>
 
   <div class="actions">
