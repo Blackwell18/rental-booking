@@ -2716,7 +2716,8 @@ def admin_booking(booking_id):
             cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
             row = cur.fetchone()
             if row:
-                b = dict(row)
+                import decimal as _dec
+                b = {k: float(v) if isinstance(v, _dec.Decimal) else v for k, v in dict(row).items()}
                 try:
                     items_raw = json.loads(b.get("items_json") or "[]")
                     items = items_raw if isinstance(items_raw, list) else []
