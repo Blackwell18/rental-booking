@@ -1495,7 +1495,12 @@ function buildDropdowns(){
   });
   const wrap=document.getElementById('category-dropdowns');
   wrap.innerHTML='';
-  Object.entries(groups).forEach(([cat,items])=>{
+  const sorted=Object.entries(groups).sort(([a],[b])=>{
+    if(a==='📦 Other') return 1;
+    if(b==='📦 Other') return -1;
+    return a.localeCompare(b);
+  });
+  sorted.forEach(([cat,items])=>{
     const sec=document.createElement('div');
     sec.style.cssText='border:1px solid #e5e7eb;border-radius:8px;margin-bottom:.5rem;overflow:hidden';
     sec.innerHTML=`
