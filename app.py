@@ -3367,27 +3367,17 @@ def submit():
             products=_products, exact_time_fee=EXACT_TIME_FEE,
             error="Name and email are required.", form=f), 400
 
-    # Check inventory
-    avail = get_available(event_start_date, event_end_date)
-    order_items, subtotal, errors = [], 0.0, []
+    # Accept any quantity — admin is alerted of conflicts on the dashboard
+    order_items, subtotal = [], 0.0
     for p in _products:
         qty = int(f.get(f"qty_{p['id']}", 0) or 0)
         qty = max(0, qty)
         if qty == 0:
             continue
-        max_avail = avail.get(p["id"], p["total"])
-        if qty > max_avail:
-            errors.append(f"Only {max_avail} {p['name']} available for those dates (requested {qty}).")
-            qty = max_avail
-        if qty > 0:
-            line = round(qty * p["price"], 2)
-            subtotal += line
-            order_items.append({"id": p["id"], "name": p["name"],
-                                 "qty": qty, "unit_price": p["price"], "total": line})
-    if errors:
-        return render_template_string(FORM_HTML, business_name=BUSINESS_NAME,
-            products=_products, exact_time_fee=EXACT_TIME_FEE,
-            error=" | ".join(errors), form=f), 400
+        line = round(qty * p["price"], 2)
+        subtotal += line
+        order_items.append({"id": p["id"], "name": p["name"],
+                             "qty": qty, "unit_price": p["price"], "total": line})
 
     # Delivery
     event_address = f"{event_street}, {event_city}, {event_state} {event_zip}"
