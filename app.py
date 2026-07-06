@@ -1434,7 +1434,7 @@ function checkLateNightFee(){
   return late?LATE_NIGHT_FEE:0;
 }
 
-// ── Marquee Number Tier Pricing ───────────────────────────────────
+// ── Marquee Tier Pricing ──────────────────────────────────────────
 const MARQUEE_NUMBER_TIERS = [
   { count:1, total:80 },
   { count:2, total:150 },
@@ -1445,8 +1445,22 @@ function getMarqueeNumberTotal(n){
   if(n<=0) return 0;
   const t=MARQUEE_NUMBER_TIERS.find(x=>x.count===n);
   if(t) return t.total;
-  return 275+(n-4)*55; // $275 + $55 per additional beyond 4
+  return 275+(n-4)*55;
 }
+const MARQUEE_LETTER_TIERS = [
+  { count:1, total:85 },
+  { count:2, total:160 },
+  { count:3, total:225 },
+  { count:4, total:285 },
+];
+function getMarqueeLetterTotal(n){
+  if(n<=0) return 0;
+  const t=MARQUEE_LETTER_TIERS.find(x=>x.count===n);
+  if(t) return t.total;
+  return 285+(n-4)*55;
+}
+function isMarqueeNumber(name){ return /^marquee\s+#?\d/i.test(name); }
+function isMarqueeLetter(name){ return /^marquee\s+[a-z]$/i.test(name); }
 
 // ── Item Categories ───────────────────────────────────────────────
 const ITEM_CATEGORIES = [
@@ -1493,6 +1507,9 @@ function buildDropdowns(){
       <div class="cat-body" style="display:none;padding:.75rem 1rem;background:white">
         ${cat==='🔢 Marquee Numbers'?`<div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:.6rem .9rem;margin-bottom:.75rem;font-size:.83rem;color:#713f12">
           <strong>📋 Tier Pricing:</strong> 1 for $80 &nbsp;·&nbsp; 2 for $150 &nbsp;·&nbsp; 3 for $215 &nbsp;·&nbsp; 4 for $275 &nbsp;·&nbsp; 5+ = $275 + $55 each additional
+        </div>`:''}
+        ${cat==='🔤 Marquee Letters'?`<div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:.6rem .9rem;margin-bottom:.75rem;font-size:.83rem;color:#713f12">
+          <strong>📋 Tier Pricing:</strong> 1 for $85 &nbsp;·&nbsp; 2 for $160 &nbsp;·&nbsp; 3 for $225 &nbsp;·&nbsp; 4 for $285 &nbsp;·&nbsp; 5+ = $285 + $55 each additional
         </div>`:''}
         <div style="display:flex;flex-wrap:wrap;gap:.5rem">
           ${items.map(p=>`
@@ -1558,17 +1575,24 @@ function renderCart(){
   if(ids.length===0){ wrap.style.display='none'; list.innerHTML=''; return; }
   wrap.style.display='block';
   // Calculate total marquee numbers for proration
-  let mnCount=0;
-  ids.forEach(id=>{ const p=ALL_PRODUCTS.find(x=>x.id===id); if(p&&/^marquee\s+#?\d/i.test(p.name)) mnCount+=cart[id]||0; });
+  let mnCount=0, mlCount=0;
+  ids.forEach(id=>{ const p=ALL_PRODUCTS.find(x=>x.id===id); if(!p) return;
+    if(isMarqueeNumber(p.name)) mnCount+=cart[id]||0;
+    else if(isMarqueeLetter(p.name)) mlCount+=cart[id]||0;
+  });
   const mnTierTotal=getMarqueeNumberTotal(mnCount);
+  const mlTierTotal=getMarqueeLetterTotal(mlCount);
   const mnUnitPrice=mnCount>0?(mnTierTotal/mnCount):0;
+  const mlUnitPrice=mlCount>0?(mlTierTotal/mlCount):0;
   list.innerHTML=ids.map(id=>{
     const p=ALL_PRODUCTS.find(x=>x.id===id);
     const q=cart[id]||1;
-    const isMN=/^marquee\s+#?\d/i.test(p.name);
-    const unitPrice=isMN?mnUnitPrice:p.price;
+    const isMN=isMarqueeNumber(p.name);
+    const isML=isMarqueeLetter(p.name);
+    const unitPrice=isMN?mnUnitPrice:isML?mlUnitPrice:p.price;
     const lineTotal=(unitPrice*q).toFixed(2);
-    const unitLabel=isMN?`$${unitPrice.toFixed(2)} ea <span style="font-size:.75rem;color:#2563eb;font-weight:600">(tier)</span>`:`$${p.price.toFixed(2)} ea`;
+    const tierTag=(isMN||isML)?` <span style="font-size:.75rem;color:#2563eb;font-weight:600">(tier)</span>`:'';
+    const unitLabel=`$${unitPrice.toFixed(2)} ea${tierTag}`;
     return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem .5rem;border-bottom:1px solid #f3f4f6">
       <span style="flex:1;font-size:.92rem;font-weight:600;color:#1a202c">${p.name}</span>
       <span style="font-size:.82rem;color:#6b7280;white-space:nowrap">${unitLabel}</span>
@@ -1588,24 +1612,33 @@ function renderCart(){
   }).join('');
 }
 function updateTotals(){
-  let regularSub=0, marqueeCount=0;
+  let regularSub=0, mnCount=0, mlCount=0;
   ALL_PRODUCTS.forEach(p=>{
     const qty=cart[p.id]||0;
     if(!qty) return;
-    if(getCat(p.name)==='🔢 Marquee Numbers') marqueeCount+=qty;
+    if(isMarqueeNumber(p.name)) mnCount+=qty;
+    else if(isMarqueeLetter(p.name)) mlCount+=qty;
     else regularSub+=qty*p.price;
   });
-  const marqueeSub=getMarqueeNumberTotal(marqueeCount);
-  const sub=regularSub+marqueeSub;
-  // Update marquee tier notice in cart
+  const mnSub=getMarqueeNumberTotal(mnCount);
+  const mlSub=getMarqueeLetterTotal(mlCount);
+  const sub=regularSub+mnSub+mlSub;
+  // Update tier notices in cart
   const tierEl=document.getElementById('marquee-tier-notice');
   if(tierEl){
-    if(marqueeCount>0){
-      const nextTier=MARQUEE_NUMBER_TIERS.find(t=>t.count===marqueeCount+1);
-      const savings=nextTier?`Add 1 more for $${nextTier.total} total (save $${(marqueeSub+80-nextTier.total).toFixed(0)})`:null;
-      tierEl.innerHTML=`🔢 <strong>${marqueeCount} Marquee Number${marqueeCount!==1?'s':''}</strong> — Tier Price: <strong>$${marqueeSub.toFixed(2)}</strong>${savings?`<span style="color:#16a34a;margin-left:.5rem;font-size:.82rem"> · ${savings}</span>`:''}`;
-      tierEl.style.display='block';
-    } else { tierEl.style.display='none'; }
+    let html='';
+    if(mnCount>0){
+      const nextN=MARQUEE_NUMBER_TIERS.find(t=>t.count===mnCount+1);
+      const savN=nextN?` <span style="color:#16a34a;font-size:.82rem">· Add 1 more for $${nextN.total} total</span>`:'';
+      html+=`🔢 <strong>${mnCount} Marquee Number${mnCount!==1?'s':''}</strong> — Tier Price: <strong>$${mnSub.toFixed(2)}</strong>${savN}<br>`;
+    }
+    if(mlCount>0){
+      const nextL=MARQUEE_LETTER_TIERS.find(t=>t.count===mlCount+1);
+      const savL=nextL?` <span style="color:#16a34a;font-size:.82rem">· Add 1 more for $${nextL.total} total</span>`:'';
+      html+=`🔤 <strong>${mlCount} Marquee Letter${mlCount!==1?'s':''}</strong> — Tier Price: <strong>$${mlSub.toFixed(2)}</strong>${savL}`;
+    }
+    tierEl.innerHTML=html;
+    tierEl.style.display=(mnCount>0||mlCount>0)?'block':'none';
   }
   const exactCb=document.getElementById('exact_time_cb');
   const ef=exactCb&&exactCb.checked?EXACT_FEE:0;
