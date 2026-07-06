@@ -2033,7 +2033,7 @@ ADMIN_DASH_HTML = """
     <a href="/admin/dashboard" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
     <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
     <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}{{ sf }}"   class="tab {% if status_filter=='pending'   and not past_filter %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
-    <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Awaiting Payment&nbsp;({{ stats.accepted }})</a>
+    <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Accepted&nbsp;({{ stats.accepted }})</a>
     <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' and not past_filter %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
     <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    and not past_filter %}active{% endif %}">Denied</a>
     <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' and not past_filter %}active{% endif %}">Cancelled</a>
@@ -3431,7 +3431,7 @@ def admin_dashboard():
     upcoming_filter = bool(request.args.get("upcoming", ""))
     archived_filter = bool(request.args.get("archived", ""))
     past_filter     = bool(request.args.get("past", ""))
-    sort_by         = request.args.get("sort", "date")   # date | name | id
+    sort_by         = request.args.get("sort", "created")   # date | name | id | created
     conn = get_db()
     bookings = []
     stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0}
