@@ -1626,7 +1626,7 @@ function addToCart(id){
 function setQty(id, val){
   const p=ALL_PRODUCTS.find(x=>x.id===id);
   if(!p) return;
-  const v=Math.max(0,Math.min(p.max, val));
+  const v=Math.max(0, val);
   if(v===0){ delete cart[id]; }
   else { cart[id]=v; }
   const inp=document.getElementById('cart-qty-'+id);
@@ -1676,7 +1676,7 @@ function renderCart(){
       <div style="display:flex;align-items:center;gap:.3rem">
         <button type="button" onclick="setQty('${id}',${q-1})"
           style="width:28px;height:28px;border:1px solid #d1d5db;border-radius:6px;background:white;font-size:1rem;cursor:pointer;line-height:1">−</button>
-        <input id="cart-qty-${id}" type="number" value="${q}" min="1" max="${p.max}"
+        <input id="cart-qty-${id}" type="number" value="${q}" min="1" max="9999"
           onchange="setQty('${id}',parseInt(this.value)||1)"
           style="width:44px;text-align:center;border:1px solid #d1d5db;border-radius:6px;padding:.2rem;font-size:.9rem;font-weight:700">
         <button type="button" onclick="setQty('${id}',${q+1})"
@@ -1733,8 +1733,7 @@ function updateTotals(){
 document.addEventListener('DOMContentLoaded', buildDropdowns);
 function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
 setVenue('venue');
-function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{ALL_PRODUCTS.forEach(p=>{if(data[p.id]!==undefined){p.max=data[p.id];}});// Cap any cart quantities over new max
-Object.keys(cart).forEach(id=>{const p=ALL_PRODUCTS.find(x=>x.id===id);if(p&&cart[id]>p.max){setQty(id,p.max);}});updateTotals();}).catch(()=>{});}
+function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{ALL_PRODUCTS.forEach(p=>{if(data[p.id]!==undefined){p.max=data[p.id];}});updateTotals();}).catch(()=>{});}
 let distTimer;
 function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';}).catch(()=>{});}},800);}
 // ── Date validation ───────────────────────────────────────────────────────
