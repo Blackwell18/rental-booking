@@ -440,6 +440,73 @@ def get_inventory_conflicts():
     return conflicts
 
 
+def get_booking_inventory_check(booking_id):
+    """
+    For a specific booking (any status), check whether its items can be fulfilled
+    given other confirmed/accepted bookings on the same dates.
+    Returns list of {item, needed, available, shortfall}
+    """
+    products    = get_products()
+    prod_totals = {p["id"]: int(p["total"]) for p in products}
+    name_to_pid = {p["name"].lower(): p["id"] for p in products}
+
+    conn = get_db()
+    if not conn:
+        return []
+    issues = []
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+        row = cur.fetchone()
+        if not row:
+            cur.close(); conn.close()
+            return []
+        b       = _row(row)
+        b_start = str(b.get("event_start_date", ""))[:10]
+        b_end   = str(b.get("event_end_date",   ""))[:10]
+        if not b_start or not b_end:
+            cur.close(); conn.close()
+            return []
+
+        # All other confirmed/accepted bookings overlapping these dates
+        cur.execute("""
+            SELECT id, items_json, event_start_date, event_end_date
+            FROM bookings
+            WHERE status IN ('confirmed','accepted')
+              AND id != %s
+              AND event_start_date IS NOT NULL
+              AND event_end_date   IS NOT NULL
+              AND event_start_date <= %s
+              AND event_end_date   >= %s
+        """, (booking_id, b_end, b_start))
+        others = [_row(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+
+        others_reserved = {}
+        for o in others:
+            for item in json.loads(o.get("items_json") or "[]"):
+                pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
+                qty = int(item.get("qty") or 0)
+                if pid and qty > 0:
+                    others_reserved[pid] = others_reserved.get(pid, 0) + qty
+
+        for item in json.loads(b.get("items_json") or "[]"):
+            pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
+            qty = int(item.get("qty") or 0)
+            if pid and qty > 0 and pid in prod_totals:
+                avail = max(0, prod_totals[pid] - others_reserved.get(pid, 0))
+                if qty > avail:
+                    issues.append({
+                        "item":      item.get("name", ""),
+                        "needed":    qty,
+                        "available": avail,
+                        "shortfall": qty - avail,
+                    })
+    except Exception as e:
+        log.error(f"Booking inventory check error: {e}")
+    return issues
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  DISTANCE & DELIVERY FEE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1393,9 +1460,9 @@ FORM_HTML = r"""
     </div>
     <div class="row">
       <div class="field"><label>Event Start Time <span class="required">*</span></label><input name="event_start_time" type="time" required value="{{ form.event_start_time or '' }}"></div>
-      <div class="field"><label>Event End Time <span class="required">*</span></label><input name="event_end_time" type="time" required value="{{ form.event_end_time or '' }}"></div>
+      <div class="field"><label>Pickup / End Time <span class="required">*</span></label><input name="event_end_time" type="time" required value="{{ form.event_end_time or '' }}"></div>
     </div>
-    <div class="row"><div class="field"><label>Setup Time <span class="required">*</span></label><input name="setup_time" type="time" required value="{{ form.setup_time or '' }}"></div></div>
+    <div class="row"><div class="field"><label>Setup / Delivery Time <span class="required">*</span></label><input name="setup_time" type="time" required value="{{ form.setup_time or '' }}"></div></div>
     <div class="field">
       <label>Venue Type <span class="required">*</span></label>
       <div class="type-toggle">
@@ -2428,9 +2495,9 @@ ADMIN_BOOKING_EDIT_HTML = """
     <div class="field-grid">
       <div><label>Start Date</label><input name="event_start_date" type="date" value="{{ b.event_start_date or '' }}"></div>
       <div><label>End Date</label><input name="event_end_date" type="date" value="{{ b.event_end_date or '' }}"></div>
-      <div><label>Start Time</label><input name="event_start_time" type="time" value="{{ b.event_start_time or '' }}"></div>
-      <div><label>End Time</label><input name="event_end_time" type="time" value="{{ b.event_end_time or '' }}"></div>
-      <div><label>Setup Time</label><input name="setup_time" type="time" value="{{ b.setup_time or '' }}"></div>
+      <div><label>Event Start Time</label><input name="event_start_time" type="time" value="{{ b.event_start_time or '' }}"></div>
+      <div><label>Pickup Time</label><input name="event_end_time" type="time" value="{{ b.event_end_time or '' }}"></div>
+      <div><label>Delivery Time</label><input name="setup_time" type="time" value="{{ b.setup_time or '' }}"></div>
       <div><label>Venue Type</label>
         <select name="venue_type">
           <option value="venue" {% if b.venue_type=='venue' %}selected{% endif %}>Venue</option>
@@ -2782,6 +2849,19 @@ ADMIN_BOOKING_HTML = """
   </div>
   {% endif %}
 
+  {% if booking_inv_issues %}
+  <div style="background:#fef2f2;border:2px solid #f87171;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
+    <div style="font-weight:700;color:#dc2626;font-size:1rem;margin-bottom:.5rem">⚠️ Inventory Shortage — Review Before Accepting</div>
+    {% for c in booking_inv_issues %}
+    <div style="font-size:.9rem;color:#7f1d1d;margin-bottom:.3rem">
+      <strong>{{ c.item }}</strong>: customer needs <strong>{{ c.needed }}</strong>, only <strong>{{ c.available }}</strong> available after other bookings
+      <span style="background:#fee2e2;color:#b91c1c;border-radius:4px;padding:.1rem .45rem;font-size:.78rem;font-weight:700;margin-left:.4rem">{{ c.shortfall }} short</span>
+    </div>
+    {% endfor %}
+    <div style="font-size:.82rem;color:#991b1b;margin-top:.6rem">Other confirmed bookings on these dates are using the remaining inventory. You may need to source more or contact the customer.</div>
+  </div>
+  {% endif %}
+
   {% if b.status == 'pending' %}
   <div class="alert">
     This booking is waiting for your review. Click Accept to send the customer their invoice, contract, and Stripe payment link.
@@ -2873,9 +2953,9 @@ ADMIN_BOOKING_HTML = """
     {% endif %}
     <div class="row">
       <span class="k">Dates</span><span class="v">{{ b.event_start_date }} - {{ b.event_end_date }}</span>
-      <span class="k">Start Time</span><span class="v">{{ b.event_start_time }}</span>
-      <span class="k">End Time</span><span class="v">{{ b.event_end_time }}</span>
-      <span class="k">Setup Time</span><span class="v">{{ b.setup_time }}</span>
+      <span class="k">Event Start Time</span><span class="v">{{ b.event_start_time }}</span>
+      <span class="k">Pickup Time</span><span class="v">{{ b.event_end_time }}</span>
+      <span class="k">Delivery Time</span><span class="v">{{ b.setup_time }}</span>
       <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type }}</span>
       {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
       <span class="k">Event Address</span><span class="v">{{ b.event_street }}, {{ b.event_city }}, {{ b.event_state }} {{ b.event_zip }}</span>
@@ -4052,11 +4132,14 @@ def admin_booking(booking_id):
     except Exception:
         pass
 
+    booking_inv_issues = get_booking_inventory_check(booking_id)
+
     try:
         return render_template_string(ADMIN_BOOKING_HTML,
             business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until,
             products=get_products(), payment_links=get_payment_links(booking_id),
-            matched_customer=matched_customer, weekend_residential=weekend_residential)
+            matched_customer=matched_customer, weekend_residential=weekend_residential,
+            booking_inv_issues=booking_inv_issues)
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
         return "Error rendering booking — please contact support.", 500
