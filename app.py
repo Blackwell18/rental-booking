@@ -1995,6 +1995,7 @@ ADMIN_DASH_HTML = """
     <a href="/admin/customers" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Customers</a>
     <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
     <a href="/admin/route" class="nav-link">🗺 Route</a>
+    <a href="/admin/booking/new" style="background:#16a34a;color:white;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .85rem;border-radius:6px">+ New Booking</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
 </div>
@@ -2370,6 +2371,229 @@ ADMIN_BOOKING_EDIT_HTML = """
   </div>
 </form>
 </div>
+</body></html>
+"""
+
+
+ADMIN_NEW_BOOKING_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>New Booking — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
+    header{background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;padding:1.25rem 2rem;display:flex;justify-content:space-between;align-items:center}
+    header h1{font-size:1.2rem}
+    .container{max-width:860px;margin:0 auto;padding:1.5rem 1rem}
+    .card{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:1.5rem;margin-bottom:1.5rem}
+    .card h2{font-size:.95rem;font-weight:700;color:#2b6cb0;border-bottom:2px solid #ebf4ff;padding-bottom:.5rem;margin-bottom:1rem;text-transform:uppercase;letter-spacing:.4px}
+    .fg{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem}
+    .fg.one{grid-template-columns:1fr}
+    .fg.three{grid-template-columns:1fr 1fr 1fr}
+    label{display:block;font-size:.78rem;font-weight:600;color:#6b7280;margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.3px}
+    input,select,textarea{width:100%;border:1px solid #d1d5db;border-radius:7px;padding:.5rem .75rem;font-size:.92rem;color:#1a202c;background:white}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    textarea{resize:vertical;min-height:70px}
+    .item-row{display:grid;grid-template-columns:1fr 80px 110px 90px 36px;gap:.4rem;align-items:center;margin-bottom:.4rem}
+    .item-row input{font-size:.88rem}
+    .item-total{font-size:.88rem;font-weight:600;color:#2563eb;text-align:right;padding-right:.25rem}
+    .add-btn{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:7px;padding:.4rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer;margin-top:.35rem}
+    .del-btn{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;width:32px;height:32px;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .subtotal-bar{display:flex;justify-content:flex-end;gap:1.5rem;font-size:.88rem;padding:.6rem .25rem;border-top:1px solid #e5e7eb;margin-top:.35rem}
+    .subtotal-bar span{font-weight:700;color:#1a202c}
+    .actions{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.5rem}
+    .btn{padding:.65rem 1.4rem;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;display:inline-block}
+    .btn-save{background:#16a34a;color:white}
+    .btn-cancel{background:#f0f4f8;color:#4a5568}
+    .col-hdr{font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.3px;padding:.1rem .1rem .4rem}
+  </style>
+</head>
+<body>
+<header>
+  <h1>➕ New Manual Booking</h1>
+  <a href="/admin/dashboard" style="color:white;text-decoration:none;font-size:.9rem">← Dashboard</a>
+</header>
+<div class="container">
+<form method="POST" action="/admin/booking/new" id="nbform">
+
+  <div class="card">
+    <h2>Customer</h2>
+    <div class="fg">
+      <div><label>Full Name *</label><input name="full_name" required placeholder="Jane Smith"></div>
+      <div><label>Email</label><input name="email" type="email" placeholder="jane@email.com"></div>
+      <div><label>Phone</label><input name="phone" placeholder="(555) 000-0000"></div>
+      <div><label>Company</label><input name="company_name" placeholder="Optional"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Event</h2>
+    <div class="fg">
+      <div><label>Delivery Date *</label><input name="event_start_date" type="date" required></div>
+      <div><label>Pickup Date *</label><input name="event_end_date" type="date" required></div>
+      <div><label>Delivery Time</label><input name="event_start_time" type="time" value="16:00"></div>
+      <div><label>Pickup Time</label><input name="event_end_time" type="time" value="10:00"></div>
+      <div><label>Venue Type</label>
+        <select name="venue_type">
+          <option value="residential">Residential</option>
+          <option value="venue">Venue</option>
+          <option value="backyard">Backyard</option>
+          <option value="park">Park</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div><label>Status</label>
+        <select name="status">
+          <option value="confirmed">Confirmed (Paid/Partial)</option>
+          <option value="accepted">Accepted (Awaiting Payment)</option>
+          <option value="pending">Pending Review</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg" style="margin-top:.75rem">
+      <div><label>Event Street</label><input name="event_street" placeholder="456 Venue Blvd"></div>
+      <div><label>Event City</label><input name="event_city" placeholder="Hartford"></div>
+      <div><label>State</label><input name="event_state" placeholder="CT" style="width:80px"></div>
+      <div><label>ZIP</label><input name="event_zip" placeholder="06101" style="width:100px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Items</h2>
+    <datalist id="inv-list">
+      {% for p in products %}<option value="{{ p.name }}">{% endfor %}
+    </datalist>
+    <script>
+    const INV_PRICES = { {% for p in products %}"{{ p.name }}": {{ p.price }},{% endfor %} };
+    </script>
+    <div style="display:grid;grid-template-columns:1fr 80px 110px 90px 36px;gap:.4rem;padding-bottom:.25rem">
+      <div class="col-hdr">Item Name</div>
+      <div class="col-hdr" style="text-align:center">Qty</div>
+      <div class="col-hdr" style="text-align:center">Unit Price</div>
+      <div class="col-hdr" style="text-align:right">Total</div>
+      <div></div>
+    </div>
+    <div id="items-wrap"></div>
+    <button type="button" class="add-btn" onclick="addRow()">+ Add Item</button>
+    <div class="subtotal-bar">
+      Items Subtotal: <span id="items-sub">$0.00</span>
+    </div>
+    <input type="hidden" name="items_json" id="items_json_field">
+    <input type="hidden" name="items_subtotal" id="items_subtotal_field">
+  </div>
+
+  <div class="card">
+    <h2>Financials</h2>
+    <div class="fg three">
+      <div><label>Delivery Fee ($)</label><input name="delivery_fee" type="number" step="0.01" value="0" id="del_fee" oninput="recalc()"></div>
+      <div><label>CT Sales Tax (6.35%)</label><input name="tax_amount" type="number" step="0.01" id="tax_amt" readonly style="background:#f9fafb"></div>
+      <div><label>Grand Total ($)</label><input name="grand_total" type="number" step="0.01" id="grand_total" style="font-weight:700;background:#f0fff4" readonly></div>
+      <div><label>Amount Paid ($)</label><input name="amount_paid" type="number" step="0.01" value="0" id="amt_paid" oninput="recalc()"></div>
+      <div><label>Balance Due</label><input type="text" id="bal_due" readonly style="background:#fff5f5;font-weight:700;color:#dc2626"></div>
+      <div><label>Tax Exempt?</label>
+        <select name="tax_exempt" onchange="recalc()">
+          <option value="0">No — Apply 6.35% CT Tax</option>
+          <option value="1">Yes — Tax Exempt</option>
+        </select>
+      </div>
+    </div>
+    <input type="hidden" name="tax_rate" value="0.0635">
+  </div>
+
+  <div class="card">
+    <h2>Notes</h2>
+    <div class="fg one"><textarea name="notes" placeholder="Source, special instructions, Booqable reference #, etc."></textarea></div>
+  </div>
+
+  <div class="actions">
+    <button type="submit" class="btn btn-save" onclick="prepSubmit()">💾 Create Booking</button>
+    <a href="/admin/dashboard" class="btn btn-cancel">Cancel</a>
+  </div>
+</form>
+</div>
+
+<script>
+let rowCount = 0;
+
+function addRow(name='', qty=1, price=0) {
+  rowCount++;
+  const wrap = document.getElementById('items-wrap');
+  const div = document.createElement('div');
+  div.className = 'item-row';
+  div.id = 'row' + rowCount;
+  const rc = rowCount;
+  div.innerHTML = `
+    <input type="text" list="inv-list" placeholder="Type item name…" id="rn${rc}" value="${name}" oninput="onNameChange(${rc})">
+    <input type="number" min="1" value="${qty}" id="rq${rc}" oninput="onQtyChange(${rc})" style="text-align:center">
+    <input type="number" step="0.01" value="${price.toFixed(2)}" id="rp${rc}" oninput="recalc()">
+    <div class="item-total" id="rt${rc}">$0.00</div>
+    <button type="button" class="del-btn" onclick="delRow(${rc})">×</button>
+  `;
+  wrap.appendChild(div);
+  recalc();
+}
+
+function onNameChange(rc) {
+  const name = document.getElementById('rn'+rc).value;
+  if (INV_PRICES[name] !== undefined) {
+    document.getElementById('rp'+rc).value = INV_PRICES[name].toFixed(2);
+  }
+  recalc();
+}
+
+function onQtyChange(rc) { recalc(); }
+
+function delRow(rc) {
+  const el = document.getElementById('row'+rc);
+  if (el) el.remove();
+  recalc();
+}
+
+function recalc() {
+  let sub = 0;
+  document.querySelectorAll('.item-row').forEach(row => {
+    const rc = row.id.replace('row','');
+    const qty = parseFloat(document.getElementById('rq'+rc)?.value || 0);
+    const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
+    const tot = qty * price;
+    sub += tot;
+    const totEl = document.getElementById('rt'+rc);
+    if (totEl) totEl.textContent = '$' + tot.toFixed(2);
+  });
+  document.getElementById('items-sub').textContent = '$' + sub.toFixed(2);
+  document.getElementById('items_subtotal_field').value = sub.toFixed(2);
+  const delFee = parseFloat(document.getElementById('del_fee').value || 0);
+  const taxExempt = document.querySelector('[name=tax_exempt]').value === '1';
+  const taxable = sub + delFee;
+  const tax = taxExempt ? 0 : Math.round(taxable * 0.0635 * 100) / 100;
+  document.getElementById('tax_amt').value = tax.toFixed(2);
+  const grand = taxable + tax;
+  document.getElementById('grand_total').value = grand.toFixed(2);
+  const paid = parseFloat(document.getElementById('amt_paid').value || 0);
+  const bal = Math.max(0, grand - paid);
+  document.getElementById('bal_due').value = '$' + bal.toFixed(2);
+}
+
+function prepSubmit() {
+  const items = [];
+  document.querySelectorAll('.item-row').forEach(row => {
+    const rc = row.id.replace('row','');
+    const name = (document.getElementById('rn'+rc)?.value || '').trim();
+    const qty = parseInt(document.getElementById('rq'+rc)?.value || 0);
+    const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
+    if (name && qty > 0) items.push({name, qty, unit_price: price, total: Math.round(qty*price*100)/100});
+  });
+  document.getElementById('items_json_field').value = JSON.stringify(items);
+  // un-readonly grand_total and tax so they submit
+  document.getElementById('grand_total').removeAttribute('readonly');
+  document.getElementById('tax_amt').removeAttribute('readonly');
+}
+
+// Start with two blank rows
+addRow(); addRow();
+</script>
 </body></html>
 """
 
@@ -3948,6 +4172,76 @@ def edit_booking(booking_id):
     except Exception as e:
         log.error(f"Edit booking save: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/new", methods=["GET", "POST"])
+@admin_required
+def new_booking():
+    if request.method == "GET":
+        return render_template_string(ADMIN_NEW_BOOKING_HTML,
+            business_name=BUSINESS_NAME, products=get_products())
+    # POST — create booking
+    f = request.form
+    try:
+        items_json_raw = f.get("items_json", "[]")
+        try:
+            items = json.loads(items_json_raw)
+        except Exception:
+            items = []
+        items_subtotal = float(f.get("items_subtotal") or 0)
+        delivery_fee   = float(f.get("delivery_fee") or 0)
+        tax_exempt     = f.get("tax_exempt", "0") == "1"
+        tax_rate       = 0.0 if tax_exempt else 0.0635
+        taxable        = items_subtotal + delivery_fee
+        tax_amount     = 0.0 if tax_exempt else round(taxable * tax_rate, 2)
+        grand_total    = float(f.get("grand_total") or round(taxable + tax_amount, 2))
+        amount_paid    = float(f.get("amount_paid") or 0)
+        conn = get_db()
+        if not conn:
+            return "Database unavailable", 500
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO bookings (
+                full_name, company_name, email, phone,
+                event_start_date, event_end_date, event_start_time, event_end_time,
+                venue_type, event_street, event_city, event_state, event_zip,
+                delivery_location, status,
+                items_json, items_subtotal, delivery_fee,
+                tax_rate, tax_amount, tax_exempt,
+                grand_total, amount_paid, notes,
+                created_at
+            ) VALUES (
+                %s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s,%s,%s, %s,%s,
+                %s,%s,%s, %s,%s,%s, %s,%s,%s, NOW()
+            ) RETURNING id
+        """, (
+            f.get("full_name","").strip(),
+            f.get("company_name","").strip() or None,
+            f.get("email","").strip() or None,
+            f.get("phone","").strip() or None,
+            f.get("event_start_date","").strip() or None,
+            f.get("event_end_date","").strip() or None,
+            f.get("event_start_time","").strip() or None,
+            f.get("event_end_time","").strip() or None,
+            f.get("venue_type","other"),
+            f.get("event_street","").strip() or None,
+            f.get("event_city","").strip() or None,
+            f.get("event_state","").strip() or None,
+            f.get("event_zip","").strip() or None,
+            f.get("delivery_location","").strip() or None,
+            f.get("status","confirmed"),
+            json.dumps(items), items_subtotal, delivery_fee,
+            tax_rate, tax_amount, tax_exempt,
+            grand_total, amount_paid,
+            f.get("notes","").strip() or None,
+        ))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close(); conn.close()
+        return redirect(url_for("admin_booking", booking_id=new_id))
+    except Exception as e:
+        log.error(f"New booking create error: {e}")
+        return f"Error creating booking: {e}", 500
 
 
 @app.route("/admin/booking/<int:booking_id>/update-items", methods=["POST"])
