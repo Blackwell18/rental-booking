@@ -375,6 +375,71 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
     return available
 
 
+def get_inventory_conflicts():
+    """
+    Returns a list of conflicts where a confirmed/accepted booking needs more
+    of an item than the inventory can supply given all other bookings on those dates.
+    Each conflict: {booking_id, customer, event_date, item, needed, available, shortfall}
+    """
+    products   = get_products()
+    prod_totals = {p["id"]: int(p["total"]) for p in products}
+    name_to_pid = {p["name"].lower(): p["id"] for p in products}
+
+    conn = get_db()
+    if not conn:
+        return []
+    conflicts = []
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("""
+            SELECT id, full_name, event_start_date, event_end_date, items_json
+            FROM bookings
+            WHERE status IN ('confirmed','accepted')
+              AND event_start_date IS NOT NULL
+              AND event_end_date   IS NOT NULL
+        """)
+        active = [_row(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+
+        for b in active:
+            b_start = str(b.get("event_start_date",""))[:10]
+            b_end   = str(b.get("event_end_date",""))[:10]
+
+            # Sum qty reserved by every OTHER booking that overlaps these dates
+            others_reserved = {}
+            for o in active:
+                if o["id"] == b["id"]:
+                    continue
+                o_start = str(o.get("event_start_date",""))[:10]
+                o_end   = str(o.get("event_end_date",""))[:10]
+                if o_start <= b_end and o_end >= b_start:  # date overlap
+                    for item in json.loads(o.get("items_json") or "[]"):
+                        pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
+                        qty = int(item.get("qty") or 0)
+                        if pid and qty > 0:
+                            others_reserved[pid] = others_reserved.get(pid, 0) + qty
+
+            # Check this booking's items against what's left
+            for item in json.loads(b.get("items_json") or "[]"):
+                pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
+                qty = int(item.get("qty") or 0)
+                if pid and qty > 0 and pid in prod_totals:
+                    avail = max(0, prod_totals[pid] - others_reserved.get(pid, 0))
+                    if qty > avail:
+                        conflicts.append({
+                            "booking_id": b["id"],
+                            "customer":   b.get("full_name","Unknown"),
+                            "event_date": b_start,
+                            "item":       item.get("name",""),
+                            "needed":     qty,
+                            "available":  avail,
+                            "shortfall":  qty - avail,
+                        })
+    except Exception as e:
+        log.error(f"Conflict check error: {e}")
+    return conflicts
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  DISTANCE & DELIVERY FEE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2012,6 +2077,31 @@ ADMIN_DASH_HTML = """
       <span id="dash-count" style="position:absolute;right:.6rem;top:50%;transform:translateY(-50%);font-size:.75rem;color:#9ca3af"></span>
     </div>
   </div>
+
+  <!-- ── Inventory Conflict Alert ── -->
+  {% if inv_conflicts %}
+  <div style="background:#fef2f2;border:2px solid #f87171;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem">
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem">
+      <span style="font-size:1.2rem">🚨</span>
+      <span style="font-weight:700;color:#991b1b;font-size:.95rem">Inventory Conflict — {{ inv_conflicts|length }} item{{ 's' if inv_conflicts|length != 1 else '' }} over-committed</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.35rem">
+      {% for c in inv_conflicts %}
+      <div style="background:white;border:1px solid #fecaca;border-radius:7px;padding:.5rem .85rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem;font-size:.86rem">
+        <div>
+          <a href="/admin/booking/{{ c.booking_id }}" style="font-weight:700;color:#dc2626;text-decoration:none">Booking #{{ c.booking_id }}</a>
+          <span style="color:#374151"> — {{ c.customer }}</span>
+          <span style="color:#9ca3af;font-size:.78rem"> ({{ c.event_date }})</span>
+        </div>
+        <div style="color:#7f1d1d;font-size:.83rem">
+          <strong>{{ c.item }}</strong>: needs <strong>{{ c.needed }}</strong>, only <strong>{{ c.available }}</strong> available
+          <span style="background:#dc2626;color:white;border-radius:4px;padding:.1rem .45rem;font-size:.75rem;font-weight:700;margin-left:.3rem">-{{ c.shortfall }} short</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   <!-- ── Metric Cards ── -->
   <div class="metrics">
@@ -3864,6 +3954,8 @@ def admin_dashboard():
         except Exception as e:
             log.error(f"Admin dashboard error: {e}")
 
+    inv_conflicts = get_inventory_conflicts()
+
     return render_template_string(ADMIN_DASH_HTML,
         business_name=BUSINESS_NAME,
         bookings=bookings,
@@ -3877,6 +3969,7 @@ def admin_dashboard():
         archived_filter=archived_filter,
         past_filter=past_filter,
         sort_by=sort_by,
+        inv_conflicts=inv_conflicts,
     )
 
 
