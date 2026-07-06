@@ -1366,6 +1366,7 @@ FORM_HTML = r"""
         style="width:100%;padding:.6rem .9rem;border:1.5px solid #cbd5e0;border-radius:8px;font-size:.95rem;box-sizing:border-box;outline:none"
         onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#cbd5e0'">
     </div>
+    <div id="products-container">
     {% for p in products %}
     <div class="product-row" data-name="{{ p.name | lower }}">
       <div>
@@ -1382,6 +1383,7 @@ FORM_HTML = r"""
       <div class="product-sub" id="sub_{{ p.id }}">-</div>
     </div>
     {% endfor %}
+    </div>
   </div>
 
   <input type="hidden" name="late_night_fee" id="late_night_fee_input" value="0">
@@ -1429,12 +1431,59 @@ function checkLateNightFee(){
   document.getElementById('late_night_fee_input').value=late?LATE_NIGHT_FEE:0;
   return late?LATE_NIGHT_FEE:0;
 }
-function filterItems(q){
-  q=q.toLowerCase().trim();
-  document.querySelectorAll('.product-row').forEach(row=>{
-    row.style.display=(!q||row.dataset.name.includes(q))?'':'none';
+// ── Product Categorization ────────────────────────────────────────
+const ITEM_CATEGORIES = [
+  { label: "🪑 Chairs",           keywords: ["chair","stool","bench","seat","chiavari","folding chair","ghost chair"] },
+  { label: "🪣 Tables",           keywords: ["table","tablecloth","linen","cloth","runner","overlay","skirt"] },
+  { label: "🔢 Marquee Numbers",  keywords: ["marquee number","number ","#0","#1","#2","#3","#4","#5","#6","#7","#8","#9","digit"] },
+  { label: "🔤 Marquee Letters",  keywords: ["marquee letter","letter "] },
+  { label: "💡 Lighting",         keywords: ["light","lamp","led","glow","neon","bulb","lantern","fairy","string light","uplift","uplighting","candle","chandelier"] },
+  { label: "🎭 Backdrops & Décor",keywords: ["backdrop","banner","balloon","arch","flower","floral","decor","sign","drape","curtain","pillar","column","centerpiece","vase","stand","frame","wall"] },
+  { label: "🎪 Entertainment",    keywords: ["bounce","slide","game","popcorn","cotton candy","machine","photo booth","casino","carnival","inflatable","dunk","obstacle"] },
+  { label: "⛺ Tents & Canopies", keywords: ["tent","canopy","pergola","gazebo","umbrella","shade"] },
+];
+function getCategoryForItem(name){
+  const n = name.toLowerCase();
+  for(const cat of ITEM_CATEGORIES){
+    if(cat.keywords.some(k => n.includes(k))) return cat.label;
+  }
+  return "📦 Other";
+}
+function buildCategoryGroups(){
+  const container = document.getElementById('products-container');
+  const rows = Array.from(container.querySelectorAll('.product-row'));
+  // Remove any existing headers
+  container.querySelectorAll('.cat-header').forEach(h => h.remove());
+  // Group rows by category (preserve DOM order)
+  let lastCat = null;
+  rows.forEach(row => {
+    const cat = getCategoryForItem(row.dataset.name);
+    if(cat !== lastCat){
+      const header = document.createElement('div');
+      header.className = 'cat-header';
+      header.setAttribute('data-cat', cat);
+      header.textContent = cat;
+      header.style.cssText = 'font-weight:700;font-size:.82rem;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;padding:.6rem 0 .3rem;border-top:1px solid #e5e7eb;margin-top:.5rem';
+      // Remove top border from very first header
+      if(!lastCat) header.style.borderTop = 'none';
+      container.insertBefore(header, row);
+      lastCat = cat;
+    }
   });
 }
+function filterItems(q){
+  q = q.toLowerCase().trim();
+  document.querySelectorAll('.product-row').forEach(row=>{
+    row.style.display = (!q || row.dataset.name.includes(q)) ? '' : 'none';
+  });
+  // Show/hide category headers based on whether any visible rows follow them
+  if(q){
+    document.querySelectorAll('.cat-header').forEach(h => h.style.display = 'none');
+  } else {
+    document.querySelectorAll('.cat-header').forEach(h => h.style.display = '');
+  }
+}
+document.addEventListener('DOMContentLoaded', buildCategoryGroups);
 function updateTotals(){
   let sub=0;
   document.querySelectorAll('.qty-input').forEach(i=>{const qty=parseInt(i.value)||0;const price=parseFloat(i.dataset.price);const id=i.id.replace('qty_','');const line=qty*price;sub+=line;const el=document.getElementById('sub_'+id);el.textContent=qty>0?'$'+line.toFixed(2):'-';el.classList.toggle('has-val',qty>0);});
