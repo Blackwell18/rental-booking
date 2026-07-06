@@ -1435,16 +1435,21 @@ function checkLateNightFee(){
 const ITEM_CATEGORIES = [
   { label:"🪑 Chairs",           keywords:["chair","stool","bench","seat","chiavari"] },
   { label:"🪣 Tables",           keywords:["table","tablecloth","linen","cloth","runner","overlay","skirt"] },
-  { label:"🔢 Marquee Numbers",  keywords:["marquee number","number"] },
-  { label:"🔤 Marquee Letters",  keywords:["marquee letter","letter"] },
+  { label:"🔢 Marquee Numbers",  keywords:["marquee number"] },
+  { label:"🔤 Marquee Letters",  keywords:["marquee letter"] },
   { label:"💡 Lighting",         keywords:["light","lamp","led","glow","neon","bulb","lantern","fairy","chandelier","uplighting"] },
   { label:"🎭 Backdrops & Décor",keywords:["backdrop","banner","balloon","arch","flower","floral","decor","sign","drape","curtain","pillar","column","centerpiece","vase","frame","wall"] },
   { label:"🎪 Entertainment",    keywords:["bounce","slide","game","popcorn","cotton candy","machine","photo booth","casino","carnival","inflatable"] },
   { label:"⛺ Tents & Canopies", keywords:["tent","canopy","pergola","gazebo","umbrella"] },
 ];
 function getCat(name){
-  const n=name.toLowerCase();
-  for(const c of ITEM_CATEGORIES){ if(c.keywords.some(k=>n.includes(k))) return c.label; }
+  const n=name.trim();
+  // Marquee Letter: "Marquee A", "Marquee B", etc. — marquee followed by a single letter
+  if(/^marquee\s+[a-zA-Z]$/i.test(n) || /marquee\s+[a-zA-Z]\s*$/i.test(n)) return "🔤 Marquee Letters";
+  // Marquee Number: "Marquee #5", "Marquee 3", etc. — marquee followed by # or digit
+  if(/marquee\s+#?\d/i.test(n)) return "🔢 Marquee Numbers";
+  const nl=n.toLowerCase();
+  for(const c of ITEM_CATEGORIES){ if(c.keywords.some(k=>nl.includes(k))) return c.label; }
   return "📦 Other";
 }
 
