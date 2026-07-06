@@ -205,6 +205,8 @@ def init_db():
             "UPDATE bookings SET company_name  = NULL WHERE company_name  = 'None'",
             # Set all Marquee Letter items to $85 (name = "Marquee A" through "Marquee Z")
             "UPDATE inventory SET price = 85 WHERE TRIM(name) SIMILAR TO 'Marquee [A-Za-z]'",
+            # Admin-only private notes
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS admin_notes TEXT",
         ]
         for m in migrations:
             try:
@@ -2915,6 +2917,18 @@ ADMIN_BOOKING_HTML = """
   <div class="card"><h2>Notes</h2><p style="color:#4a5568;line-height:1.6">{{ b.notes }}</p></div>
   {% endif %}
 
+  <!-- ── Admin Private Notes ── -->
+  <div class="card" style="border:2px solid #fde68a;background:#fffbeb">
+    <h2 style="color:#92400e">🔒 Private Admin Notes</h2>
+    <p style="font-size:.8rem;color:#a16207;margin-bottom:.75rem">Only visible to you — never shown to customers.</p>
+    <form method="POST" action="/admin/booking/{{ b.id }}/admin-notes">
+      <textarea name="admin_notes" rows="5" placeholder="Add your private notes here… follow-up reminders, customer preferences, payment history, anything…" style="width:100%;border:1px solid #fcd34d;border-radius:8px;padding:.65rem .85rem;font-size:.9rem;color:#1a202c;background:white;resize:vertical;line-height:1.6">{{ b.admin_notes or '' }}</textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:.5rem">
+        <button type="submit" style="background:#d97706;color:white;border:none;border-radius:7px;padding:.5rem 1.25rem;font-size:.88rem;font-weight:700;cursor:pointer">💾 Save Notes</button>
+      </div>
+    </form>
+  </div>
+
   <!-- ── Payment Links History ── -->
   {% if payment_links %}
   <div class="card">
@@ -4374,6 +4388,22 @@ def update_booking_address(booking_id):
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"Update address error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/admin-notes", methods=["POST"])
+@admin_required
+def update_admin_notes(booking_id):
+    notes = (request.form.get("admin_notes") or "").strip()
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE bookings SET admin_notes=%s WHERE id=%s", (notes or None, booking_id))
+            conn.commit()
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Admin notes update error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
