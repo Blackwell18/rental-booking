@@ -5207,9 +5207,13 @@ def admin_customers_import_template():
 def booqable_sync():
     """Pull phone numbers from Booqable API and update matching bookings/customers."""
     result = None
+    last_token  = ""
+    last_tenant = "eminent-rental"
     if request.method == "POST":
         token    = (request.form.get("token") or "").strip()
         tenant   = (request.form.get("tenant") or "eminent-rental").strip()
+        last_token  = token
+        last_tenant = tenant
         # Strip full domain if user pasted the whole URL or domain
         tenant = tenant.replace("https://", "").replace("http://", "")
         tenant = tenant.split(".booqable.com")[0].split("/")[0]
@@ -5223,58 +5227,58 @@ def booqable_sync():
                 headers = {"Authorization": f"Bearer {token}",
                            "Content-Type": "application/json"}
                 base = f"https://{tenant}.booqable.com/api/boomerang"
-                # Fetch up to 500 customers (paginate if needed)
+                # Use orders?include=customer — orders endpoint works with this token
                 page = 1
-                customers = []
+                email_phone = {}  # email -> phone
                 while True:
-                    r = requests.get(f"{base}/customers",
+                    r = requests.get(f"{base}/orders",
                                      headers=headers,
-                                     params={"page[number]": page, "page[per]": 100},
+                                     params={"page[number]": page, "page[per]": 100,
+                                             "include": "customer"},
                                      timeout=15)
-                    debug_info.append(f"Page {page}: HTTP {r.status_code}, URL: {r.url}")
+                    debug_info.append(f"Page {page}: HTTP {r.status_code}")
                     if r.status_code != 200:
-                        errors.append(f"Booqable API error {r.status_code}: {r.text[:400]}")
+                        errors.append(f"Orders API error {r.status_code}: {r.text[:400]}")
                         break
                     try:
                         rjson = r.json()
                     except Exception:
                         errors.append(f"Bad JSON: {r.text[:200]}")
                         break
-                    data = rjson.get("data", [])
-                    meta = rjson.get("meta", {})
-                    debug_info.append(f"  → {len(data)} records, meta: {str(meta)[:200]}")
-                    if not data:
-                        break
-                    customers.extend(data)
-                    if len(data) < 100:
+                    orders = rjson.get("data", [])
+                    included = rjson.get("included", [])
+                    debug_info.append(f"  → {len(orders)} orders, {len(included)} included records")
+                    # Extract customer phone from included records
+                    for inc in included:
+                        if inc.get("type") == "customers":
+                            attrs = inc.get("attributes", {})
+                            email = (attrs.get("email") or "").strip().lower()
+                            phone = (attrs.get("phone") or attrs.get("mobile_phone") or "").strip()
+                            if email and phone:
+                                email_phone[email] = phone
+                    if len(orders) < 100:
                         break
                     page += 1
 
-                # Update bookings + customers tables by matching email
+                debug_info.append(f"Unique emails with phone: {len(email_phone)}")
+
+                # Update bookings + customers tables
                 conn = get_db()
-                if conn and customers:
+                if conn and email_phone:
                     cur = conn.cursor()
-                    for c in customers:
-                        attrs = c.get("attributes", {})
-                        email = (attrs.get("email") or "").strip().lower()
-                        phone = (attrs.get("phone") or attrs.get("mobile_phone") or "").strip()
-                        name  = (attrs.get("name") or "").strip()
-                        if not phone or not email:
-                            continue
-                        # Update bookings table
+                    for email, phone in email_phone.items():
                         cur.execute("""
                             UPDATE bookings SET phone=%s
                             WHERE LOWER(email)=%s AND (phone IS NULL OR phone = '' OR phone = 'None')
                         """, (phone, email))
-                        # Update customers table
+                        updated += cur.rowcount
                         cur.execute("""
                             UPDATE customers SET phone=%s
                             WHERE LOWER(email)=%s AND (phone IS NULL OR phone = '' OR phone = 'None')
                         """, (phone, email))
-                        updated += cur.rowcount
                     conn.commit()
                     cur.close(); conn.close()
-                result = {"ok": True, "customers_fetched": len(customers), "records_updated": updated, "errors": errors, "debug": debug_info}
+                result = {"ok": True, "customers_fetched": len(email_phone), "records_updated": updated, "errors": errors, "debug": debug_info}
             except Exception as e:
                 result = {"error": str(e), "debug": debug_info}
 
@@ -5295,15 +5299,15 @@ button{{background:#2563eb;color:white;border:none;border-radius:6px;padding:.6r
 <div class="card">
   <div style="margin-bottom:1rem">{nav}</div>
   <h1>Booqable Phone Sync</h1>
-  <p>Fetches phone numbers from your Booqable account and fills them in for matching bookings. Get a fresh Bearer token from Booqable → Network tab.</p>
-  {'<div class="ok">✅ Fetched ' + str(result.get("customers_fetched",0)) + ' customers, updated ' + str(result.get("records_updated",0)) + ' records.</div>' if result and result.get("ok") else ''}
+  <p>Fetches phone numbers from your Booqable orders and fills them in for matching bookings. Get a fresh Bearer token from Booqable → open browser DevTools (F12) → Network tab → filter "boomerang" → click any request → copy the Authorization header value (everything after "Bearer ").</p>
+  {'<div class="ok">✅ Found ' + str(result.get("customers_fetched",0)) + ' customers with phones, updated ' + str(result.get("records_updated",0)) + ' booking records.</div>' if result and result.get("ok") else ''}
   {'<div class="err">⚠ ' + result.get("error","") + '</div>' if result and result.get("error") else ''}
   {'<pre style=\'background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:.75rem;font-size:.75rem;overflow-x:auto;margin-bottom:1rem;white-space:pre-wrap\'>' + chr(10).join(result.get("debug",[])) + '</pre>' if result and result.get("debug") else ''}
   <form method="POST">
     <label>Booqable Subdomain (just the part before .booqable.com)</label>
-    <input name="tenant" value="eminent-rental" required>
-    <label>Bearer Token (from Network tab)</label>
-    <input name="token" placeholder="Paste token here…" required autocomplete="off">
+    <input name="tenant" value="{last_tenant}" required>
+    <label>Bearer Token (paste fresh token each time)</label>
+    <input name="token" value="{last_token}" placeholder="Paste token here…" required autocomplete="off">
     <button type="submit">🔄 Sync Phone Numbers</button>
   </form>
 </div>
