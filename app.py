@@ -1399,6 +1399,13 @@ FORM_HTML = r"""
     <p class="total-note">Final delivery fee and tax confirmed after we review your address. This is a quote request, not a charge.</p>
   </div>
 
+  <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem">
+    <p style="margin:0;font-size:.9rem;color:#78350f;line-height:1.7">
+      <strong>📋 Please note:</strong> This is a quote request, not a charge. The initial quote may not reflect the exact final price — pricing may vary based on your event details.
+      Any differences will be clearly explained in the invoice we send you before any payment is required.
+    </p>
+  </div>
+
   <button type="submit" class="submit-btn" id="submitBtn">Send Quote Request</button>
 </form>
 </div>
