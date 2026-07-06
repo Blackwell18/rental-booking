@@ -907,8 +907,8 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
 
     <p style="color:#2d3748;font-size:1.05rem;margin-bottom:.75rem">Hi <strong>{first}</strong>,</p>
     <p style="color:#4a5568;line-height:1.7;margin-bottom:1.25rem">
-      Great news &mdash; your rental request has been reviewed and we have availability for your event!
-      Please review your invoice below, make your payment, and read the rental agreement at the bottom of this email.
+      Thank you for choosing Rent a Party, LLC. We are pleased to confirm that your rental request has been reviewed and we have availability for your event.
+      Please carefully review your invoice below, read the rental agreement at the bottom of this email, and submit your payment at your earliest convenience to secure your reservation.
     </p>
 
     <!-- Event Summary box -->
