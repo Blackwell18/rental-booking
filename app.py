@@ -204,7 +204,7 @@ def init_db():
             "UPDATE bookings SET renter_zip    = NULL WHERE renter_zip    = 'None'",
             "UPDATE bookings SET company_name  = NULL WHERE company_name  = 'None'",
             # Set all Marquee Letter items to $85 (name = "Marquee A" through "Marquee Z")
-            "UPDATE products SET price = 85 WHERE TRIM(name) SIMILAR TO 'Marquee [A-Za-z]'",
+            "UPDATE inventory SET price = 85 WHERE TRIM(name) SIMILAR TO 'Marquee [A-Za-z]'",
         ]
         for m in migrations:
             try:
