@@ -1557,13 +1557,21 @@ function renderCart(){
   const ids=Object.keys(cart);
   if(ids.length===0){ wrap.style.display='none'; list.innerHTML=''; return; }
   wrap.style.display='block';
+  // Calculate total marquee numbers for proration
+  let totalMarqueeCount=0;
+  ids.forEach(id=>{ const p=ALL_PRODUCTS.find(x=>x.id===id); if(p&&getCat(p.name)==='🔢 Marquee Numbers') totalMarqueeCount+=cart[id]; });
+  const marqueeTierTotal=getMarqueeNumberTotal(totalMarqueeCount);
+  const marqueeUnitShare=totalMarqueeCount>0?marqueeTierTotal/totalMarqueeCount:0;
   list.innerHTML=ids.map(id=>{
     const p=ALL_PRODUCTS.find(x=>x.id===id);
     const q=cart[id]||1;
-    const sub=(p.price*q).toFixed(2);
+    const isMarqueeNum=getCat(p.name)==='🔢 Marquee Numbers';
+    const unitPrice=isMarqueeNum?(marqueeTierTotal/totalMarqueeCount):p.price;
+    const lineTotal=(unitPrice*q).toFixed(2);
+    const unitLabel=isMarqueeNum?`$${unitPrice.toFixed(2)} ea <span style="font-size:.75rem;color:#2563eb">(tier)</span>`:`$${p.price.toFixed(2)} ea`;
     return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem .5rem;border-bottom:1px solid #f3f4f6">
       <span style="flex:1;font-size:.92rem;font-weight:600;color:#1a202c">${p.name}</span>
-      <span style="font-size:.82rem;color:#6b7280;white-space:nowrap">$${p.price.toFixed(2)} ea</span>
+      <span style="font-size:.82rem;color:#6b7280;white-space:nowrap">${unitLabel}</span>
       <div style="display:flex;align-items:center;gap:.3rem">
         <button type="button" onclick="setQty('${id}',${q-1})"
           style="width:28px;height:28px;border:1px solid #d1d5db;border-radius:6px;background:white;font-size:1rem;cursor:pointer;line-height:1">−</button>
@@ -1573,7 +1581,7 @@ function renderCart(){
         <button type="button" onclick="setQty('${id}',${q+1})"
           style="width:28px;height:28px;border:1px solid #d1d5db;border-radius:6px;background:white;font-size:1rem;cursor:pointer;line-height:1">+</button>
       </div>
-      <span style="font-size:.9rem;font-weight:700;color:#2563eb;min-width:52px;text-align:right">$${sub}</span>
+      <span style="font-size:.9rem;font-weight:700;color:#2563eb;min-width:52px;text-align:right">$${lineTotal}</span>
       <button type="button" onclick="removeFromCart('${id}')"
         style="background:none;border:none;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.1rem .3rem" title="Remove">✕</button>
     </div>`;
