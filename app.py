@@ -2146,7 +2146,14 @@ ADMIN_BOOKING_HTML = """
       {% if b.renter_zip and b.renter_zip != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_zip] %}{% endif %}
       <span class="k">Address</span><span class="v">{{ _addr_parts|join(', ') or '—' }}</span>
       {% set _phone = b.phone if (b.phone and b.phone != 'None') else '' %}
-      <span class="k">Phone</span><span class="v">{% if _phone %}<a href="tel:{{ _phone }}">{{ _phone }}</a>{% else %}—{% endif %}</span>
+      <span class="k">Phone</span>
+      <span class="v">
+        <form method="POST" action="/admin/booking/{{ b.id }}/update-phone" style="display:inline-flex;align-items:center;gap:.4rem;margin:0">
+          <input type="tel" name="phone" value="{{ _phone }}" placeholder="(555) 000-0000"
+                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:160px">
+          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .6rem;font-size:.8rem;font-weight:600;cursor:pointer">Save</button>
+        </form>
+      </span>
       <span class="k">Email</span><span class="v">{% if b.email %}<a href="mailto:{{ b.email }}">{{ b.email }}</a>{% else %}—{% endif %}</span>
     </div>
   </div>
@@ -3537,6 +3544,22 @@ def update_booking_items(booking_id):
             conn.close()
         except Exception as e:
             log.error(f"Update items error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/update-phone", methods=["POST"])
+@admin_required
+def update_booking_phone(booking_id):
+    phone = (request.form.get("phone") or "").strip()
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE bookings SET phone=%s WHERE id=%s", (phone or None, booking_id))
+            conn.commit()
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Update phone error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
