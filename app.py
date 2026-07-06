@@ -2520,6 +2520,22 @@ ADMIN_BOOKING_HTML = """
 
   <div class="card">
     <h2>Event</h2>
+    {% if weekend_residential %}
+    <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.75rem">
+      <div style="flex:1;min-width:200px">
+        <div style="font-weight:700;color:#92400e;margin-bottom:.2rem">🏠 Weekend Residential Event</div>
+        <div style="font-size:.85rem;color:#78350f">
+          {{ weekend_residential.day_label }} event detected. Apply standard weekend schedule:<br>
+          <strong>Delivery:</strong> {{ weekend_residential.delivery_label }} &nbsp;|&nbsp; <strong>Pickup:</strong> {{ weekend_residential.pickup_label }}
+        </div>
+      </div>
+      <form method="POST" action="/admin/booking/{{ b.id }}/apply-weekend-schedule" style="margin:0">
+        <button type="submit" style="background:#d97706;color:white;border:none;border-radius:7px;padding:.55rem 1.1rem;font-size:.88rem;font-weight:700;cursor:pointer;white-space:nowrap">
+          📅 Apply Weekend Schedule
+        </button>
+      </form>
+    </div>
+    {% endif %}
     <div class="row">
       <span class="k">Dates</span><span class="v">{{ b.event_start_date }} - {{ b.event_end_date }}</span>
       <span class="k">Start Time</span><span class="v">{{ b.event_start_time }}</span>
@@ -2529,6 +2545,9 @@ ADMIN_BOOKING_HTML = """
       {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
       <span class="k">Event Address</span><span class="v">{{ b.event_street }}, {{ b.event_city }}, {{ b.event_state }} {{ b.event_zip }}</span>
       <span class="k">Deliver To</span><span class="v">{{ b.delivery_location }}</span>
+    </div>
+    <div style="background:#f0f9ff;border-left:3px solid #38bdf8;padding:.6rem .9rem;margin-top:.9rem;border-radius:0 6px 6px 0;font-size:.82rem;color:#0c4a6e">
+      ℹ️ <strong>Delivery times are approximate</strong> unless the customer has opted for exact-time delivery/pickup.
     </div>
   </div>
 
@@ -3650,11 +3669,43 @@ def admin_booking(booking_id):
     except Exception as e:
         log.error(f"Customer match lookup error: {e}")
 
+    # Weekend residential schedule detection
+    weekend_residential = None
+    try:
+        if (b.get("venue_type") or "").lower() == "residential":
+            esd = str(b.get("event_start_date", ""))[:10]
+            event_date = datetime.strptime(esd, "%Y-%m-%d").date()
+            weekday = event_date.weekday()  # 5=Saturday, 6=Sunday
+            if weekday == 5:  # Saturday
+                friday = event_date - timedelta(days=1)
+                sunday = event_date + timedelta(days=1)
+                weekend_residential = {
+                    "day_label": "Saturday",
+                    "delivery_date": friday,
+                    "delivery_label": f"Friday {friday.strftime('%b %-d')} at 4:00 PM",
+                    "pickup_date": sunday,
+                    "pickup_label": f"Sunday {sunday.strftime('%b %-d')} at 10:00 AM",
+                    "pickup_weekday": "sunday",
+                }
+            elif weekday == 6:  # Sunday
+                friday = event_date - timedelta(days=2)
+                monday = event_date + timedelta(days=1)
+                weekend_residential = {
+                    "day_label": "Sunday",
+                    "delivery_date": friday,
+                    "delivery_label": f"Friday {friday.strftime('%b %-d')} at 4:00 PM",
+                    "pickup_date": monday,
+                    "pickup_label": f"Monday {monday.strftime('%b %-d')} at 10:00 AM",
+                    "pickup_weekday": "monday",
+                }
+    except Exception:
+        pass
+
     try:
         return render_template_string(ADMIN_BOOKING_HTML,
             business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until,
             products=get_products(), payment_links=get_payment_links(booking_id),
-            matched_customer=matched_customer)
+            matched_customer=matched_customer, weekend_residential=weekend_residential)
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
         return "Error rendering booking — please contact support.", 500
@@ -4028,6 +4079,42 @@ def update_booking_address(booking_id):
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"Update address error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/apply-weekend-schedule", methods=["POST"])
+@admin_required
+def apply_weekend_schedule(booking_id):
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT event_start_date, venue_type FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            if row:
+                venue_type = (row["venue_type"] or "").lower()
+                event_date = row["event_start_date"]
+                if hasattr(event_date, "strftime"):
+                    pass  # already a date object
+                else:
+                    event_date = datetime.strptime(str(event_date)[:10], "%Y-%m-%d").date()
+                weekday = event_date.weekday()
+                if venue_type == "residential" and weekday in (5, 6):
+                    friday = event_date - timedelta(days=1 if weekday == 5 else 2)
+                    if weekday == 5:  # Saturday → pickup Sunday
+                        pickup_date = event_date + timedelta(days=1)
+                    else:  # Sunday → pickup Monday
+                        pickup_date = event_date + timedelta(days=1)
+                    cur.execute("""
+                        UPDATE bookings SET
+                          event_start_date=%s, event_start_time=%s,
+                          event_end_date=%s, event_end_time=%s
+                        WHERE id=%s
+                    """, (friday, "16:00", pickup_date, "10:00", booking_id))
+                    conn.commit()
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Apply weekend schedule error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
