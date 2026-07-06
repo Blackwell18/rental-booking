@@ -1385,6 +1385,7 @@ FORM_HTML = r"""
     <!-- Selected items list -->
     <div id="selected-items-wrap" style="display:none;margin-top:1.25rem;border-top:2px solid #e5e7eb;padding-top:1rem">
       <div style="font-weight:700;font-size:.95rem;color:#1a202c;margin-bottom:.75rem">🛒 Your Items</div>
+      <div id="marquee-tier-notice" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.6rem .9rem;margin-bottom:.75rem;font-size:.88rem;color:#1e40af"></div>
       <div id="selected-items-list"></div>
     </div>
   </div>
@@ -1433,6 +1434,20 @@ function checkLateNightFee(){
   return late?LATE_NIGHT_FEE:0;
 }
 
+// ── Marquee Number Tier Pricing ───────────────────────────────────
+const MARQUEE_NUMBER_TIERS = [
+  { count:1, total:80 },
+  { count:2, total:150 },
+  { count:3, total:215 },
+  { count:4, total:275 },
+];
+function getMarqueeNumberTotal(n){
+  if(n<=0) return 0;
+  const t=MARQUEE_NUMBER_TIERS.find(x=>x.count===n);
+  if(t) return t.total;
+  return 275+(n-4)*55; // $275 + $55 per additional beyond 4
+}
+
 // ── Item Categories ───────────────────────────────────────────────
 const ITEM_CATEGORIES = [
   { label:"🪑 Chairs",           keywords:["chair","stool","bench","seat","chiavari"] },
@@ -1476,6 +1491,9 @@ function buildDropdowns(){
         <span class="chev" style="transition:transform .2s;font-size:.8rem">▼</span>
       </button>
       <div class="cat-body" style="display:none;padding:.75rem 1rem;background:white">
+        ${cat==='🔢 Marquee Numbers'?`<div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:.6rem .9rem;margin-bottom:.75rem;font-size:.83rem;color:#713f12">
+          <strong>📋 Tier Pricing:</strong> 1 for $80 &nbsp;·&nbsp; 2 for $150 &nbsp;·&nbsp; 3 for $215 &nbsp;·&nbsp; 4 for $275 &nbsp;·&nbsp; 5+ = $275 + $55 each additional
+        </div>`:''}
         <div style="display:flex;flex-wrap:wrap;gap:.5rem">
           ${items.map(p=>`
             <button type="button" onclick="addToCart('${p.id}')"
@@ -1562,8 +1580,25 @@ function renderCart(){
   }).join('');
 }
 function updateTotals(){
-  let sub=0;
-  ALL_PRODUCTS.forEach(p=>{ sub+=(cart[p.id]||0)*p.price; });
+  let regularSub=0, marqueeCount=0;
+  ALL_PRODUCTS.forEach(p=>{
+    const qty=cart[p.id]||0;
+    if(!qty) return;
+    if(getCat(p.name)==='🔢 Marquee Numbers') marqueeCount+=qty;
+    else regularSub+=qty*p.price;
+  });
+  const marqueeSub=getMarqueeNumberTotal(marqueeCount);
+  const sub=regularSub+marqueeSub;
+  // Update marquee tier notice in cart
+  const tierEl=document.getElementById('marquee-tier-notice');
+  if(tierEl){
+    if(marqueeCount>0){
+      const nextTier=MARQUEE_NUMBER_TIERS.find(t=>t.count===marqueeCount+1);
+      const savings=nextTier?`Add 1 more for $${nextTier.total} total (save $${(marqueeSub+80-nextTier.total).toFixed(0)})`:null;
+      tierEl.innerHTML=`🔢 <strong>${marqueeCount} Marquee Number${marqueeCount!==1?'s':''}</strong> — Tier Price: <strong>$${marqueeSub.toFixed(2)}</strong>${savings?`<span style="color:#16a34a;margin-left:.5rem;font-size:.82rem"> · ${savings}</span>`:''}`;
+      tierEl.style.display='block';
+    } else { tierEl.style.display='none'; }
+  }
   const exactCb=document.getElementById('exact_time_cb');
   const ef=exactCb&&exactCb.checked?EXACT_FEE:0;
   const lf=checkLateNightFee();
