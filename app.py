@@ -1359,30 +1359,31 @@ FORM_HTML = r"""
     <div class="field"><label>Where on the premises will items be delivered? <span class="required">*</span></label><textarea name="delivery_location" required placeholder="e.g. Through the main entrance, set up in the ballroom on the left side...">{{ form.delivery_location or '' }}</textarea></div>
   </div>
 
+  <!-- Hidden qty inputs — submitted with form -->
+  {% for p in products %}
+  <input type="hidden" class="qty-input" id="qty_{{ p.id }}" name="qty_{{ p.id }}" value="0" data-price="{{ p.price }}" data-max="{{ p.total }}">
+  {% endfor %}
+
+  <!-- Product data for JS -->
+  <script>
+  const ALL_PRODUCTS = [
+    {% for p in products %}
+    { id:"{{ p.id }}", name:{{ p.name | tojson }}, price:{{ p.price }}, max:{{ p.total }} },
+    {% endfor %}
+  ];
+  </script>
+
   <div class="card">
     <h2>Select Your Items</h2>
-    <div style="margin-bottom:1rem">
-      <input type="text" id="item_search" placeholder="🔍 Search items..." oninput="filterItems(this.value)"
-        style="width:100%;padding:.6rem .9rem;border:1.5px solid #cbd5e0;border-radius:8px;font-size:.95rem;box-sizing:border-box;outline:none"
-        onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#cbd5e0'">
-    </div>
-    <div id="products-container">
-    {% for p in products %}
-    <div class="product-row" data-name="{{ p.name | lower }}">
-      <div>
-        <div class="product-name">{{ p.name }}</div>
-        <div class="product-meta">
-          <span class="product-price">${{ "%.2f"|format(p.price) }} each</span>
-        </div>
-      </div>
-      <div class="qty-control">
-        <button type="button" class="qty-btn" onclick="changeQty('{{ p.id }}',-1)">-</button>
-        <input class="qty-input" type="number" id="qty_{{ p.id }}" name="qty_{{ p.id }}" value="0" min="0" max="{{ p.total }}" data-price="{{ p.price }}" data-max="{{ p.total }}" oninput="updateTotals()">
-        <button type="button" class="qty-btn" onclick="changeQty('{{ p.id }}',1)">+</button>
-      </div>
-      <div class="product-sub" id="sub_{{ p.id }}">-</div>
-    </div>
-    {% endfor %}
+    <p style="color:#6b7280;font-size:.88rem;margin-bottom:1.25rem">Click a category below to browse items. Select an item to add it to your order.</p>
+
+    <!-- Category accordion dropdowns -->
+    <div id="category-dropdowns"></div>
+
+    <!-- Selected items list -->
+    <div id="selected-items-wrap" style="display:none;margin-top:1.25rem;border-top:2px solid #e5e7eb;padding-top:1rem">
+      <div style="font-weight:700;font-size:.95rem;color:#1a202c;margin-bottom:.75rem">🛒 Your Items</div>
+      <div id="selected-items-list"></div>
     </div>
   </div>
 
@@ -1415,12 +1416,10 @@ FORM_HTML = r"""
 const EXACT_FEE = {{ exact_time_fee }};
 const LATE_NIGHT_FEE = 125;
 const CT_TAX_RATE = 0.0635;
-function changeQty(id,delta){const i=document.getElementById('qty_'+id);const m=parseInt(i.dataset.max);let v=Math.max(0,Math.min(m,parseInt(i.value||0)+delta));i.value=v;updateTotals();}
 function isLateNight(timeStr){
   if(!timeStr) return false;
   const [h,m]=timeStr.split(':').map(Number);
   const mins=h*60+m;
-  // 23:30 = 1410, 07:00 = 420
   return mins>=1410||mins<420;
 }
 function checkLateNightFee(){
@@ -1431,80 +1430,151 @@ function checkLateNightFee(){
   document.getElementById('late_night_fee_input').value=late?LATE_NIGHT_FEE:0;
   return late?LATE_NIGHT_FEE:0;
 }
-// ── Product Categorization ────────────────────────────────────────
+
+// ── Item Categories ───────────────────────────────────────────────
 const ITEM_CATEGORIES = [
-  { label: "🪑 Chairs",           keywords: ["chair","stool","bench","seat","chiavari","folding chair","ghost chair"] },
-  { label: "🪣 Tables",           keywords: ["table","tablecloth","linen","cloth","runner","overlay","skirt"] },
-  { label: "🔢 Marquee Numbers",  keywords: ["marquee number","number ","#0","#1","#2","#3","#4","#5","#6","#7","#8","#9","digit"] },
-  { label: "🔤 Marquee Letters",  keywords: ["marquee letter","letter "] },
-  { label: "💡 Lighting",         keywords: ["light","lamp","led","glow","neon","bulb","lantern","fairy","string light","uplift","uplighting","candle","chandelier"] },
-  { label: "🎭 Backdrops & Décor",keywords: ["backdrop","banner","balloon","arch","flower","floral","decor","sign","drape","curtain","pillar","column","centerpiece","vase","stand","frame","wall"] },
-  { label: "🎪 Entertainment",    keywords: ["bounce","slide","game","popcorn","cotton candy","machine","photo booth","casino","carnival","inflatable","dunk","obstacle"] },
-  { label: "⛺ Tents & Canopies", keywords: ["tent","canopy","pergola","gazebo","umbrella","shade"] },
+  { label:"🪑 Chairs",           keywords:["chair","stool","bench","seat","chiavari"] },
+  { label:"🪣 Tables",           keywords:["table","tablecloth","linen","cloth","runner","overlay","skirt"] },
+  { label:"🔢 Marquee Numbers",  keywords:["marquee number","number"] },
+  { label:"🔤 Marquee Letters",  keywords:["marquee letter","letter"] },
+  { label:"💡 Lighting",         keywords:["light","lamp","led","glow","neon","bulb","lantern","fairy","chandelier","uplighting"] },
+  { label:"🎭 Backdrops & Décor",keywords:["backdrop","banner","balloon","arch","flower","floral","decor","sign","drape","curtain","pillar","column","centerpiece","vase","frame","wall"] },
+  { label:"🎪 Entertainment",    keywords:["bounce","slide","game","popcorn","cotton candy","machine","photo booth","casino","carnival","inflatable"] },
+  { label:"⛺ Tents & Canopies", keywords:["tent","canopy","pergola","gazebo","umbrella"] },
 ];
-function getCategoryForItem(name){
-  const n = name.toLowerCase();
-  for(const cat of ITEM_CATEGORIES){
-    if(cat.keywords.some(k => n.includes(k))) return cat.label;
-  }
+function getCat(name){
+  const n=name.toLowerCase();
+  for(const c of ITEM_CATEGORIES){ if(c.keywords.some(k=>n.includes(k))) return c.label; }
   return "📦 Other";
 }
-function buildCategoryGroups(){
-  const container = document.getElementById('products-container');
-  const rows = Array.from(container.querySelectorAll('.product-row'));
-  // Remove any existing headers
-  container.querySelectorAll('.cat-header').forEach(h => h.remove());
-  // Group rows by category (preserve DOM order)
-  let lastCat = null;
-  rows.forEach(row => {
-    const cat = getCategoryForItem(row.dataset.name);
-    if(cat !== lastCat){
-      const header = document.createElement('div');
-      header.className = 'cat-header';
-      header.setAttribute('data-cat', cat);
-      header.textContent = cat;
-      header.style.cssText = 'font-weight:700;font-size:.82rem;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;padding:.6rem 0 .3rem;border-top:1px solid #e5e7eb;margin-top:.5rem';
-      // Remove top border from very first header
-      if(!lastCat) header.style.borderTop = 'none';
-      container.insertBefore(header, row);
-      lastCat = cat;
-    }
+
+// ── Build Category Accordion Dropdowns ───────────────────────────
+function buildDropdowns(){
+  // Group products by category
+  const groups={};
+  ALL_PRODUCTS.forEach(p=>{
+    const cat=getCat(p.name);
+    if(!groups[cat]) groups[cat]=[];
+    groups[cat].push(p);
+  });
+  const wrap=document.getElementById('category-dropdowns');
+  wrap.innerHTML='';
+  Object.entries(groups).forEach(([cat,items])=>{
+    const sec=document.createElement('div');
+    sec.style.cssText='border:1px solid #e5e7eb;border-radius:8px;margin-bottom:.5rem;overflow:hidden';
+    sec.innerHTML=`
+      <button type="button" onclick="toggleCat(this)"
+        style="width:100%;text-align:left;background:#f9fafb;border:none;padding:.75rem 1rem;font-size:.95rem;font-weight:700;color:#1a202c;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+        <span>${cat} <span style="font-size:.8rem;font-weight:400;color:#9ca3af">(${items.length} item${items.length!==1?'s':''})</span></span>
+        <span class="chev" style="transition:transform .2s;font-size:.8rem">▼</span>
+      </button>
+      <div class="cat-body" style="display:none;padding:.75rem 1rem;background:white">
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+          ${items.map(p=>`
+            <button type="button" onclick="addToCart('${p.id}')"
+              data-id="${p.id}"
+              style="background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:20px;padding:.35rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .15s"
+              onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+              ${p.name} — $${p.price.toFixed(2)}
+            </button>`).join('')}
+        </div>
+      </div>`;
+    wrap.appendChild(sec);
   });
 }
-function filterItems(q){
-  q = q.toLowerCase().trim();
-  document.querySelectorAll('.product-row').forEach(row=>{
-    row.style.display = (!q || row.dataset.name.includes(q)) ? '' : 'none';
-  });
-  // Show/hide category headers based on whether any visible rows follow them
-  if(q){
-    document.querySelectorAll('.cat-header').forEach(h => h.style.display = 'none');
-  } else {
-    document.querySelectorAll('.cat-header').forEach(h => h.style.display = '');
-  }
+function toggleCat(btn){
+  const body=btn.nextElementSibling;
+  const open=body.style.display==='block';
+  body.style.display=open?'none':'block';
+  btn.querySelector('.chev').style.transform=open?'':'rotate(180deg)';
+  btn.style.background=open?'#f9fafb':'#eff6ff';
 }
-document.addEventListener('DOMContentLoaded', buildCategoryGroups);
+
+// ── Cart ──────────────────────────────────────────────────────────
+const cart={};  // id -> qty
+function addToCart(id){
+  const p=ALL_PRODUCTS.find(x=>x.id===id);
+  if(!p) return;
+  if(cart[id]){ setQty(id, cart[id]+1); }
+  else { cart[id]=1; renderCart(); }
+  setHiddenQty(id, cart[id]);
+  updateTotals();
+  // Highlight the button
+  const btn=document.querySelector(`button[data-id="${id}"]`);
+  if(btn){ btn.style.background='#bbf7d0'; btn.style.borderColor='#4ade80'; btn.style.color='#166534';
+    setTimeout(()=>{ btn.style.background='#eff6ff'; btn.style.borderColor='#bfdbfe'; btn.style.color='#1d4ed8'; },600); }
+}
+function setQty(id, val){
+  const p=ALL_PRODUCTS.find(x=>x.id===id);
+  if(!p) return;
+  const v=Math.max(0,Math.min(p.max, val));
+  if(v===0){ delete cart[id]; }
+  else { cart[id]=v; }
+  const inp=document.getElementById('cart-qty-'+id);
+  if(inp) inp.value=v===0?'':v;
+  setHiddenQty(id, v);
+  renderCart();
+  updateTotals();
+}
+function setHiddenQty(id, val){
+  const h=document.getElementById('qty_'+id);
+  if(h) h.value=val;
+}
+function removeFromCart(id){
+  delete cart[id];
+  setHiddenQty(id,0);
+  renderCart();
+  updateTotals();
+}
+function renderCart(){
+  const list=document.getElementById('selected-items-list');
+  const wrap=document.getElementById('selected-items-wrap');
+  const ids=Object.keys(cart);
+  if(ids.length===0){ wrap.style.display='none'; list.innerHTML=''; return; }
+  wrap.style.display='block';
+  list.innerHTML=ids.map(id=>{
+    const p=ALL_PRODUCTS.find(x=>x.id===id);
+    const q=cart[id]||1;
+    const sub=(p.price*q).toFixed(2);
+    return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem .5rem;border-bottom:1px solid #f3f4f6">
+      <span style="flex:1;font-size:.92rem;font-weight:600;color:#1a202c">${p.name}</span>
+      <span style="font-size:.82rem;color:#6b7280;white-space:nowrap">$${p.price.toFixed(2)} ea</span>
+      <div style="display:flex;align-items:center;gap:.3rem">
+        <button type="button" onclick="setQty('${id}',${q-1})"
+          style="width:28px;height:28px;border:1px solid #d1d5db;border-radius:6px;background:white;font-size:1rem;cursor:pointer;line-height:1">−</button>
+        <input id="cart-qty-${id}" type="number" value="${q}" min="1" max="${p.max}"
+          onchange="setQty('${id}',parseInt(this.value)||1)"
+          style="width:44px;text-align:center;border:1px solid #d1d5db;border-radius:6px;padding:.2rem;font-size:.9rem;font-weight:700">
+        <button type="button" onclick="setQty('${id}',${q+1})"
+          style="width:28px;height:28px;border:1px solid #d1d5db;border-radius:6px;background:white;font-size:1rem;cursor:pointer;line-height:1">+</button>
+      </div>
+      <span style="font-size:.9rem;font-weight:700;color:#2563eb;min-width:52px;text-align:right">$${sub}</span>
+      <button type="button" onclick="removeFromCart('${id}')"
+        style="background:none;border:none;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.1rem .3rem" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
 function updateTotals(){
   let sub=0;
-  document.querySelectorAll('.qty-input').forEach(i=>{const qty=parseInt(i.value)||0;const price=parseFloat(i.dataset.price);const id=i.id.replace('qty_','');const line=qty*price;sub+=line;const el=document.getElementById('sub_'+id);el.textContent=qty>0?'$'+line.toFixed(2):'-';el.classList.toggle('has-val',qty>0);});
-  const exact=document.getElementById('exact_time_cb').checked;
-  const ef=exact?EXACT_FEE:0;
+  ALL_PRODUCTS.forEach(p=>{ sub+=(cart[p.id]||0)*p.price; });
+  const exactCb=document.getElementById('exact_time_cb');
+  const ef=exactCb&&exactCb.checked?EXACT_FEE:0;
   const lf=checkLateNightFee();
   const exemptCb=document.getElementById('tax_exempt_request');
   const exempt=exemptCb&&exemptCb.checked;
   const tax=exempt?0:(sub+ef+lf)*CT_TAX_RATE;
   const taxEl=document.getElementById('t_tax');
-  taxEl.textContent='$'+tax.toFixed(2);
-  taxEl.style.color=exempt?'#16a34a':'';
-  const taxLbl=taxEl.previousElementSibling;
-  if(taxLbl)taxLbl.textContent=exempt?'CT Sales Tax (EXEMPT)':'CT Sales Tax (6.35%)';
+  if(taxEl){ taxEl.textContent='$'+tax.toFixed(2); taxEl.style.color=exempt?'#16a34a':'';
+    const lbl=taxEl.previousElementSibling; if(lbl) lbl.textContent=exempt?'CT Sales Tax (EXEMPT)':'CT Sales Tax (6.35%)'; }
   document.getElementById('t_items').textContent='$'+sub.toFixed(2);
-  document.getElementById('t_exact').textContent=exact?'$'+EXACT_FEE.toFixed(2):'-';
+  document.getElementById('t_exact').textContent=ef>0?'$'+ef.toFixed(2):'-';
   document.getElementById('t_grand').textContent='$'+(sub+ef+lf+tax).toFixed(2)+'+';
 }
+document.addEventListener('DOMContentLoaded', buildDropdowns);
 function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
 setVenue('venue');
-function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{Object.entries(data).forEach(([id,avail])=>{const input=document.getElementById('qty_'+id);if(!input)return;input.dataset.max=avail;input.max=avail;if(parseInt(input.value)>avail){input.value=avail;}});updateTotals();}).catch(()=>{});}
+function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{ALL_PRODUCTS.forEach(p=>{if(data[p.id]!==undefined){p.max=data[p.id];}});// Cap any cart quantities over new max
+Object.keys(cart).forEach(id=>{const p=ALL_PRODUCTS.find(x=>x.id===id);if(p&&cart[id]>p.max){setQty(id,p.max);}});updateTotals();}).catch(()=>{});}
 let distTimer;
 function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';}).catch(()=>{});}},800);}
 // ── Date validation ───────────────────────────────────────────────────────
