@@ -2003,8 +2003,15 @@ ADMIN_DASH_HTML = """
 </div>
 
 <div class="main">
-  <div class="page-title">Dashboard</div>
-
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
+    <div class="page-title" style="margin-bottom:0">Dashboard</div>
+    <div style="position:relative">
+      <input type="text" id="dash-search" placeholder="🔍 Search bookings…" oninput="filterDash(this.value)"
+        style="border:1px solid #d1d5db;border-radius:8px;padding:.45rem 1rem;font-size:.88rem;width:260px;outline:none;transition:border .12s;background:white"
+        onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#d1d5db'">
+      <span id="dash-count" style="position:absolute;right:.6rem;top:50%;transform:translateY(-50%);font-size:.75rem;color:#9ca3af"></span>
+    </div>
+  </div>
 
   <!-- ── Metric Cards ── -->
   <div class="metrics">
@@ -2106,7 +2113,7 @@ ADMIN_DASH_HTML = """
       </thead>
       <tbody>
         {% for b in bookings %}
-        <tr id="row-{{ b.id }}">
+        <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '') | lower }} {{ (b.email or '') | lower }} {{ (b.phone or '') | lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '') | lower }}">
           <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
           <td style="font-weight:700;color:#2563eb;font-size:.83rem">#{{ b.id }}</td>
           <td>
@@ -2241,6 +2248,19 @@ function clearAll(){
   document.querySelectorAll('.row-cb').forEach(c => c.checked = false);
   document.getElementById('selectAll').checked = false;
   document.getElementById('bulkBar').style.display = 'none';
+}
+
+function filterDash(q){
+  const term = q.toLowerCase().trim();
+  const rows = document.querySelectorAll('tbody tr[data-search]');
+  let shown = 0;
+  rows.forEach(row => {
+    const match = !term || row.dataset.search.includes(term);
+    row.style.display = match ? '' : 'none';
+    if(match) shown++;
+  });
+  const cnt = document.getElementById('dash-count');
+  if(cnt) cnt.textContent = term ? shown + ' found' : '';
 }
 
 function bulkAction(type){
@@ -3559,6 +3579,9 @@ ADMIN_INVENTORY_HTML = """
   <div class="card">
     <div class="card-header">
       <span>Rental Items ({{ products|length }})</span>
+      <input type="text" id="inv-search" placeholder="🔍 Search items…" oninput="filterInv(this.value)"
+        style="border:1px solid #d1d5db;border-radius:7px;padding:.35rem .75rem;font-size:.85rem;width:220px;outline:none;transition:border .12s"
+        onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#d1d5db'">
     </div>
     <form method="POST" action="/admin/inventory/save">
       <table>
@@ -3620,6 +3643,13 @@ ADMIN_INVENTORY_HTML = """
   </div>
 </div>
 <script>
+function filterInv(q){
+  const term=q.toLowerCase();
+  document.querySelectorAll('tbody tr').forEach(row=>{
+    const name=(row.querySelector('input[type=text]')?.value||'').toLowerCase();
+    row.style.display=name.includes(term)?'':'none';
+  });
+}
 function setMode(m){
   const isRange=m==='range';
   document.getElementById('to_wrapper').style.display=isRange?'block':'none';
