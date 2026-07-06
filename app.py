@@ -2030,14 +2030,14 @@ ADMIN_DASH_HTML = """
   {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
   {% set sf = ('&sort=' ~ sort_by) if (sort_by and sort_by != 'date') else '' %}
   <div class="tabs">
-    <a href="/admin/dashboard" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
+    <a href="/admin/dashboard?status=pending&sort=created_asc" class="tab {% if status_filter=='pending' and not past_filter %}active{% endif %}" style="{% if status_filter=='pending' and not past_filter %}color:#d97706;border-bottom-color:#d97706;{% endif %}">🆕&nbsp;New{% if stats.pending > 0 %}&nbsp;<span style="background:#d97706;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.pending }}</span>{% endif %}</a>
     <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
-    <a href="/admin/dashboard?status=pending{{ df }}{{ dt }}{{ pf }}{{ sf }}"   class="tab {% if status_filter=='pending'   and not past_filter %}active{% endif %}">Pending&nbsp;({{ stats.pending }})</a>
     <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Accepted&nbsp;({{ stats.accepted }})</a>
     <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' and not past_filter %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
     <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    and not past_filter %}active{% endif %}">Denied</a>
     <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' and not past_filter %}active{% endif %}">Cancelled</a>
     <a href="/admin/dashboard?past=1" class="tab {% if past_filter %}active{% endif %}" style="{% if past_filter %}color:#6366f1;border-bottom-color:#6366f1;{% endif %}">🕓&nbsp;Past&nbsp;({{ stats.past }})</a>
+    <a href="/admin/dashboard" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
     <a href="/admin/dashboard?archived=1" class="tab {% if archived_filter %}active{% endif %}" style="{% if archived_filter %}color:#9ca3af;border-bottom-color:#9ca3af;{% endif %}">📦&nbsp;Archived</a>
   </div>
 
@@ -3499,14 +3499,15 @@ def admin_dashboard():
                 q += " WHERE " + " AND ".join(wheres)
             # Sort order
             sort_map = {
-                "date":      "event_start_date ASC NULLS LAST, created_at DESC",
-                "date_desc": "event_start_date DESC NULLS LAST, created_at DESC",
-                "name":      "full_name ASC",
-                "name_desc": "full_name DESC",
-                "id":        "id DESC",
-                "id_asc":    "id ASC",
-                "total":     "grand_total DESC NULLS LAST",
-                "created":   "created_at DESC",
+                "date":        "event_start_date ASC NULLS LAST, created_at DESC",
+                "date_desc":   "event_start_date DESC NULLS LAST, created_at DESC",
+                "name":        "full_name ASC",
+                "name_desc":   "full_name DESC",
+                "id":          "id DESC",
+                "id_asc":      "id ASC",
+                "total":       "grand_total DESC NULLS LAST",
+                "created":     "created_at DESC",
+                "created_asc": "created_at ASC",
             }
             q += " ORDER BY " + sort_map.get(sort_by, "event_start_date ASC NULLS LAST, created_at DESC")
             q += " LIMIT 1000"
