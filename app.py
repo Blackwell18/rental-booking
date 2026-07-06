@@ -4089,28 +4089,42 @@ def apply_weekend_schedule(booking_id):
     if conn:
         try:
             cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            cur.execute("SELECT event_start_date, venue_type FROM bookings WHERE id=%s", (booking_id,))
+            cur.execute("SELECT event_start_date, event_start_time, event_end_date, event_end_time, venue_type, notes FROM bookings WHERE id=%s", (booking_id,))
             row = cur.fetchone()
             if row:
                 venue_type = (row["venue_type"] or "").lower()
                 event_date = row["event_start_date"]
-                if hasattr(event_date, "strftime"):
-                    pass  # already a date object
-                else:
+                if not hasattr(event_date, "strftime"):
                     event_date = datetime.strptime(str(event_date)[:10], "%Y-%m-%d").date()
                 weekday = event_date.weekday()
                 if venue_type == "residential" and weekday in (5, 6):
                     friday = event_date - timedelta(days=1 if weekday == 5 else 2)
-                    if weekday == 5:  # Saturday → pickup Sunday
-                        pickup_date = event_date + timedelta(days=1)
-                    else:  # Sunday → pickup Monday
-                        pickup_date = event_date + timedelta(days=1)
+                    pickup_date = event_date + timedelta(days=1)  # Sunday or Monday
+                    # Preserve original submitted dates in notes
+                    orig_start = event_date.strftime("%A, %B %-d %Y")
+                    orig_start_time = row["event_start_time"] or ""
+                    orig_end = row["event_end_date"]
+                    orig_end_str = ""
+                    if orig_end:
+                        if not hasattr(orig_end, "strftime"):
+                            orig_end = datetime.strptime(str(orig_end)[:10], "%Y-%m-%d").date()
+                        orig_end_str = f" – {orig_end.strftime('%A, %B %-d %Y')}"
+                        if row["event_end_time"]:
+                            orig_end_str += f" at {row['event_end_time']}"
+                    schedule_note = (
+                        f"[Original event date: {orig_start}"
+                        + (f" at {orig_start_time}" if orig_start_time else "")
+                        + orig_end_str + "]"
+                    )
+                    existing_notes = (row["notes"] or "").strip()
+                    new_notes = (schedule_note + "\n" + existing_notes).strip()
                     cur.execute("""
                         UPDATE bookings SET
                           event_start_date=%s, event_start_time=%s,
-                          event_end_date=%s, event_end_time=%s
+                          event_end_date=%s, event_end_time=%s,
+                          notes=%s
                         WHERE id=%s
-                    """, (friday, "16:00", pickup_date, "10:00", booking_id))
+                    """, (friday, "16:00", pickup_date, "10:00", new_notes, booking_id))
                     conn.commit()
             cur.close(); conn.close()
         except Exception as e:
