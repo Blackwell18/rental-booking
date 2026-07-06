@@ -2139,12 +2139,20 @@ ADMIN_BOOKING_HTML = """
     <div class="row">
       <span class="k">Name</span><span class="v">{{ b.full_name or '—' }}</span>
       {% if b.company_name and b.company_name != 'None' %}<span class="k">Company</span><span class="v">{{ b.company_name }}</span>{% endif %}
-      {% set _addr_parts = [] %}
-      {% if b.renter_street and b.renter_street != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_street] %}{% endif %}
-      {% if b.renter_city and b.renter_city != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_city] %}{% endif %}
-      {% if b.renter_state and b.renter_state != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_state] %}{% endif %}
-      {% if b.renter_zip and b.renter_zip != 'None' %}{% set _addr_parts = _addr_parts + [b.renter_zip] %}{% endif %}
-      <span class="k">Address</span><span class="v">{{ _addr_parts|join(', ') or '—' }}</span>
+      <span class="k">Address</span>
+      <span class="v">
+        <form method="POST" action="/admin/booking/{{ b.id }}/update-address" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:0">
+          <input name="renter_street" value="{{ b.renter_street if (b.renter_street and b.renter_street != 'None') else '' }}" placeholder="Street"
+                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:180px">
+          <input name="renter_city" value="{{ b.renter_city if (b.renter_city and b.renter_city != 'None') else '' }}" placeholder="City"
+                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:120px">
+          <input name="renter_state" value="{{ b.renter_state if (b.renter_state and b.renter_state != 'None') else '' }}" placeholder="ST"
+                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:50px">
+          <input name="renter_zip" value="{{ b.renter_zip if (b.renter_zip and b.renter_zip != 'None') else '' }}" placeholder="ZIP"
+                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:75px">
+          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .6rem;font-size:.8rem;font-weight:600;cursor:pointer">Save</button>
+        </form>
+      </span>
       {% set _phone = b.phone if (b.phone and b.phone != 'None') else '' %}
       <span class="k">Phone</span>
       <span class="v">
@@ -3544,6 +3552,32 @@ def update_booking_items(booking_id):
             conn.close()
         except Exception as e:
             log.error(f"Update items error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/update-address", methods=["POST"])
+@admin_required
+def update_booking_address(booking_id):
+    f = request.form
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE bookings SET
+                  renter_street=%s, renter_city=%s, renter_state=%s, renter_zip=%s
+                WHERE id=%s
+            """, (
+                f.get("renter_street","").strip() or None,
+                f.get("renter_city","").strip() or None,
+                f.get("renter_state","").strip() or None,
+                f.get("renter_zip","").strip() or None,
+                booking_id
+            ))
+            conn.commit()
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Update address error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
