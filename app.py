@@ -1495,9 +1495,14 @@ function buildDropdowns(){
   });
   const wrap=document.getElementById('category-dropdowns');
   wrap.innerHTML='';
+  const CAT_ORDER=['🪑 Chairs','🪣 Tables','🔤 Marquee Letters','🔢 Marquee Numbers'];
   const sorted=Object.entries(groups).sort(([a],[b])=>{
     if(a==='📦 Other') return 1;
     if(b==='📦 Other') return -1;
+    const ai=CAT_ORDER.indexOf(a), bi=CAT_ORDER.indexOf(b);
+    if(ai>=0&&bi>=0) return ai-bi;
+    if(ai>=0) return -1;
+    if(bi>=0) return 1;
     return a.localeCompare(b);
   });
   sorted.forEach(([cat,items])=>{
