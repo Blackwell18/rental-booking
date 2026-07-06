@@ -666,11 +666,17 @@ def send_customer_email(b):
       <p style="margin:0;font-weight:600;color:#2d3748">Booking Reference</p>
       <p style="margin:.3rem 0 0;font-size:1.5rem;font-weight:700;color:#2b6cb0">#{b.get('id')}</p>
     </div>
+    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:.85rem 1rem;margin:1rem 0">
+      <p style="margin:0;font-size:.88rem;color:#78350f;line-height:1.6">
+        <strong>📋 Please note:</strong> The initial quote is an estimate and the final price may vary.
+        Any price difference will be clearly explained in the invoice we send you before any payment is required.
+      </p>
+    </div>
     <p style="color:#4a5568;line-height:1.7">Keep this reference number handy.{f" Questions? Call <strong>{BUSINESS_PHONE}</strong>." if BUSINESS_PHONE else ""}</p>
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
   </div>
 </div></body></html>"""
-    plain = f"Hi {first},\n\nThank you! Your rental request for {b.get('event_start_date')} has been received.\n\nBooking Reference: #{b.get('id')}\n\nWe'll review and send you an invoice soon.\n\n— {BUSINESS_NAME}"
+    plain = f"Hi {first},\n\nThank you! Your rental request for {b.get('event_start_date')} has been received.\n\nBooking Reference: #{b.get('id')}\n\nPlease note: the initial quote is an estimate and the final price may vary. The exact pricing will be clearly detailed in the invoice we send you.\n\nWe'll review and send you an invoice soon.\n\n— {BUSINESS_NAME}"
     _send_email(email, subject, html, plain)
 
 
@@ -860,6 +866,101 @@ By completing payment you agree to the rental terms and contract.
 
 — {BUSINESS_NAME}"""
 
+    _send_email(email, subject, html, plain)
+
+
+def send_receipt_email(b):
+    """Send a detailed receipt to the customer after payment."""
+    email = b.get("email")
+    if not email:
+        return
+    first  = (b.get("full_name") or "").split()[0] or "Valued Customer"
+    bid    = b.get("id")
+    paid   = float(b.get("amount_paid") or 0)
+    total  = float(b.get("grand_total") or 0)
+    balance = max(round(total - paid, 2), 0)
+
+    # Build items table rows
+    items = b.get("items_json") or []
+    if isinstance(items, str):
+        try: items = json.loads(items)
+        except Exception: items = []
+    item_rows = ""
+    for it in items:
+        name  = it.get("name", "")
+        qty   = it.get("qty", 1)
+        up    = float(it.get("unit_price") or 0)
+        tot   = float(it.get("total") or round(up * qty, 2))
+        item_rows += f"""<tr>
+          <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0">{name}</td>
+          <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;text-align:center">{qty}</td>
+          <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;text-align:right">${up:,.2f}</td>
+          <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;text-align:right">${tot:,.2f}</td>
+        </tr>"""
+
+    delivery_fee  = float(b.get("delivery_fee") or 0)
+    late_fee      = float(b.get("late_night_fee") or 0)
+    if delivery_fee:
+        item_rows += f"""<tr><td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0" colspan="3">Delivery Fee</td>
+          <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;text-align:right">${delivery_fee:,.2f}</td></tr>"""
+    if late_fee:
+        item_rows += f"""<tr><td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0" colspan="3">Late Night Fee</td>
+          <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;text-align:right">${late_fee:,.2f}</td></tr>"""
+
+    balance_row = ""
+    if balance > 0.01:
+        balance_row = f"""<tr style="background:#fff5f5"><td colspan="3" style="padding:.5rem .75rem;font-weight:600;color:#991b1b">Balance Remaining</td>
+          <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#991b1b">${balance:,.2f}</td></tr>"""
+
+    subject = f"Receipt for Order #{bid} — {BUSINESS_NAME}"
+    html = f"""
+<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#1a365d,#2b6cb0);padding:2rem;color:white;text-align:center">
+    <h2 style="margin:0">Payment Receipt</h2>
+    <p style="margin:.4rem 0 0;opacity:.85">{BUSINESS_NAME}</p>
+  </div>
+  <div style="padding:2rem">
+    <p>Hi <strong>{first}</strong>,</p>
+    <p style="color:#4a5568;line-height:1.7">Thank you so much for your business! We truly appreciate you choosing {BUSINESS_NAME} and look forward to making your event a great one.</p>
+    <div style="background:#f0f4f8;border-radius:8px;padding:1rem;margin:1.25rem 0;text-align:center">
+      <p style="margin:0;font-size:.8rem;font-weight:600;color:#718096;text-transform:uppercase;letter-spacing:.05em">Order Number</p>
+      <p style="margin:.25rem 0 0;font-size:1.6rem;font-weight:800;color:#2b6cb0">#{bid}</p>
+      <p style="margin:.25rem 0 0;font-size:.85rem;color:#718096">{b.get('event_start_date','')} — {b.get('event_end_date','')}</p>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin:1rem 0">
+      <thead>
+        <tr style="background:#f0f4f8">
+          <th style="padding:.5rem .75rem;text-align:left;font-weight:600;color:#4a5568">Item</th>
+          <th style="padding:.5rem .75rem;text-align:center;font-weight:600;color:#4a5568">Qty</th>
+          <th style="padding:.5rem .75rem;text-align:right;font-weight:600;color:#4a5568">Unit Price</th>
+          <th style="padding:.5rem .75rem;text-align:right;font-weight:600;color:#4a5568">Total</th>
+        </tr>
+      </thead>
+      <tbody>{item_rows}</tbody>
+      <tfoot>
+        <tr style="background:#f0fdf4">
+          <td colspan="3" style="padding:.6rem .75rem;font-weight:700;color:#166534">Grand Total</td>
+          <td style="padding:.6rem .75rem;text-align:right;font-weight:800;color:#166534">${total:,.2f}</td>
+        </tr>
+        <tr style="background:#f0fdf4">
+          <td colspan="3" style="padding:.5rem .75rem;color:#166534">✅ Amount Paid</td>
+          <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#166534">${paid:,.2f}</td>
+        </tr>
+        {balance_row}
+      </tfoot>
+    </table>
+    <p style="color:#4a5568;line-height:1.7;font-size:.9rem">Please keep this receipt for your records. Order #{bid} is your reference for any questions or changes.</p>
+    {f'<p style="color:#4a5568;font-size:.9rem">Questions? Call <strong>{BUSINESS_PHONE}</strong> or reply to this email.</p>' if BUSINESS_PHONE else ''}
+    <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">With gratitude,<br>— The {BUSINESS_NAME} Team</p>
+  </div>
+</div></body></html>"""
+    plain = (f"RECEIPT — Order #{bid}\n{BUSINESS_NAME}\n\n"
+             f"Hi {first},\n\nThank you for your business! We appreciate you choosing {BUSINESS_NAME}.\n\n"
+             f"Event: {b.get('event_start_date')} — {b.get('event_end_date')}\n"
+             f"Grand Total: ${total:,.2f}\nAmount Paid: ${paid:,.2f}\n"
+             + (f"Balance Due: ${balance:,.2f}\n" if balance > 0.01 else "Paid in Full\n") +
+             f"\nOrder Reference: #{bid}\n\n— {BUSINESS_NAME}")
     _send_email(email, subject, html, plain)
 
 
@@ -2134,6 +2235,38 @@ ADMIN_BOOKING_HTML = """
   </div>
   {% endif %}
 
+  {% if matched_customer %}
+  {% set mc = matched_customer %}
+  <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
+    <div style="font-weight:700;color:#1e40af;margin-bottom:.4rem">🔗 Existing Customer Profile Found</div>
+    <div style="font-size:.88rem;color:#1e3a8a;margin-bottom:.75rem">
+      A customer profile matches this booking's name: <strong>{{ mc.full_name }}</strong><br>
+      Profile email: {{ mc.email or '—' }} &nbsp;|&nbsp; Profile phone: {{ mc.phone or '—' }}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+      {% if mc.email != b.email or mc.phone != b.phone %}
+      <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
+        <input type="hidden" name="action" value="update_profile">
+        <button style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer">
+          ↑ Update Profile with Booking Info
+        </button>
+      </form>
+      <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
+        <input type="hidden" name="action" value="update_booking">
+        <button style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer">
+          ↓ Fill Booking from Profile
+        </button>
+      </form>
+      {% else %}
+      <span style="font-size:.85rem;color:#166534;font-weight:600">✅ Profile info matches — no update needed</span>
+      {% endif %}
+      <a href="/admin/customers/{{ mc.id }}" style="background:white;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;text-decoration:none">
+        View Profile →
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="card">
     <h2>Customer</h2>
     <div class="row">
@@ -2438,6 +2571,14 @@ ADMIN_BOOKING_HTML = """
       <input type="hidden" name="custom_amount" id="final-amount-input">
       <button type="button" class="btn btn-reminder" id="final-btn">
         Send Final Payment Reminder
+      </button>
+    </form>
+    {% endif %}
+    {% if b.status in ('confirmed', 'accepted') %}
+    <form method="POST" action="/admin/booking/{{ b.id }}/send-receipt"
+          onsubmit="return confirm('Send a payment receipt to {{ b.email }}?')">
+      <button class="btn" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;font-weight:700">
+        📄 Send Receipt to Customer
       </button>
     </form>
     {% endif %}
@@ -3272,10 +3413,29 @@ def admin_booking(booking_id):
     except Exception:
         pass
 
+    # Check for matching customer profile by name
+    matched_customer = None
+    try:
+        conn2 = get_db()
+        if conn2:
+            cur2 = conn2.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur2.execute("""
+                SELECT * FROM customers
+                WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(%s))
+                LIMIT 1
+            """, (b.get("full_name") or "",))
+            crow = cur2.fetchone()
+            cur2.close(); conn2.close()
+            if crow:
+                matched_customer = _row(crow)
+    except Exception as e:
+        log.error(f"Customer match lookup error: {e}")
+
     try:
         return render_template_string(ADMIN_BOOKING_HTML,
             business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until,
-            products=get_products(), payment_links=get_payment_links(booking_id))
+            products=get_products(), payment_links=get_payment_links(booking_id),
+            matched_customer=matched_customer)
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
         return "Error rendering booking — please contact support.", 500
@@ -3413,8 +3573,12 @@ def confirm_booking(booking_id):
             cur = conn.cursor()
             cur.execute("UPDATE bookings SET status='confirmed' WHERE id=%s", (booking_id,))
             conn.commit()
-            cur.close()
-            conn.close()
+            cur2 = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur2.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            row = cur2.fetchone()
+            cur2.close(); cur.close(); conn.close()
+            if row:
+                send_receipt_email(_row(row))
             log.info(f"Booking #{booking_id} manually confirmed")
         except Exception as e:
             log.error(f"Confirm error: {e}")
@@ -3552,6 +3716,73 @@ def update_booking_items(booking_id):
             conn.close()
         except Exception as e:
             log.error(f"Update items error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/sync-customer-profile", methods=["POST"])
+@admin_required
+def sync_customer_profile(booking_id):
+    """Sync between booking info and matching customer profile."""
+    action = request.form.get("action", "")
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+        brow = cur.fetchone()
+        if not brow:
+            cur.close(); conn.close()
+            return redirect(url_for("admin_booking", booking_id=booking_id))
+        b = _row(brow)
+        cur.execute("SELECT * FROM customers WHERE LOWER(TRIM(full_name))=LOWER(TRIM(%s)) LIMIT 1",
+                    (b.get("full_name") or "",))
+        crow = cur.fetchone()
+        if crow:
+            mc = _row(crow)
+            if action == "update_profile":
+                # Push booking phone/email → customer profile
+                cur2 = conn.cursor()
+                cur2.execute("""
+                    UPDATE customers SET
+                      email = COALESCE(NULLIF(%s,''), email),
+                      phone = COALESCE(NULLIF(%s,''), phone)
+                    WHERE id=%s
+                """, (b.get("email") or "", b.get("phone") or "", mc["id"]))
+                conn.commit(); cur2.close()
+                log.info(f"Customer profile {mc['id']} updated from booking #{booking_id}")
+            elif action == "update_booking":
+                # Pull customer profile phone/email → booking
+                cur2 = conn.cursor()
+                cur2.execute("""
+                    UPDATE bookings SET
+                      email = COALESCE(NULLIF(%s,''), email),
+                      phone = COALESCE(NULLIF(%s,''), phone)
+                    WHERE id=%s
+                """, (mc.get("email") or "", mc.get("phone") or "", booking_id))
+                conn.commit(); cur2.close()
+                log.info(f"Booking #{booking_id} updated from customer profile {mc['id']}")
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"Sync customer profile error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/send-receipt", methods=["POST"])
+@admin_required
+def admin_send_receipt(booking_id):
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row:
+                send_receipt_email(_row(row))
+                log.info(f"Manual receipt sent for #{booking_id}")
+        except Exception as e:
+            log.error(f"Send receipt error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
@@ -3873,8 +4104,15 @@ def stripe_webhook():
                             (sess.get("id"), int(booking_id))
                         )
                         conn.commit()
+                        # Fetch booking for receipt
+                        cur2 = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                        cur2.execute("SELECT * FROM bookings WHERE id=%s", (int(booking_id),))
+                        row = cur2.fetchone()
+                        cur2.close()
                         cur.close()
                         conn.close()
+                        if row:
+                            send_receipt_email(_row(row))
                         log.info(f"Booking #{booking_id} auto-confirmed via Stripe webhook")
                     except Exception as e:
                         log.error(f"Webhook DB error: {e}")
