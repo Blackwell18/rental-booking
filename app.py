@@ -1558,17 +1558,17 @@ function renderCart(){
   if(ids.length===0){ wrap.style.display='none'; list.innerHTML=''; return; }
   wrap.style.display='block';
   // Calculate total marquee numbers for proration
-  let totalMarqueeCount=0;
-  ids.forEach(id=>{ const p=ALL_PRODUCTS.find(x=>x.id===id); if(p&&getCat(p.name)==='🔢 Marquee Numbers') totalMarqueeCount+=cart[id]; });
-  const marqueeTierTotal=getMarqueeNumberTotal(totalMarqueeCount);
-  const marqueeUnitShare=totalMarqueeCount>0?marqueeTierTotal/totalMarqueeCount:0;
+  let mnCount=0;
+  ids.forEach(id=>{ const p=ALL_PRODUCTS.find(x=>x.id===id); if(p&&/^marquee\s+#?\d/i.test(p.name)) mnCount+=cart[id]||0; });
+  const mnTierTotal=getMarqueeNumberTotal(mnCount);
+  const mnUnitPrice=mnCount>0?(mnTierTotal/mnCount):0;
   list.innerHTML=ids.map(id=>{
     const p=ALL_PRODUCTS.find(x=>x.id===id);
     const q=cart[id]||1;
-    const isMarqueeNum=getCat(p.name)==='🔢 Marquee Numbers';
-    const unitPrice=isMarqueeNum?(marqueeTierTotal/totalMarqueeCount):p.price;
+    const isMN=/^marquee\s+#?\d/i.test(p.name);
+    const unitPrice=isMN?mnUnitPrice:p.price;
     const lineTotal=(unitPrice*q).toFixed(2);
-    const unitLabel=isMarqueeNum?`$${unitPrice.toFixed(2)} ea <span style="font-size:.75rem;color:#2563eb">(tier)</span>`:`$${p.price.toFixed(2)} ea`;
+    const unitLabel=isMN?`$${unitPrice.toFixed(2)} ea <span style="font-size:.75rem;color:#2563eb;font-weight:600">(tier)</span>`:`$${p.price.toFixed(2)} ea`;
     return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem .5rem;border-bottom:1px solid #f3f4f6">
       <span style="flex:1;font-size:.92rem;font-weight:600;color:#1a202c">${p.name}</span>
       <span style="font-size:.82rem;color:#6b7280;white-space:nowrap">${unitLabel}</span>
