@@ -1631,6 +1631,7 @@ FORM_HTML = r"""
 </head>
 <body>
 <header>
+  <img src="/static/logo.png" alt="{{ business_name }}" style="height:90px;width:auto;object-fit:contain;margin-bottom:.6rem;filter:drop-shadow(0 2px 8px rgba(0,0,0,.25))">
   <h1>{{ business_name }}</h1>
   <p>Request a rental quote — we'll respond quickly!</p>
 </header>
@@ -2406,7 +2407,7 @@ ADMIN_DASH_HTML = """
 <body>
 
 <div class="topbar">
-  <div class="topbar-brand"><span>🎉</span> {{ business_name }}</div>
+  <div class="topbar-brand"><img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
   <div style="display:flex;align-items:center;gap:.5rem">
     <a href="/admin/dashboard" style="color:#2563eb;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .75rem;border-radius:6px;background:#eff6ff">Dashboard</a>
     <a href="/admin/inventory" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Inventory</a>
@@ -2736,7 +2737,10 @@ ADMIN_BOOKING_EDIT_HTML = """
 </head>
 <body>
 <header>
-  <h1>✏️ Edit Booking #{{ b.id }} — {{ b.full_name }}</h1>
+  <div style="display:flex;align-items:center;gap:.75rem">
+    <img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))">
+    <h1>✏️ Edit Booking #{{ b.id }} — {{ b.full_name }}</h1>
+  </div>
   <a href="/admin/booking/{{ b.id }}" style="color:white;text-decoration:none;font-size:.9rem">← Cancel</a>
 </header>
 <div class="container">
@@ -2856,7 +2860,10 @@ ADMIN_NEW_BOOKING_HTML = """
 </head>
 <body>
 <header>
-  <h1>➕ New Manual Booking</h1>
+  <div style="display:flex;align-items:center;gap:.75rem">
+    <img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))">
+    <h1>➕ New Manual Booking</h1>
+  </div>
   <a href="/admin/dashboard" style="color:white;text-decoration:none;font-size:.9rem">← Dashboard</a>
 </header>
 <div class="container">
@@ -3094,6 +3101,7 @@ ADMIN_BOOKING_HTML = """
 <header>
   <div style="display:flex;align-items:center;gap:.75rem">
     <a href="/admin" title="Dashboard" style="display:flex;align-items:center;justify-content:center;width:2.1rem;height:2.1rem;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:8px;text-decoration:none;font-size:1.1rem;line-height:1">🏠</a>
+    <img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))">
     <h1>Booking #{{ b.id }}</h1>
   </div>
   <div style="display:flex;gap:.75rem;align-items:center">
@@ -4211,7 +4219,7 @@ ADMIN_INVENTORY_HTML = """
 </head>
 <body>
 <div class="topbar">
-  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-brand"><img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
   <div class="topbar-nav">
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link active">Inventory</a>
@@ -5975,7 +5983,7 @@ ADMIN_CUSTOMERS_HTML = """
 </head>
 <body>
 <div class="topbar">
-  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-brand"><img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
   <div class="topbar-nav">
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link">Inventory</a>
@@ -6208,7 +6216,7 @@ ADMIN_CUSTOMER_IMPORT_HTML = """
 </head>
 <body>
 <div class="topbar">
-  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-brand"><img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
   <div class="topbar-nav">
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link">Inventory</a>
@@ -6375,7 +6383,7 @@ ADMIN_CUSTOMER_EDIT_HTML = """
 </head>
 <body>
 <div class="topbar">
-  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-brand"><img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
   <div class="topbar-nav">
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link">Inventory</a>
@@ -6845,7 +6853,7 @@ ADMIN_CALENDAR_HTML = """
 </head>
 <body>
 <div class="topbar">
-  <div class="topbar-brand">🎉 {{ business_name }}</div>
+  <div class="topbar-brand"><img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
   <div class="topbar-nav">
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link">Inventory</a>
@@ -7386,7 +7394,7 @@ ADMIN_ROUTE_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="topbar">
-  <div class="topbar-brand">&#127881; {{ business_name }}</div>
+  <div class="topbar-brand"><img src="/static/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
   <div class="topbar-nav">
     <a href="/admin/dashboard" class="nav-link">Dashboard</a>
     <a href="/admin/inventory" class="nav-link">Inventory</a>
