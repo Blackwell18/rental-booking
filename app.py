@@ -2913,13 +2913,26 @@ ADMIN_NEW_BOOKING_HTML = """
           <option value="other">Other</option>
         </select>
       </div>
-      <div><label>Status</label>
-        <select name="status">
+      <div>
+        <label>Status</label>
+        <select name="status" id="nb_status" onchange="onStatusChange()">
           <option value="confirmed">Confirmed (Paid in Full)</option>
           <option value="partial">Confirmed (Partial Payment)</option>
           <option value="accepted">Accepted (Awaiting Payment)</option>
           <option value="pending">Pending Review</option>
         </select>
+      </div>
+    </div>
+    <div id="partial_pay_row" style="display:none;margin-top:.75rem;padding:.75rem 1rem;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px">
+      <label style="font-weight:700;color:#7c3aed;font-size:.85rem;display:block;margin-bottom:.4rem">💳 How much did they pay?</label>
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:.4rem">
+          <span style="font-weight:600">$</span>
+          <input type="number" step="0.01" min="0" placeholder="0.00" id="partial_amt_input"
+                 style="width:130px;padding:.4rem .6rem;border:1px solid #c4b5fd;border-radius:6px;font-size:1rem"
+                 oninput="syncPartialAmt()">
+        </div>
+        <span id="partial_balance_note" style="font-size:.85rem;color:#7c3aed;font-weight:600"></span>
       </div>
     </div>
     <div class="fg" style="margin-top:.75rem">
@@ -3065,6 +3078,30 @@ function prepSubmit() {
 
 // Start with two blank rows
 addRow(); addRow();
+
+// ── Partial payment toggle ───────────────────────────────────────────────────
+function onStatusChange() {
+  const status = document.getElementById('nb_status').value;
+  const row = document.getElementById('partial_pay_row');
+  row.style.display = (status === 'partial') ? 'block' : 'none';
+  if (status !== 'partial') {
+    document.getElementById('amt_paid').value = '0';
+    recalc();
+  }
+}
+
+function syncPartialAmt() {
+  const val = parseFloat(document.getElementById('partial_amt_input').value) || 0;
+  document.getElementById('amt_paid').value = val.toFixed(2);
+  recalc();
+  const grand = parseFloat(document.getElementById('grand_total').value) || 0;
+  const bal = Math.max(0, grand - val);
+  const noteEl = document.getElementById('partial_balance_note');
+  if (grand > 0) {
+    noteEl.textContent = `Balance remaining: $${bal.toFixed(2)}`;
+    noteEl.style.color = bal > 0 ? '#7c3aed' : '#16a34a';
+  }
+}
 
 // ── Delivery fee auto-calculate ──────────────────────────────────────────────
 (function() {
