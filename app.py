@@ -4814,9 +4814,7 @@ def admin_dashboard():
             for row in rows:
                 b = _row(row)
                 items = json.loads(b.get("items_json") or "[]")
-                b["items_summary"] = ", ".join(f"{i['qty']}x {i['name']}" for i in items[:2])
-                if len(items) > 2:
-                    b["items_summary"] += f" +{len(items)-2} more"
+                b["items_summary"] = "  ·  ".join(f"{i['qty']}x" for i in items)
                 # Payment label + class
                 paid    = float(b.get("amount_paid") or 0)
                 total   = float(b.get("grand_total") or 0)
