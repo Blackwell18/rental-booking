@@ -3561,7 +3561,7 @@ ADMIN_BOOKING_HTML = """
         <a href="/admin/booking/{{ b.id }}/remove-discount" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:7px;padding:.5rem 1rem;font-size:.88rem;font-weight:600;text-decoration:none">Remove</a>
         {% endif %}
       </div>
-      <p style="font-size:.78rem;color:#6b7280;margin-top:.6rem;margin-bottom:0">Discount is applied to items subtotal before tax. Grand total is recalculated automatically.</p>
+      <p style="font-size:.78rem;color:#6b7280;margin-top:.6rem;margin-bottom:0">Discount is applied to the full pre-tax total (items + delivery fees). Grand total is recalculated automatically.</p>
     </form>
   </div>
 
@@ -5198,12 +5198,12 @@ def update_booking_items(booking_id):
             disc_value = float(row["discount_value"] or 0) if row else 0.0
             tax_rate   = float(row["tax_rate"]  or 0.0635) if row else 0.0635
 
-            # Reapply discount
+            # Reapply discount to full pre-tax total (items + fees)
             disc_amount = 0.0
             if disc_type == "percent" and disc_value > 0:
                 disc_amount = round(pre_tax * disc_value / 100.0, 2)
             elif disc_type == "amount" and disc_value > 0:
-                disc_amount = min(round(disc_value, 2), pre_tax)
+                disc_amount = round(min(disc_value, pre_tax), 2)
 
             taxable    = round(pre_tax - disc_amount, 2)
             tax_amount = round(taxable * tax_rate, 2)
@@ -5361,21 +5361,20 @@ def apply_discount(booking_id):
 
         items_subtotal = float(b.get("items_subtotal") or 0)
         delivery_fee   = float(b.get("delivery_fee")   or 0)
-        exact_fee      = float(b.get("exact_time_fee") or 0)
-        late_night_fee = float(b.get("late_night_fee") or 0)
+        exact_fee      = 175.0 if b.get("exact_time_delivery") else 0.0
         tax_rate       = float(b.get("tax_rate")       or 0.0635)
         tax_exempt     = bool(b.get("tax_exempt"))
 
-        # Calculate discount amount
+        # Discount applies to full pre-tax total (items + fees)
+        pre_tax_full = round(items_subtotal + delivery_fee + exact_fee, 2)
         if disc_type == "percent":
-            disc_amount = round(items_subtotal * (disc_value / 100.0), 2)
+            disc_amount = round(pre_tax_full * (disc_value / 100.0), 2)
         else:
-            disc_amount = round(min(disc_value, items_subtotal), 2)
+            disc_amount = round(min(disc_value, pre_tax_full), 2)
 
-        discounted_subtotal = round(items_subtotal - disc_amount, 2)
-        pre_tax = round(discounted_subtotal + delivery_fee + exact_fee + late_night_fee, 2)
-        tax_amount  = 0.0 if tax_exempt else round(pre_tax * tax_rate, 2)
-        grand_total = round(pre_tax + tax_amount, 2)
+        taxable     = round(pre_tax_full - disc_amount, 2)
+        tax_amount  = 0.0 if tax_exempt else round(taxable * tax_rate, 2)
+        grand_total = round(taxable + tax_amount, 2)
 
         cur.execute("""
             UPDATE bookings
