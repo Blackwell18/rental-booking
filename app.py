@@ -2893,6 +2893,10 @@ ADMIN_NEW_BOOKING_HTML = """
       <div><label>Phone</label><input name="phone" id="nb_phone" placeholder="(555) 000-0000"></div>
       <div><label>Company</label><input name="company_name" id="nb_company" placeholder="Optional"></div>
     </div>
+    <input type="hidden" name="renter_street" id="nb_renter_street">
+    <input type="hidden" name="renter_city"   id="nb_renter_city">
+    <input type="hidden" name="renter_state"  id="nb_renter_state">
+    <input type="hidden" name="renter_zip"    id="nb_renter_zip">
   </div>
 
   <div class="card">
@@ -3157,14 +3161,13 @@ function syncPartialAmt() {
             li.addEventListener('mousedown', function(e) {
               e.preventDefault();
               nameInput.value = c.full_name;
-              document.getElementById('nb_email').value   = c.email        || '';
-              document.getElementById('nb_phone').value   = c.phone        || '';
-              document.getElementById('nb_company').value = c.company_name || '';
-              // fill event address if present
-              if (c.event_street) document.querySelector('[name=event_street]').value = c.event_street;
-              if (c.event_city)   document.querySelector('[name=event_city]').value   = c.event_city;
-              if (c.event_state)  document.querySelector('[name=event_state]').value  = c.event_state;
-              if (c.event_zip)    document.querySelector('[name=event_zip]').value    = c.event_zip;
+              document.getElementById('nb_email').value         = c.email        || '';
+              document.getElementById('nb_phone').value         = c.phone        || '';
+              document.getElementById('nb_company').value       = c.company_name || '';
+              document.getElementById('nb_renter_street').value = c.renter_street || '';
+              document.getElementById('nb_renter_city').value   = c.renter_city   || '';
+              document.getElementById('nb_renter_state').value  = c.renter_state  || '';
+              document.getElementById('nb_renter_zip').value    = c.renter_zip    || '';
               suggestions.style.display = 'none';
             });
             suggestions.appendChild(li);
@@ -5323,8 +5326,8 @@ def customer_search():
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute("""
                 SELECT full_name, email, phone, company_name,
-                       street AS event_street, city AS event_city,
-                       state AS event_state, zip AS event_zip
+                       street AS renter_street, city AS renter_city,
+                       state AS renter_state, zip AS renter_zip
                 FROM (
                     SELECT full_name, email, phone, company_name,
                            street, city, state, zip,
@@ -5338,8 +5341,8 @@ def customer_search():
                       AND TRIM(full_name) != ''
                     UNION ALL
                     SELECT full_name, email, phone, company_name,
-                           event_street AS street, event_city AS city,
-                           event_state AS state, event_zip AS zip,
+                           renter_street AS street, renter_city AS city,
+                           renter_state AS state, renter_zip AS zip,
                            ROW_NUMBER() OVER (
                                PARTITION BY LOWER(TRIM(full_name))
                                ORDER BY id DESC
