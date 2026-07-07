@@ -2454,25 +2454,6 @@ ADMIN_DASH_HTML = """
   </div>
   {% endif %}
 
-  <!-- ── Metric Cards ── -->
-  <div class="metrics">
-    <div class="metric">
-      <div class="metric-label">Bookings</div>
-      <div class="metric-value">{{ stats.total }}</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Pending Review</div>
-      <div class="metric-value" style="color:#d97706">{{ stats.pending }}</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Revenue</div>
-      <div class="metric-value" style="color:#059669">${{ "{:,.2f}".format(stats.revenue) }}</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Amount Due</div>
-      <div class="metric-value" style="color:#dc2626">${{ "{:,.2f}".format(stats.amount_due) }}</div>
-    </div>
-  </div>
 
 
   <!-- ── Bookings ── -->
