@@ -2109,9 +2109,12 @@ endDateEl.addEventListener('change', function() {
   onDateChange();
 });
 
-// When start time changes, end time must be after it; setup time must be before it
+// When start time changes:
+//   - end time rule only applies if start date == end date (same-day event)
+//   - delivery (setup) time must always be before start time (delivery is always same day as start)
 startTimeEl.addEventListener('change', function() {
-  if (endTimeEl.value && endTimeEl.value <= this.value) {
+  const sameDay = startDateEl.value && endDateEl.value && startDateEl.value === endDateEl.value;
+  if (sameDay && endTimeEl.value && endTimeEl.value <= this.value) {
     endTimeEl.value = '';
     showTimeError('Event end time must be after start time.');
   }
@@ -2122,7 +2125,8 @@ startTimeEl.addEventListener('change', function() {
 });
 
 endTimeEl.addEventListener('change', function() {
-  if (startTimeEl.value && this.value <= startTimeEl.value) {
+  const sameDay = startDateEl.value && endDateEl.value && startDateEl.value === endDateEl.value;
+  if (sameDay && startTimeEl.value && this.value <= startTimeEl.value) {
     this.value = '';
     showTimeError('Event end time must be after the start time.');
   }
@@ -2132,7 +2136,7 @@ endTimeEl.addEventListener('change', function() {
 setupTimeEl.addEventListener('change', function() {
   if (startTimeEl.value && this.value >= startTimeEl.value) {
     this.value = '';
-    showTimeError('Setup time must be before the event start time.');
+    showTimeError('Setup / delivery time must be before the event start time.');
   }
 });
 
@@ -2153,10 +2157,13 @@ document.getElementById('bookingForm').addEventListener('submit', function(e) {
   const errors = [];
   const sd = startDateEl.value, ed = endDateEl.value;
   const st = startTimeEl.value, et = endTimeEl.value, sut = setupTimeEl.value;
+  const sameDay = sd && ed && sd === ed;
 
   if (sd && ed && ed < sd)   errors.push('End date cannot be before start date.');
-  if (st && et && et <= st)  errors.push('Event end time must be after the start time.');
-  if (sut && st && sut >= st) errors.push('Setup time must be before the event start time.');
+  // End time vs start time only matters when event starts and ends the same day
+  if (sameDay && st && et && et <= st)  errors.push('Event end time must be after the start time.');
+  // Delivery time must always be before start time — delivery is always on the start date
+  if (sut && st && sut >= st) errors.push('Setup / delivery time must be before the event start time.');
 
   if (errors.length) {
     e.preventDefault();
