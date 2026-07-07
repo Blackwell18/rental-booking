@@ -75,6 +75,17 @@ def _row(row):
         return None
     return {k: float(v) if isinstance(v, decimal.Decimal) else v for k, v in dict(row).items()}
 
+def _fmt_date(d):
+    """Format a date as MM/DD/YYYY. Accepts datetime.date, datetime, or YYYY-MM-DD string."""
+    if not d:
+        return ''
+    if hasattr(d, 'strftime'):
+        return d.strftime('%m/%d/%Y')
+    s = str(d)[:10]
+    if len(s) == 10 and s[4] == '-':
+        return f"{s[5:7]}/{s[8:10]}/{s[0:4]}"
+    return s
+
 BUSINESS_NAME    = os.getenv("BUSINESS_NAME",    "Rent a Party, LLC")
 BUSINESS_PHONE   = os.getenv("BUSINESS_PHONE",   "")
 BUSINESS_EMAIL   = os.getenv("BUSINESS_EMAIL",   "")
@@ -740,7 +751,7 @@ def send_owner_email(b):
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${it['unit_price']:.2f}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${it['total']:.2f}</td>
         </tr>"""
-    subject = f"New Booking #{b.get('id')} — {b.get('full_name')} | {b.get('event_start_date')}"
+    subject = f"New Booking #{b.get('id')} — {b.get('full_name')} | {_fmt_date(b.get('event_start_date'))}"
     html = f"""
 <html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
 <div style="max-width:640px;margin:0 auto">
@@ -758,7 +769,7 @@ def send_owner_email(b):
     </table>
     <table style="width:100%;border-collapse:collapse;margin-bottom:1.5rem">
       <tr style="background:#ebf4ff"><td colspan="2" style="padding:10px 12px;font-weight:700;color:#2b6cb0;text-transform:uppercase;font-size:.85rem">Event</td></tr>
-      <tr><td style="padding:8px 12px;color:#718096;width:160px">Dates</td><td style="padding:8px 12px;font-weight:600">{b.get('event_start_date')} to {b.get('event_end_date')}</td></tr>
+      <tr><td style="padding:8px 12px;color:#718096;width:160px">Dates</td><td style="padding:8px 12px;font-weight:600">{_fmt_date(b.get('event_start_date'))} to {_fmt_date(b.get('event_end_date'))}</td></tr>
       <tr style="background:#f7fafc"><td style="padding:8px 12px;color:#718096">Event Address</td><td style="padding:8px 12px">{event_addr}</td></tr>
     </table>
     <table style="width:100%;border-collapse:collapse;margin-bottom:1.5rem">
@@ -780,7 +791,7 @@ def send_owner_email(b):
     </div>
   </div>
 </div></body></html>"""
-    plain = f"NEW BOOKING #{b.get('id')}\n{b.get('full_name')} | {b.get('email')} | {b.get('phone')}\nEvent: {b.get('event_start_date')}\nTotal: ${b.get('grand_total',0):.2f}\n"
+    plain = f"NEW BOOKING #{b.get('id')}\n{b.get('full_name')} | {b.get('email')} | {b.get('phone')}\nEvent: {_fmt_date(b.get('event_start_date'))}\nTotal: ${b.get('grand_total',0):.2f}\n"
     _send_email(OWNER_EMAIL, subject, html, plain, reply_to=b.get("email"))
 
 
@@ -1074,7 +1085,7 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
 
     <!-- Event Summary box -->
     <div style="background:#f0fff4;border:1.5px solid #68d391;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem;font-size:.9rem;color:#2d3748">
-      <div style="margin-bottom:.3rem"><strong>Event Date:</strong> {b.get('event_start_date')} &rarr; {b.get('event_end_date')}</div>
+      <div style="margin-bottom:.3rem"><strong>Event Date:</strong> {_fmt_date(b.get('event_start_date'))} &rarr; {_fmt_date(b.get('event_end_date'))}</div>
       <div style="margin-bottom:.3rem"><strong>Location:</strong> {event_addr}</div>
       <div><strong>Deliver to:</strong> {b.get('delivery_location','')}</div>
     </div>
@@ -1143,7 +1154,7 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
 GREAT NEWS — Your rental request (Booking #{b.get('id')}) has been ACCEPTED!
 
 EVENT DETAILS
-  Date:       {b.get('event_start_date')} - {b.get('event_end_date')}
+  Date:       {_fmt_date(b.get('event_start_date'))} - {_fmt_date(b.get('event_end_date'))}
   Location:   {event_addr}
   Deliver to: {b.get('delivery_location','')}
 
@@ -1231,7 +1242,7 @@ def send_receipt_email(b):
     <div style="background:#f0f4f8;border-radius:8px;padding:1rem;margin:1.25rem 0;text-align:center">
       <p style="margin:0;font-size:.8rem;font-weight:600;color:#718096;text-transform:uppercase;letter-spacing:.05em">Order Number</p>
       <p style="margin:.25rem 0 0;font-size:1.6rem;font-weight:800;color:#2b6cb0">#{bid}</p>
-      <p style="margin:.25rem 0 0;font-size:.85rem;color:#718096">{b.get('event_start_date','')} — {b.get('event_end_date','')}</p>
+      <p style="margin:.25rem 0 0;font-size:.85rem;color:#718096">{_fmt_date(b.get('event_start_date'))} — {_fmt_date(b.get('event_end_date'))}</p>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin:1rem 0">
       <thead>
@@ -1262,7 +1273,7 @@ def send_receipt_email(b):
 </div></body></html>"""
     plain = (f"RECEIPT — Order #{bid}\n{BUSINESS_NAME}\n\n"
              f"Hi {first},\n\nThank you for your business! We appreciate you choosing {BUSINESS_NAME}.\n\n"
-             f"Event: {b.get('event_start_date')} — {b.get('event_end_date')}\n"
+             f"Event: {_fmt_date(b.get('event_start_date'))} — {_fmt_date(b.get('event_end_date'))}\n"
              f"Grand Total: ${total:,.2f}\nAmount Paid: ${paid:,.2f}\n"
              + (f"Balance Due: ${balance:,.2f}\n" if balance > 0.01 else "Paid in Full\n") +
              f"\nOrder Reference: #{bid}\n\n— {BUSINESS_NAME}")
@@ -1285,7 +1296,7 @@ def send_denied_email(b):
   <div style="padding:2rem">
     <p>Hi <strong>{first}</strong>,</p>
     <p style="color:#4a5568;line-height:1.7;margin:.75rem 0">
-      Thank you for thinking of us for your event on <strong>{b.get('event_start_date')}</strong>.
+      Thank you for thinking of us for your event on <strong>{_fmt_date(b.get('event_start_date'))}</strong>.
       Unfortunately, we are unable to accommodate your rental request at this time.
       This may be due to availability, date conflicts, or other circumstances.
     </p>
@@ -1297,7 +1308,7 @@ def send_denied_email(b):
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
   </div>
 </div></body></html>"""
-    plain = f"Hi {first},\n\nThank you for your interest in {BUSINESS_NAME}. Unfortunately, we are unable to accommodate your rental request for {b.get('event_start_date')} at this time.\n\nWe hope to serve you in the future.{f' Please call {BUSINESS_PHONE} if you have questions.' if BUSINESS_PHONE else ''}\n\n— {BUSINESS_NAME}"
+    plain = f"Hi {first},\n\nThank you for your interest in {BUSINESS_NAME}. Unfortunately, we are unable to accommodate your rental request for {_fmt_date(b.get('event_start_date'))} at this time.\n\nWe hope to serve you in the future.{f' Please call {BUSINESS_PHONE} if you have questions.' if BUSINESS_PHONE else ''}\n\n— {BUSINESS_NAME}"
     _send_email(email, subject, html, plain)
 
 
@@ -2522,9 +2533,9 @@ ADMIN_DASH_HTML = """
           <td><span class="badge badge-{{ b.status }}">{{ b.status | capitalize }}</span></td>
           <td>
             <div class="date-range">
-              <span>{{ b.event_start_date }}</span>
+              <span>{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }}</span>
               <span class="date-arrow">→</span>
-              <span>{{ b.event_end_date }}</span>
+              <span>{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '' }}</span>
             </div>
             {% if b.maps_url %}
             <a href="{{ b.maps_url }}" target="_blank" rel="noopener noreferrer"
@@ -3189,7 +3200,7 @@ ADMIN_BOOKING_HTML = """
     </div>
     {% endif %}
     <div class="row">
-      <span class="k">Dates</span><span class="v">{{ b.event_start_date }} - {{ b.event_end_date }}</span>
+      <span class="k">Dates</span><span class="v">{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }} - {{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '' }}</span>
       <span class="k">Event Start Time</span><span class="v">{{ b.event_start_time }}</span>
       <span class="k">Pickup Time</span><span class="v">{{ b.event_end_time }}</span>
       <span class="k">Delivery Time</span><span class="v">{{ b.setup_time }}</span>
@@ -4378,8 +4389,8 @@ def customer_booking_view(token):
   <div class="card">
     <div class="section-title">Event Details</div>
     <div class="row">
-      <div class="field"><label>Delivery Date</label><span>{b.get('event_start_date') or '—'}</span></div>
-      <div class="field"><label>Pickup Date</label><span>{b.get('event_end_date') or '—'}</span></div>
+      <div class="field"><label>Delivery Date</label><span>{_fmt_date(b.get('event_start_date')) or '—'}</span></div>
+      <div class="field"><label>Pickup Date</label><span>{_fmt_date(b.get('event_end_date')) or '—'}</span></div>
       <div class="field"><label>Delivery / Setup Time</label><span>{b.get('setup_time') or '—'}</span></div>
       <div class="field"><label>Pickup Time</label><span>{b.get('event_end_time') or '—'}</span></div>
       <div class="field"><label>Venue Type</label><span>{venue_map.get(b.get('venue_type',''), b.get('venue_type','') or '—')}</span></div>
@@ -6299,7 +6310,7 @@ ADMIN_CUSTOMER_EDIT_HTML = """
         {% for b in bookings %}
         <tr>
           <td><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;font-weight:600">#{{ b.id }}</a></td>
-          <td>{{ b.event_start_date }}</td>
+          <td>{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }}</td>
           <td>${{ "%.2f"|format(b.grand_total or 0) }}</td>
           <td><span class="badge badge-{{ b.status }}">{{ b.status|capitalize }}</span></td>
         </tr>
@@ -6886,10 +6897,12 @@ function changeMonth(delta){
 }
 function goToday(){curYear=today.getFullYear();curMonth=today.getMonth();renderCalendar();}
 
+function fmtD(s){if(!s)return '';var p=s.split('-');return p.length===3?p[1]+'/'+p[2]+'/'+p[0]:s;}
+
 function showModal(b){
   document.getElementById('modalTitle').textContent = '#'+b.id+' — '+b.full_name;
   var rows = [
-    ['Dates', b.event_start_date + (b.event_end_date&&b.event_end_date!==b.event_start_date?' → '+b.event_end_date:'')],
+    ['Dates', fmtD(b.event_start_date) + (b.event_end_date&&b.event_end_date!==b.event_start_date?' → '+fmtD(b.event_end_date):'')],
     ['Status', b.status.charAt(0).toUpperCase()+b.status.slice(1)],
     ['Payment', b.status==='confirmed'?(b.amount_paid>0&&b.amount_paid<b.grand_total-0.01?'Partial — $'+(b.grand_total-b.amount_paid).toFixed(2)+' owed':(b.final_payment_link?'Partially Paid':'Paid In Full')):(b.status==='accepted'?'Payment Due':'—')],
     ['Total', '$'+parseFloat(b.grand_total||0).toFixed(2)],
