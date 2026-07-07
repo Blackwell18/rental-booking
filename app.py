@@ -5228,7 +5228,7 @@ def edit_booking(booking_id):
 @app.route("/admin/customer-search")
 @admin_required
 def customer_search():
-    """Return up to 10 customers whose name matches the query string (JSON)."""
+    """Search both customers table and bookings table, return up to 10 matches."""
     q = request.args.get("q", "").strip()
     if len(q) < 1:
         return jsonify([])
@@ -5237,10 +5237,23 @@ def customer_search():
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute("""
                 SELECT full_name, email, phone, company_name,
-                       event_street, event_city, event_state, event_zip
+                       street AS event_street, city AS event_city,
+                       state AS event_state, zip AS event_zip
                 FROM (
                     SELECT full_name, email, phone, company_name,
-                           event_street, event_city, event_state, event_zip,
+                           street, city, state, zip,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY LOWER(TRIM(full_name))
+                               ORDER BY id DESC
+                           ) AS rn
+                    FROM customers
+                    WHERE full_name ILIKE %s
+                      AND full_name IS NOT NULL
+                      AND TRIM(full_name) != ''
+                    UNION ALL
+                    SELECT full_name, email, phone, company_name,
+                           event_street AS street, event_city AS city,
+                           event_state AS state, event_zip AS zip,
                            ROW_NUMBER() OVER (
                                PARTITION BY LOWER(TRIM(full_name))
                                ORDER BY id DESC
@@ -5249,11 +5262,12 @@ def customer_search():
                     WHERE full_name ILIKE %s
                       AND full_name IS NOT NULL
                       AND TRIM(full_name) != ''
-                ) sub
+                      AND email NOT IN (SELECT email FROM customers WHERE email IS NOT NULL)
+                ) combined
                 WHERE rn = 1
                 ORDER BY full_name
                 LIMIT 10
-            """, (f"%{q}%",))
+            """, (f"%{q}%", f"%{q}%"))
             rows = [dict(r) for r in cur.fetchall()]
         return jsonify(rows)
     except Exception as e:
