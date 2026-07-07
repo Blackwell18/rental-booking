@@ -735,28 +735,29 @@ def _send_email(to, subject, html, plain, reply_to=None):
         log.error(f"Email error: {e}")
 
 
-def send_sms(body):
-    """Send an SMS to the owner via Twilio REST API (no SDK required)."""
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
-    auth_token  = os.getenv("TWILIO_AUTH_TOKEN",  "")
-    from_number = os.getenv("TWILIO_FROM_NUMBER", "")
-    to_number   = os.getenv("OWNER_PHONE",        "")
-    if not all([account_sid, auth_token, from_number, to_number]):
-        log.warning("SMS skipped — TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER / OWNER_PHONE not all set")
+def send_push(title, body):
+    """Send a push notification to the owner via ntfy.sh (free, no account needed)."""
+    topic = os.getenv("NTFY_TOPIC", "")
+    if not topic:
+        log.warning("Push notification skipped — NTFY_TOPIC not set")
         return
     try:
         resp = requests.post(
-            f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
-            auth=(account_sid, auth_token),
-            data={"From": from_number, "To": to_number, "Body": body},
+            f"https://ntfy.sh/{topic}",
+            data=body.encode("utf-8"),
+            headers={
+                "Title":    title,
+                "Priority": "high",
+                "Tags":     "bell",
+            },
             timeout=10
         )
         if resp.status_code >= 400:
-            log.warning(f"SMS send failed ({resp.status_code}): {resp.text[:200]}")
+            log.warning(f"Push notification failed ({resp.status_code}): {resp.text[:200]}")
         else:
-            log.info(f"Owner SMS sent → {to_number}")
+            log.info(f"Push notification sent → ntfy.sh/{topic}")
     except Exception as e:
-        log.error(f"SMS error: {e}")
+        log.error(f"Push notification error: {e}")
 
 
 def send_owner_email(b):
@@ -4101,14 +4102,12 @@ def submit():
     send_owner_email(booking_data)
     send_customer_email(booking_data)
 
-    # ── Text alert to owner ──────────────────────────────────────────────────
+    # ── Push notification to owner ───────────────────────────────────────────
     _base = os.environ.get("APP_BASE_URL", "").rstrip("/")
     _admin_link = f"{_base}/admin/booking/{booking_id}" if _base else f"/admin/booking/{booking_id}"
-    send_sms(
-        f"New Booking #{booking_id}\n"
-        f"{full_name} | {_fmt_date(event_start_date)}\n"
-        f"Total: ${grand_total:.2f}\n"
-        f"View & Respond: {_admin_link}"
+    send_push(
+        title=f"New Booking #{booking_id} — {full_name}",
+        body=f"{_fmt_date(event_start_date)} | Total: ${grand_total:.2f}\n{_admin_link}"
     )
 
     # Upsert customer record — if email already exists update their info, else insert
@@ -7847,33 +7846,20 @@ def pwa_icon_512():
 @app.route("/admin/test-sms")
 @admin_required
 def test_sms():
-    """Send a test SMS to verify Twilio config is working."""
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
-    auth_token  = os.getenv("TWILIO_AUTH_TOKEN",  "")
-    from_number = os.getenv("TWILIO_FROM_NUMBER", "")
-    to_number   = os.getenv("OWNER_PHONE",        "")
-
-    missing = [k for k, v in [
-        ("TWILIO_ACCOUNT_SID", account_sid),
-        ("TWILIO_AUTH_TOKEN",  auth_token),
-        ("TWILIO_FROM_NUMBER", from_number),
-        ("OWNER_PHONE",        to_number),
-    ] if not v]
-
-    if missing:
-        return f"<pre>Missing env vars: {', '.join(missing)}\n\nSet them on Render and redeploy.</pre>", 400
-
+    """Send a test push notification to verify ntfy config is working."""
+    topic = os.getenv("NTFY_TOPIC", "")
+    if not topic:
+        return "<pre>Missing env var: NTFY_TOPIC\n\nAdd it on Render and redeploy.</pre>", 400
     try:
         resp = requests.post(
-            f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
-            auth=(account_sid, auth_token),
-            data={"From": from_number, "To": to_number,
-                  "Body": "Test from Rent a Party app — SMS alerts are working!"},
+            f"https://ntfy.sh/{topic}",
+            data="Test from Rent a Party — notifications are working!".encode("utf-8"),
+            headers={"Title": "Test Notification", "Priority": "high", "Tags": "white_check_mark"},
             timeout=10
         )
         if resp.status_code >= 400:
-            return f"<pre>Twilio error {resp.status_code}:\n{resp.text}</pre>", 400
-        return f"<pre>SMS sent successfully to {to_number}!\n\nTwilio response: {resp.json().get('sid')}</pre>"
+            return f"<pre>ntfy error {resp.status_code}:\n{resp.text}</pre>", 400
+        return f"<pre>Notification sent to ntfy.sh/{topic} ✓\n\nCheck your phone!</pre>"
     except Exception as e:
         return f"<pre>Error: {e}</pre>", 500
 
