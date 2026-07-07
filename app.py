@@ -2923,11 +2923,13 @@ ADMIN_NEW_BOOKING_HTML = """
       </div>
     </div>
     <div class="fg" style="margin-top:.75rem">
-      <div><label>Event Street</label><input name="event_street" placeholder="456 Venue Blvd"></div>
-      <div><label>Event City</label><input name="event_city" placeholder="Hartford"></div>
-      <div><label>State</label><input name="event_state" placeholder="CT" style="width:80px"></div>
-      <div><label>ZIP</label><input name="event_zip" placeholder="06101" style="width:100px"></div>
+      <div><label>Event Street</label><input name="event_street" id="nb_street" placeholder="456 Venue Blvd"></div>
+      <div><label>Event City</label><input name="event_city" id="nb_city" placeholder="Hartford"></div>
+      <div><label>State</label><input name="event_state" id="nb_state" placeholder="CT" style="width:80px"></div>
+      <div><label>ZIP</label><input name="event_zip" id="nb_zip" placeholder="06101" style="width:100px"></div>
     </div>
+    <input type="hidden" name="distance_miles" id="nb_distance_miles">
+    <div id="del_fee_note" style="font-size:.8rem;color:#6b7280;margin-top:.4rem"></div>
   </div>
 
   <div class="card">
@@ -3063,6 +3065,39 @@ function prepSubmit() {
 
 // Start with two blank rows
 addRow(); addRow();
+
+// ── Delivery fee auto-calculate ──────────────────────────────────────────────
+(function() {
+  const street = document.getElementById('nb_street');
+  const city   = document.getElementById('nb_city');
+  const state  = document.getElementById('nb_state');
+  const zip    = document.getElementById('nb_zip');
+  const feeEl  = document.getElementById('del_fee');
+  const noteEl = document.getElementById('del_fee_note');
+  const distEl = document.getElementById('nb_distance_miles');
+  let debounce;
+
+  function lookupFee() {
+    const addr = [street.value, city.value, state.value, zip.value].filter(Boolean).join(', ');
+    if (!city.value || !state.value) return;
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      noteEl.textContent = '⏳ Calculating delivery fee…';
+      fetch('/delivery_fee?address=' + encodeURIComponent(addr))
+        .then(r => r.json())
+        .then(d => {
+          feeEl.value = d.fee.toFixed(2);
+          distEl.value = d.miles || '';
+          noteEl.textContent = d.miles ? '📍 ' + d.note : '⚠️ ' + d.note;
+          recalc();
+        })
+        .catch(() => { noteEl.textContent = ''; });
+    }, 800);
+  }
+
+  [street, city, state, zip].forEach(el => el.addEventListener('change', lookupFee));
+  [city, zip].forEach(el => el.addEventListener('blur', lookupFee));
+})();
 
 // ── Customer autocomplete ────────────────────────────────────────────────────
 (function() {
