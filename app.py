@@ -200,6 +200,7 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_payment_link TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_reminder_sent BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS auto_invoice_sent BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS setup_date DATE DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(5,4) DEFAULT 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(10,2) DEFAULT 0",
@@ -1673,7 +1674,10 @@ FORM_HTML = r"""
       <div class="field"><label>Event Start Time <span class="required">*</span></label><input name="event_start_time" type="time" required value="{{ form.event_start_time or '' }}"></div>
       <div class="field"><label>Pickup / End Time <span class="required">*</span></label><input name="event_end_time" type="time" required value="{{ form.event_end_time or '' }}"></div>
     </div>
-    <div class="row"><div class="field"><label>Setup / Delivery Time <span class="required">*</span></label><input name="setup_time" type="time" required value="{{ form.setup_time or '' }}"></div></div>
+    <div class="row">
+      <div class="field"><label>Setup / Delivery Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl"></div>
+      <div class="field"><label>Setup / Delivery Time <span class="required">*</span></label><input name="setup_time" type="time" required value="{{ form.setup_time or '' }}"></div>
+    </div>
     <div class="field">
       <label>Venue Type <span class="required">*</span></label>
       <div class="type-toggle">
@@ -2135,9 +2139,11 @@ endTimeEl.addEventListener('change', function() {
 });
 
 setupTimeEl.addEventListener('change', function() {
-  if (startTimeEl.value && this.value >= startTimeEl.value) {
+  const setupDate = document.getElementById('setupDateEl');
+  const sameDay = setupDate && setupDate.value && startDateEl.value && setupDate.value === startDateEl.value;
+  if (sameDay && startTimeEl.value && this.value >= startTimeEl.value) {
     this.value = '';
-    showTimeError('Setup / delivery time must be before the event start time.');
+    showTimeError('Setup / delivery time must be before the event start time when delivery is on the same day.');
   }
 });
 
@@ -2163,8 +2169,10 @@ document.getElementById('bookingForm').addEventListener('submit', function(e) {
   if (sd && ed && ed < sd)   errors.push('End date cannot be before start date.');
   // End time vs start time only matters when event starts and ends the same day
   if (sameDay && st && et && et <= st)  errors.push('Event end time must be after the start time.');
-  // Delivery time must always be before start time — delivery is always on the start date
-  if (sut && st && sut >= st) errors.push('Setup / delivery time must be before the event start time.');
+  // Delivery time vs start time only matters when setup date == event start date
+  const setupDateEl = document.getElementById('setupDateEl');
+  const setupSameDay = setupDateEl && setupDateEl.value && sd && setupDateEl.value === sd;
+  if (setupSameDay && sut && st && sut >= st) errors.push('Setup / delivery time must be before the event start time when delivery is on the same day.');
 
   if (errors.length) {
     e.preventDefault();
@@ -2767,6 +2775,7 @@ ADMIN_BOOKING_EDIT_HTML = """
       <div><label>End Date</label><input name="event_end_date" type="date" value="{{ b.event_end_date or '' }}"></div>
       <div><label>Event Start Time</label><input name="event_start_time" type="time" value="{{ b.event_start_time or '' }}"></div>
       <div><label>Pickup Time</label><input name="event_end_time" type="time" value="{{ b.event_end_time or '' }}"></div>
+      <div><label>Delivery Date</label><input name="setup_date" type="date" value="{{ b.setup_date.strftime('%Y-%m-%d') if b.setup_date else '' }}"></div>
       <div><label>Delivery Time</label><input name="setup_time" type="time" value="{{ b.setup_time or '' }}"></div>
       <div><label>Venue Type</label>
         <select name="venue_type">
@@ -3230,9 +3239,11 @@ ADMIN_BOOKING_HTML = """
     <div class="row">
       <span class="k">Dates</span><span class="v">{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }} - {{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '' }}</span>
       <span class="k">Event Start Time</span><span class="v">{{ b.event_start_time }}</span>
-      <span class="k">Delivery Time</span>
+      <span class="k">Delivery</span>
       <span class="v">
-        <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="display:inline-flex;align-items:center;gap:.4rem;margin:0" id="timeForm">
+        <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:0" id="timeForm">
+          <input type="date" name="setup_date" value="{{ b.setup_date.strftime('%Y-%m-%d') if b.setup_date else '' }}"
+            style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
           <input type="time" name="setup_time" value="{{ b.setup_time or '' }}"
             style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
           <span style="color:#6b7280;font-size:.85rem">Pickup:</span>
@@ -3944,6 +3955,7 @@ def submit():
     event_start_time = f.get("event_start_time", "").strip()
     event_end_time   = f.get("event_end_time",   "").strip()
     setup_time       = f.get("setup_time",       "").strip()
+    setup_date       = f.get("setup_date",       "").strip()
     venue_type       = f.get("venue_type",       "venue").strip()
     venue_latest     = f.get("venue_latest_pickup","").strip()
     event_street     = f.get("event_street",     "").strip()
@@ -4064,7 +4076,7 @@ def submit():
                     renter_street, renter_city, renter_state, renter_zip,
                     phone, email,
                     event_start_date, event_end_date,
-                    event_start_time, event_end_time, setup_time,
+                    event_start_time, event_end_time, setup_time, setup_date,
                     venue_type, venue_latest_pickup,
                     event_street, event_city, event_state, event_zip,
                     exact_time_delivery, delivery_location,
@@ -4073,7 +4085,7 @@ def submit():
                     notes
                 ) VALUES (
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                 ) RETURNING id
             """, (
                 full_name, company_name,
@@ -4081,6 +4093,7 @@ def submit():
                 phone, email,
                 event_start_date or None, event_end_date or None,
                 event_start_time, event_end_time, setup_time,
+                setup_date or None,
                 venue_type, venue_latest or None,
                 event_street, event_city, event_state, event_zip,
                 exact_delivery, delivery_location,
@@ -5106,6 +5119,7 @@ def edit_booking(booking_id):
         "event_start_time": f.get("event_start_time","").strip(),
         "event_end_time":   f.get("event_end_time","").strip(),
         "setup_time":       f.get("setup_time","").strip(),
+        "setup_date":       f.get("setup_date","").strip() or None,
         "venue_type":       f.get("venue_type","venue"),
         "event_street":     f.get("event_street","").strip(),
         "event_city":       f.get("event_city","").strip(),
@@ -5130,7 +5144,7 @@ def edit_booking(booking_id):
               renter_state=%(renter_state)s, renter_zip=%(renter_zip)s,
               event_start_date=%(event_start_date)s, event_end_date=%(event_end_date)s,
               event_start_time=%(event_start_time)s, event_end_time=%(event_end_time)s,
-              setup_time=%(setup_time)s, venue_type=%(venue_type)s,
+              setup_time=%(setup_time)s, setup_date=%(setup_date)s, venue_type=%(venue_type)s,
               event_street=%(event_street)s, event_city=%(event_city)s,
               event_state=%(event_state)s, event_zip=%(event_zip)s,
               delivery_location=%(delivery_location)s,
@@ -5501,14 +5515,15 @@ def remove_discount(booking_id):
 @app.route("/admin/booking/<int:booking_id>/update-times", methods=["POST"])
 @admin_required
 def update_booking_times(booking_id):
+    setup_date     = request.form.get("setup_date", "").strip()
     setup_time     = request.form.get("setup_time", "").strip()
     event_end_time = request.form.get("event_end_time", "").strip()
     try:
         conn = get_db()
         cur  = conn.cursor()
         cur.execute(
-            "UPDATE bookings SET setup_time=%s, event_end_time=%s WHERE id=%s",
-            (setup_time or None, event_end_time or None, booking_id)
+            "UPDATE bookings SET setup_date=%s, setup_time=%s, event_end_time=%s WHERE id=%s",
+            (setup_date or None, setup_time or None, event_end_time or None, booking_id)
         )
         conn.commit()
         cur.close(); conn.close()
