@@ -1363,6 +1363,19 @@ def send_final_payment_email(b, remaining_amount, payment_link):
     event_time     = str(b.get("event_start_time", ""))
     setup_time     = str(b.get("setup_time", ""))
 
+    # Calculate actual days until delivery
+    try:
+        ev_dt = datetime.strptime(event_date[:10], "%Y-%m-%d").date()
+        days_until = (ev_dt - date.today()).days
+        if days_until <= 0:
+            days_label = "today"
+        elif days_until == 1:
+            days_label = "tomorrow"
+        else:
+            days_label = f"{days_until} days away"
+    except Exception:
+        days_label = "soon"
+
     item_rows = ""
     for it in items:
         item_rows += f"""
@@ -1397,13 +1410,13 @@ def send_final_payment_email(b, remaining_amount, payment_link):
       <p style="font-weight:700;color:#c05621">Remaining Balance Due: ${remaining_amount:.2f}</p>
       <p style="color:#744210;font-size:.9rem">Please contact us to complete your payment.{f" Call {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}</p>"""
 
-    subject = f"Final Payment Due — Your Delivery is in 2 Days! | {BUSINESS_NAME}"
+    subject = f"Final Payment Due — Your Delivery is {days_label}! | {BUSINESS_NAME}"
     html = f"""
 <html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
 <div style="max-width:640px;margin:0 auto">
 
   <div style="background:linear-gradient(135deg,#c05621,#dd6b20);border-radius:12px 12px 0 0;padding:1.75rem 2rem;color:white;text-align:center">
-    <div style="font-size:2rem;margin-bottom:.4rem">&#8987; Your Delivery is in 2 Days!</div>
+    <div style="font-size:2rem;margin-bottom:.4rem">&#8987; Your Delivery is {days_label}!</div>
     <h2 style="margin:0;font-weight:700;font-size:1.2rem">Final Payment Due — {BUSINESS_NAME}</h2>
     <p style="margin:.5rem 0 0;opacity:.88;font-size:.95rem">Booking #{b.get('id')} &bull; {event_date}</p>
   </div>
@@ -1412,7 +1425,7 @@ def send_final_payment_email(b, remaining_amount, payment_link):
 
     <p style="color:#2d3748;font-size:1.05rem;margin-bottom:.75rem">Hi <strong>{first}</strong>,</p>
     <p style="color:#4a5568;line-height:1.7;margin-bottom:1.25rem">
-      This is your final payment reminder. Your delivery is <strong>2 days away</strong> and your remaining balance
+      This is your final payment reminder. Your delivery is <strong>{days_label}</strong> and your remaining balance
       is due now to ensure everything is ready for delivery.
     </p>
 
