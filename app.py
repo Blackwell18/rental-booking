@@ -11,7 +11,7 @@
 ╚══════════════════════════════════════════════════════════════╝
 """
 
-import os, json, logging, smtplib, secrets, decimal
+import os, re, json, logging, smtplib, secrets, decimal
 import urllib.parse
 from datetime import datetime, timezone, date, timedelta
 from email.mime.text import MIMEText
@@ -3448,16 +3448,46 @@ def submit():
             error="Name and email are required.", form=f), 400
 
     # Accept any quantity — admin is alerted of conflicts on the dashboard
-    order_items, subtotal = [], 0.0
+    # Collect items first so we can apply marquee tier pricing
+    _raw_items = []
     for p in _products:
         qty = int(f.get(f"qty_{p['id']}", 0) or 0)
         qty = max(0, qty)
-        if qty == 0:
-            continue
-        line = round(qty * p["price"], 2)
+        if qty > 0:
+            _raw_items.append({"id": p["id"], "name": p["name"], "qty": qty, "base_price": float(p["price"])})
+
+    # Marquee tier pricing (must match JS logic exactly)
+    def _is_ml(name): return bool(re.match(r'^marquee\s+[a-z]$', name.strip(), re.IGNORECASE))
+    def _is_mn(name): return bool(re.match(r'^marquee\s+#?\d', name.strip(), re.IGNORECASE))
+    _ML_TIERS = [(1,85),(2,160),(3,225),(4,285)]
+    _MN_TIERS = [(1,80),(2,150),(3,215),(4,275)]
+    def _ml_total(n):
+        for c,t in _ML_TIERS:
+            if c==n: return float(t)
+        return 285.0+(n-4)*55.0
+    def _mn_total(n):
+        for c,t in _MN_TIERS:
+            if c==n: return float(t)
+        return 275.0+(n-4)*55.0
+    ml_count = sum(i["qty"] for i in _raw_items if _is_ml(i["name"]))
+    mn_count = sum(i["qty"] for i in _raw_items if _is_mn(i["name"]))
+    ml_unit = (_ml_total(ml_count)/ml_count) if ml_count>0 else 0.0
+    mn_unit = (_mn_total(mn_count)/mn_count) if mn_count>0 else 0.0
+
+    order_items, subtotal = [], 0.0
+    for item in _raw_items:
+        name = item["name"]
+        qty  = item["qty"]
+        if _is_ml(name):
+            unit_price = ml_unit
+        elif _is_mn(name):
+            unit_price = mn_unit
+        else:
+            unit_price = item["base_price"]
+        line = round(qty * unit_price, 2)
         subtotal += line
-        order_items.append({"id": p["id"], "name": p["name"],
-                             "qty": qty, "unit_price": p["price"], "total": line})
+        order_items.append({"id": item["id"], "name": name, "qty": qty,
+                             "unit_price": round(unit_price, 2), "total": line})
 
     # Delivery
     event_address = f"{event_street}, {event_city}, {event_state} {event_zip}"
