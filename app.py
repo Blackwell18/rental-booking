@@ -3904,11 +3904,20 @@ ADMIN_BOOKING_HTML = """
 
 @app.route("/logo.png")
 def serve_logo():
-    """Serve logo.png from the repo root."""
-    import os
-    logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
-    if os.path.exists(logo_path):
-        return send_file(logo_path, mimetype="image/png")
+    """Serve logo from the repo root — tries several common filenames."""
+    base = os.path.dirname(__file__)
+    for name in ("logo.png", "Rent a Party Logo.png", "rent a party logo.png",
+                 "Logo.png", "RentAPartyLogo.png"):
+        p = os.path.join(base, name)
+        if os.path.exists(p):
+            return send_file(p, mimetype="image/png")
+    # last resort: any .png in the repo root
+    try:
+        for f in os.listdir(base):
+            if f.lower().endswith(".png"):
+                return send_file(os.path.join(base, f), mimetype="image/png")
+    except Exception:
+        pass
     return "", 404
 
 @app.route("/", methods=["GET"])
