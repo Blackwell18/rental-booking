@@ -11,12 +11,13 @@
 ╚══════════════════════════════════════════════════════════════╝
 """
 
-import os, re, json, logging, smtplib, secrets, decimal
+import os, re, json, logging, smtplib, secrets, decimal, io
 import urllib.parse
 from datetime import datetime, timezone, date, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from functools import wraps
+from difflib import SequenceMatcher
 
 import requests
 import psycopg2
@@ -2422,6 +2423,7 @@ ADMIN_DASH_HTML = """
     <a href="/admin/customers" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Customers</a>
     <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
     <a href="/admin/route" class="nav-link">🗺 Route</a>
+    <a href="/admin/formsite-import" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">📥 Import</a>
     <a href="/admin/booking/new" style="background:#16a34a;color:white;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .85rem;border-radius:6px">+ New Booking</a>
     <a href="/admin/logout" class="logout-btn">Sign Out</a>
   </div>
@@ -8053,6 +8055,388 @@ def cron_send_reminders():
             log.error(f"Cron pass-2 error for booking #{b.get('id')}: {e}")
 
     return jsonify({"sent": sent, "count": len(sent)})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  FORMSITE IMPORT
+# ══════════════════════════════════════════════════════════════════════════════
+
+FORMSITE_IMPORT_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Formsite Import</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar-brand{font-size:1rem;font-weight:700;color:#111827;display:flex;align-items:center;gap:.5rem}
+    .main{max-width:760px;margin:2rem auto;padding:0 1.25rem}
+    .card{background:white;border-radius:12px;border:1px solid #e5e7eb;padding:1.75rem;margin-bottom:1.5rem}
+    h1{font-size:1.3rem;font-weight:700;margin-bottom:.35rem}
+    p{color:#6b7280;font-size:.9rem;line-height:1.5}
+    .upload-zone{border:2px dashed #d1d5db;border-radius:10px;padding:2.5rem;text-align:center;margin:1.25rem 0;cursor:pointer;transition:border .15s}
+    .upload-zone:hover{border-color:#2563eb;background:#f0f6ff}
+    .upload-zone input{display:none}
+    .upload-label{font-size:.9rem;color:#6b7280}
+    .upload-label strong{color:#2563eb}
+    .btn{background:#2563eb;color:white;border:none;border-radius:8px;padding:.65rem 1.4rem;font-size:.9rem;font-weight:600;cursor:pointer;width:100%}
+    .btn:hover{background:#1d4ed8}
+    .btn:disabled{background:#9ca3af;cursor:not-allowed}
+    .result-row{display:flex;align-items:flex-start;gap:.6rem;padding:.55rem 0;border-bottom:1px solid #f3f4f6;font-size:.85rem}
+    .result-row:last-child{border-bottom:none}
+    .badge{display:inline-block;padding:.15rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700;white-space:nowrap}
+    .badge-updated{background:#dcfce7;color:#166534}
+    .badge-skipped{background:#f3f4f6;color:#6b7280}
+    .badge-nomatch{background:#fee2e2;color:#991b1b}
+    .detail{color:#6b7280;font-size:.8rem;margin-top:.2rem}
+    .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem}
+    .stat{background:#f9fafb;border-radius:8px;padding:.85rem 1rem;text-align:center}
+    .stat-val{font-size:1.5rem;font-weight:700;color:#111827}
+    .stat-lbl{font-size:.75rem;color:#6b7280;margin-top:.2rem}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-brand"><img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
+  <a href="/admin/dashboard" style="color:#6b7280;font-size:.85rem;text-decoration:none">← Dashboard</a>
+</div>
+<div class="main">
+  <div class="card">
+    <h1>📥 Formsite Import</h1>
+    <p style="margin-top:.4rem">Upload your Formsite export (.xlsx). Matches customers by name to existing bookings, fills in missing info, and calculates totals from their item list.</p>
+
+    {% if not results %}
+    <form method="POST" enctype="multipart/form-data" id="importForm">
+      <div class="upload-zone" onclick="document.getElementById('xlsxFile').click()">
+        <input type="file" name="xlsx" id="xlsxFile" accept=".xlsx,.xls" onchange="showFile(this)">
+        <div style="font-size:2rem;margin-bottom:.5rem">📊</div>
+        <div class="upload-label"><strong>Click to choose file</strong> or drag & drop</div>
+        <div class="upload-label" id="fileName" style="margin-top:.4rem;color:#374151"></div>
+      </div>
+      <button type="submit" class="btn" id="submitBtn" onclick="this.disabled=true;this.textContent='Importing…';this.form.submit()">
+        Import Now
+      </button>
+    </form>
+    <script>
+      function showFile(el){
+        document.getElementById('fileName').textContent = el.files[0]?.name || '';
+      }
+    </script>
+    {% else %}
+    <!-- Results -->
+    <div class="summary">
+      <div class="stat"><div class="stat-val">{{ results.total }}</div><div class="stat-lbl">Formsite rows</div></div>
+      <div class="stat"><div class="stat-val" style="color:#16a34a">{{ results.updated }}</div><div class="stat-lbl">Bookings updated</div></div>
+      <div class="stat"><div class="stat-val" style="color:#dc2626">{{ results.no_match }}</div><div class="stat-lbl">No name match</div></div>
+    </div>
+    <div style="max-height:520px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:.5rem 1rem">
+      {% for r in results.rows %}
+      <div class="result-row">
+        <span class="badge badge-{{ r.status }}">{{ r.status }}</span>
+        <div>
+          <div style="font-weight:600">{{ r.name }}{% if r.booking_id %} <span style="color:#9ca3af;font-weight:400">#{{ r.booking_id }}</span>{% endif %}</div>
+          {% if r.detail %}<div class="detail">{{ r.detail }}</div>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <a href="/admin/formsite-import" style="display:block;margin-top:1rem;text-align:center;color:#2563eb;font-size:.88rem">Import another file</a>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>"""
+
+
+def _fs_norm(s):
+    return re.sub(r'\s+', ' ', (s or '').strip().lower())
+
+def _fs_parse_items(text):
+    if not text:
+        return []
+    results = []
+    lines = re.split(r'[\r\n,]+', text)
+    QTY_PATS = [
+        r'\((\d+)\)\s+(.+)',
+        r'(\d+)\s*[-xX]\s*(.+)',
+        r'(\d+)\s+(.+)',
+    ]
+    SKIP = ['hi there','hello','looking to rent','sincerely','please','thank you',
+            'note:','realize','appreciate','we are looking','i am looking','is the 175']
+    for line in lines:
+        line = line.strip()
+        if not line or len(line) < 3:
+            continue
+        if any(s in line.lower() for s in SKIP):
+            continue
+        matched = False
+        for pat in QTY_PATS:
+            m = re.match(pat, line, re.IGNORECASE)
+            if m:
+                try:
+                    qty = int(m.group(1))
+                    desc = m.group(2).strip(" '\"")
+                    if desc and qty > 0:
+                        results.append((qty, desc))
+                        matched = True
+                        break
+                except ValueError:
+                    pass
+        if not matched and line:
+            results.append((1, line))
+    return results
+
+def _fs_match_item(desc, inventory):
+    desc_l = desc.lower().strip()
+    ALIASES = {
+        'chair':['chair','folding chair','white chair','plastic chair','white folding'],
+        'round table':['round table','60 inch round','60" round',"60' round",'round table'],
+        'banquet table':['banquet','6ft table','6 foot','6\' table','rectangular',
+                         '8ft table','8 foot','folding table','long table','plastic table'],
+        'cocktail table':['cocktail','high top','42"','30" table','bistro'],
+        'throne':['throne','gold throne','white throne'],
+        'marquee number':['marquee number','numbers w/lights','light up number','4ft number'],
+        'marquee letter':['marquee letter','letters','light up letter'],
+        'cylinder':['cylinder','pedestal','stand cylinder'],
+        'backdrop':['backdrop'],
+        'portable bar':['portable bar','bar'],
+        'speaker':['speaker'],
+    }
+    best, best_score = None, 0
+    for inv in inventory:
+        inv_n = (inv.get('name') or '').lower().strip()
+        if inv_n == desc_l:
+            return inv, 1.0
+        if inv_n in desc_l or desc_l in inv_n:
+            s = 0.85
+            if s > best_score:
+                best_score, best = s, inv
+        ratio = SequenceMatcher(None, desc_l, inv_n).ratio()
+        if ratio > best_score and ratio > 0.5:
+            best_score, best = ratio, inv
+        for canon, aliases in ALIASES.items():
+            if any(a in desc_l for a in aliases) and any(a in inv_n for a in aliases):
+                s = 0.75
+                if s > best_score:
+                    best_score, best = s, inv
+    return best, best_score
+
+
+@app.route("/admin/formsite-import", methods=["GET", "POST"])
+@admin_required
+def formsite_import():
+    try:
+        import openpyxl
+    except ImportError:
+        return "<pre>openpyxl not installed. Add 'openpyxl>=3.1.0' to requirements.txt and redeploy.</pre>", 500
+
+    if request.method == "GET":
+        return render_template_string(FORMSITE_IMPORT_HTML,
+                                      business_name=BUSINESS_NAME, results=None)
+
+    file = request.files.get("xlsx")
+    if not file or not file.filename:
+        return render_template_string(FORMSITE_IMPORT_HTML,
+                                      business_name=BUSINESS_NAME, results=None)
+
+    TAX_RATE_IMPORT = 0.0635
+    DELIVERY_FREE   = _float("DELIVERY_FREE_MILES", "15")
+    DELIVERY_RT     = _float("DELIVERY_RATE", "3.80")
+
+    wb = openpyxl.load_workbook(io.BytesIO(file.read()))
+    ws = wb.active
+    fs_rows = list(ws.iter_rows(min_row=2, values_only=True))
+
+    conn = get_db()
+    if not conn:
+        return "DB connection failed", 500
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    cur.execute("SELECT * FROM bookings WHERE archived IS NOT TRUE")
+    bookings = [_row(r) for r in cur.fetchall()]
+    cur.execute("SELECT id, name, price, total FROM inventory ORDER BY name")
+    inventory = [dict(r) for r in cur.fetchall()]
+
+    by_name = {}
+    for b in bookings:
+        k = _fs_norm(b.get('full_name',''))
+        if k:
+            by_name.setdefault(k,[]).append(b)
+
+    result_rows = []
+    updated_count = no_match_count = 0
+
+    for row in fs_rows:
+        first = str(row[2] or '').strip()
+        last  = str(row[3] or '').strip()
+        if not first or not last:
+            continue
+        full_name = f"{first} {last}"
+        key = _fs_norm(full_name)
+
+        candidates = by_name.get(key, [])
+        if not candidates:
+            last_k = _fs_norm(last)
+            for b in bookings:
+                if _fs_norm(b.get('full_name','')).endswith(last_k):
+                    candidates.append(b)
+
+        if not candidates:
+            no_match_count += 1
+            result_rows.append({'status':'nomatch','name':full_name,'booking_id':None,'detail':'No matching booking found'})
+            continue
+
+        fs_start = row[12]
+        if len(candidates) > 1 and fs_start:
+            def _dd(b):
+                bd = b.get('event_start_date')
+                if bd and fs_start:
+                    try:
+                        fsd = fs_start.date() if hasattr(fs_start,'date') else fs_start
+                        return abs((bd - fsd).days)
+                    except Exception:
+                        return 9999
+                return 9999
+            candidates = sorted(candidates, key=_dd)
+
+        booking = candidates[0]
+        bid = booking['id']
+
+        fs_phone   = str(row[10] or '').strip()
+        fs_email   = str(row[11] or '').strip()
+        fs_street  = str(row[5]  or '').strip()
+        fs_apt     = str(row[6]  or '').strip()
+        fs_city    = str(row[7]  or '').strip()
+        fs_state   = str(row[8]  or '').strip()
+        fs_zip     = str(row[9]  or '').strip()
+        fs_company = str(row[4]  or '').strip()
+        fs_end     = row[14]
+        fs_st_time = str(row[13] or '').strip()
+        fs_end_t   = str(row[15] or '').strip()
+        fs_setup   = str(row[16] or '').strip()
+        fs_ev_addr = str(row[17] or '').strip()
+        fs_venue   = str(row[18] or '').strip().lower()
+        fs_deliv   = str(row[19] or '').strip().lower() == 'yes'
+        fs_exact   = str(row[20] or '').strip().lower() == 'yes'
+        fs_dloc    = str(row[21] or '').strip()
+        fs_items_t = str(row[22] or '').strip()
+        fs_notes   = str(row[23] or '').strip()
+
+        if fs_apt:
+            fs_street = f"{fs_street} {fs_apt}".strip()
+
+        upd = {}
+        def fill(f, v):
+            if v and not booking.get(f):
+                upd[f] = v
+
+        fill('phone', fs_phone); fill('email', fs_email)
+        fill('renter_street', fs_street); fill('renter_city', fs_city)
+        fill('renter_state', fs_state); fill('renter_zip', fs_zip)
+        fill('company_name', fs_company)
+        fill('event_start_time', fs_st_time); fill('event_end_time', fs_end_t)
+        fill('setup_time', fs_setup); fill('delivery_location', fs_dloc)
+        if fs_notes and not booking.get('notes'):
+            upd['notes'] = fs_notes
+        if fs_start and not booking.get('event_start_date'):
+            upd['event_start_date'] = fs_start.date() if hasattr(fs_start,'date') else fs_start
+        if fs_end and not booking.get('event_end_date'):
+            upd['event_end_date'] = fs_end.date() if hasattr(fs_end,'date') else fs_end
+        if fs_venue and not booking.get('venue_type'):
+            upd['venue_type'] = 'residential' if 'residential' in fs_venue else 'venue'
+        if fs_ev_addr and not booking.get('event_street'):
+            parts = [p.strip() for p in fs_ev_addr.split(',')]
+            if len(parts) >= 3:
+                upd['event_street'] = parts[0]
+                upd['event_city']   = parts[1]
+                sc = parts[2].strip().split()
+                if len(sc) >= 2:
+                    upd['event_state'] = sc[0]; upd['event_zip'] = sc[1]
+            elif len(parts) == 2:
+                upd['event_street'] = parts[0]; upd['event_city'] = parts[1]
+            else:
+                upd['event_street'] = fs_ev_addr
+
+        # Items + totals
+        existing_items = json.loads(booking.get('items_json') or '[]')
+        detail_parts = []
+
+        if fs_items_t and not existing_items:
+            parsed = _fs_parse_items(fs_items_t)
+            new_items = []; unmatched_items = []
+            for qty, desc in parsed:
+                inv_item, score = _fs_match_item(desc, inventory)
+                if inv_item and score > 0.45:
+                    new_items.append({'id':inv_item['id'],'name':inv_item['name'],
+                                      'qty':qty,'price':float(inv_item.get('price') or 0)})
+                    detail_parts.append(f"{qty}x {inv_item['name']}")
+                else:
+                    unmatched_items.append(f"{qty}x {desc}")
+
+            if unmatched_items:
+                note_add = " [Unmatched items: " + "; ".join(unmatched_items) + "]"
+                upd['notes'] = (upd.get('notes') or booking.get('notes') or '') + note_add
+
+            if new_items:
+                subtotal = round(sum(i['qty']*i['price'] for i in new_items), 2)
+                upd['items_json']     = json.dumps(new_items)
+                upd['items_subtotal'] = subtotal
+                upd['exact_time_delivery'] = fs_exact
+                upd['exact_time_fee']      = 175.0 if fs_exact else 0.0
+
+                delivery_fee = float(booking.get('delivery_fee') or 0)
+                if fs_deliv and fs_ev_addr and GOOGLE_MAPS_KEY:
+                    try:
+                        resp = requests.get(
+                            "https://maps.googleapis.com/maps/api/distancematrix/json",
+                            params={"origins":BUSINESS_ADDRESS,"destinations":fs_ev_addr,
+                                    "units":"imperial","key":GOOGLE_MAPS_KEY}, timeout=8)
+                        elem = resp.json()["rows"][0]["elements"][0]
+                        if elem["status"] == "OK":
+                            miles = round(elem["distance"]["value"]/1609.34, 1)
+                            over  = max(0, miles - DELIVERY_FREE)
+                            delivery_fee = round(over * DELIVERY_RT, 2)
+                            upd['delivery_fee']   = delivery_fee
+                            upd['distance_miles'] = miles
+                    except Exception:
+                        pass
+
+                exact_fee = 175.0 if fs_exact else 0.0
+                pre_tax   = subtotal + delivery_fee + exact_fee
+                tax_amt   = round(pre_tax * TAX_RATE_IMPORT, 2)
+                grand     = round(pre_tax + tax_amt, 2)
+                upd['tax_rate'] = TAX_RATE_IMPORT
+                upd['tax_amount'] = tax_amt
+                upd['grand_total'] = grand
+                detail_parts.append(f"Total: ${grand:.2f}")
+
+        detail = "; ".join(detail_parts) if detail_parts else "Personal info filled in"
+
+        if upd:
+            set_clause = ", ".join(f"{k}=%({k})s" for k in upd)
+            upd['_id'] = bid
+            try:
+                cur.execute(f"UPDATE bookings SET {set_clause} WHERE id=%(_id)s", upd)
+                conn.commit()
+                updated_count += 1
+                result_rows.append({'status':'updated','name':full_name,'booking_id':bid,'detail':detail})
+            except Exception as e:
+                conn.rollback()
+                result_rows.append({'status':'skipped','name':full_name,'booking_id':bid,'detail':f'DB error: {e}'})
+        else:
+            result_rows.append({'status':'skipped','name':full_name,'booking_id':bid,'detail':'Nothing new to fill in'})
+
+    cur.close(); conn.close()
+
+    results = {
+        'total':   len(fs_rows),
+        'updated': updated_count,
+        'no_match': no_match_count,
+        'rows':    result_rows,
+    }
+    return render_template_string(FORMSITE_IMPORT_HTML,
+                                  business_name=BUSINESS_NAME, results=results)
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────
