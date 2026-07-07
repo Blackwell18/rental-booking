@@ -1524,6 +1524,35 @@ FORM_HTML = r"""
     </div>
   </div>
 
+  <!-- Stackable Marquee Option — shown only when marquee items are in cart -->
+  <div id="stackable-section" style="display:none;margin:.75rem 0;padding:1.1rem 1.25rem;background:#faf5ff;border:1.5px solid #d8b4fe;border-radius:10px">
+    <div style="font-weight:700;font-size:.95rem;color:#6b21a8;margin-bottom:.5rem">🔡 Stackable Marquee</div>
+    <p style="font-size:.88rem;color:#4c1d95;margin-bottom:.85rem;line-height:1.6">
+      Would you like your marquee letters/numbers to be <strong>stackable</strong> (stacked on top of each other)?
+      <span style="background:#ede9fe;color:#7c3aed;border-radius:4px;padding:.1rem .45rem;font-size:.8rem;font-weight:700;margin-left:.3rem">+$75 fee</span>
+    </p>
+    <div style="display:flex;gap:1rem;margin-bottom:.85rem">
+      <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-weight:600;color:#1a202c">
+        <input type="radio" name="stackable_choice" value="yes" onchange="onStackableChange()"
+          style="accent-color:#7c3aed;width:16px;height:16px"> Yes, I want stackable (+$75)
+      </label>
+      <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-weight:600;color:#1a202c">
+        <input type="radio" name="stackable_choice" value="no" onchange="onStackableChange()" checked
+          style="accent-color:#7c3aed;width:16px;height:16px"> No thanks
+      </label>
+    </div>
+    <div id="stackable-top-wrap" style="display:none">
+      <label style="font-size:.88rem;font-weight:600;color:#1a202c;display:block;margin-bottom:.35rem">
+        Which letters or numbers go on top? <span style="color:#dc2626">*</span>
+      </label>
+      <input type="text" id="stackable_top_display" placeholder="e.g. A, E, O — or 2, 5"
+        oninput="document.getElementById('stackable_top_input').value=this.value"
+        style="width:100%;border:1.5px solid #c4b5fd;border-radius:8px;padding:.5rem .75rem;font-size:.9rem;box-sizing:border-box">
+    </div>
+  </div>
+  <input type="hidden" name="stackable" id="stackable_input" value="no">
+  <input type="hidden" name="stackable_top" id="stackable_top_input" value="">
+
   <input type="hidden" name="late_night_fee" id="late_night_fee_input" value="0">
   <div id="late_night_notice" style="display:none;margin:.75rem 0;padding:.75rem 1rem;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:8px;font-size:.88rem;color:#92400e">
     <strong>⏰ Late Night / Early Morning Fee: $125.00</strong><br>
@@ -1532,6 +1561,7 @@ FORM_HTML = r"""
   <div class="total-bar">
     <div class="total-row"><span>Items Subtotal</span><span id="t_items">$0.00</span></div>
     <div class="total-row"><span>Exact Time Delivery</span><span id="t_exact">-</span></div>
+    <div class="total-row" id="t_stackable_row" style="display:none"><span>Stackable Marquee</span><span id="t_stackable">$75.00</span></div>
     <div class="total-row" id="t_latenight_row" style="display:none"><span>Late Night / Early Morning Fee</span><span id="t_latenight">$125.00</span></div>
     <div class="total-row"><span>Delivery Fee</span><span id="t_delivery">Calculated after review</span></div>
     <div class="total-row"><span>CT Sales Tax (6.35%)</span><span id="t_tax">$0.00</span></div>
@@ -1712,12 +1742,46 @@ function removeFromCart(id){
   renderCart();
   updateTotals();
 }
+const STACKABLE_FEE = 75;
+function hasMarqueeInCart(){
+  return Object.keys(cart).some(id=>{
+    const p=ALL_PRODUCTS.find(x=>x.id===id);
+    return p && (isMarqueeLetter(p.name)||isMarqueeNumber(p.name));
+  });
+}
+function onStackableChange(){
+  const sel=document.querySelector('input[name="stackable_choice"]:checked');
+  const yes=sel&&sel.value==='yes';
+  document.getElementById('stackable_input').value=yes?'yes':'no';
+  document.getElementById('stackable-top-wrap').style.display=yes?'block':'none';
+  if(!yes){ document.getElementById('stackable_top_input').value=''; const d=document.getElementById('stackable_top_display'); if(d) d.value=''; }
+  updateTotals();
+}
 function renderCart(){
   const list=document.getElementById('selected-items-list');
   const wrap=document.getElementById('selected-items-wrap');
   const ids=Object.keys(cart);
-  if(ids.length===0){ wrap.style.display='none'; list.innerHTML=''; return; }
+  if(ids.length===0){
+    wrap.style.display='none'; list.innerHTML='';
+    // Hide stackable section and reset when cart is empty
+    const ss=document.getElementById('stackable-section');
+    if(ss) ss.style.display='none';
+    document.getElementById('stackable_input').value='no';
+    const noRadio=document.querySelector('input[name="stackable_choice"][value="no"]');
+    if(noRadio){ noRadio.checked=true; }
+    document.getElementById('stackable-top-wrap').style.display='none';
+    return;
+  }
   wrap.style.display='block';
+  // Show stackable section only when marquee items are in cart
+  const ss=document.getElementById('stackable-section');
+  if(ss) ss.style.display=hasMarqueeInCart()?'block':'none';
+  if(!hasMarqueeInCart()){
+    document.getElementById('stackable_input').value='no';
+    const noRadio=document.querySelector('input[name="stackable_choice"][value="no"]');
+    if(noRadio){ noRadio.checked=true; }
+    document.getElementById('stackable-top-wrap').style.display='none';
+  }
   // Calculate total marquee numbers for proration
   let mnCount=0, mlCount=0;
   ids.forEach(id=>{ const p=ALL_PRODUCTS.find(x=>x.id===id); if(!p) return;
@@ -1787,15 +1851,19 @@ function updateTotals(){
   const exactCb=document.getElementById('exact_time_cb');
   const ef=exactCb&&exactCb.checked?EXACT_FEE:0;
   const lf=checkLateNightFee();
+  const stackableSel=document.querySelector('input[name="stackable_choice"]:checked');
+  const sf=(stackableSel&&stackableSel.value==='yes'&&hasMarqueeInCart())?STACKABLE_FEE:0;
+  const stackRow=document.getElementById('t_stackable_row');
+  if(stackRow) stackRow.style.display=sf>0?'flex':'none';
   const exemptCb=document.getElementById('tax_exempt_request');
   const exempt=exemptCb&&exemptCb.checked;
-  const tax=exempt?0:(sub+ef+lf)*CT_TAX_RATE;
+  const tax=exempt?0:(sub+ef+sf+lf)*CT_TAX_RATE;
   const taxEl=document.getElementById('t_tax');
   if(taxEl){ taxEl.textContent='$'+tax.toFixed(2); taxEl.style.color=exempt?'#16a34a':'';
     const lbl=taxEl.previousElementSibling; if(lbl) lbl.textContent=exempt?'CT Sales Tax (EXEMPT)':'CT Sales Tax (6.35%)'; }
   document.getElementById('t_items').textContent='$'+sub.toFixed(2);
   document.getElementById('t_exact').textContent=ef>0?'$'+ef.toFixed(2):'-';
-  document.getElementById('t_grand').textContent='$'+(sub+ef+lf+tax).toFixed(2)+'+';
+  document.getElementById('t_grand').textContent='$'+(sub+ef+sf+lf+tax).toFixed(2)+'+';
 }
 document.addEventListener('DOMContentLoaded', buildDropdowns);
 function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
@@ -3488,6 +3556,15 @@ def submit():
         subtotal += line
         order_items.append({"id": item["id"], "name": name, "qty": qty,
                              "unit_price": round(unit_price, 2), "total": line})
+
+    # Stackable marquee fee
+    stackable     = f.get("stackable", "no").strip().lower() == "yes"
+    stackable_top = f.get("stackable_top", "").strip()
+    has_marquee   = any(_is_ml(i["name"]) or _is_mn(i["name"]) for i in order_items)
+    if stackable and has_marquee:
+        subtotal += 75.0
+        stack_label = f"Stackable Marquee (top: {stackable_top})" if stackable_top else "Stackable Marquee"
+        order_items.append({"name": stack_label, "qty": 1, "unit_price": 75.0, "total": 75.0})
 
     # Delivery
     event_address = f"{event_street}, {event_city}, {event_state} {event_zip}"
