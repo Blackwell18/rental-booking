@@ -3377,6 +3377,13 @@ ADMIN_BOOKING_HTML = """
   <div class="card">
     <h2>Edit Items</h2>
     <form method="POST" action="/admin/booking/{{ b.id }}/update-items">
+      <!-- Header labels -->
+      <div style="display:flex;gap:.5rem;margin-bottom:.25rem;font-size:.75rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">
+        <span style="flex:1;padding-left:.65rem">Item Name</span>
+        <span style="width:62px;text-align:center">Qty</span>
+        <span style="width:90px;text-align:center">Unit Price</span>
+        <span style="width:30px"></span>
+      </div>
       <div id="items-editor" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem">
         {% for item in items %}
         <div class="item-row" style="display:flex;gap:.5rem;align-items:center">
@@ -3386,18 +3393,35 @@ ADMIN_BOOKING_HTML = """
           <input type="number" name="item_qty" value="{{ item.qty }}" min="1"
                  style="width:62px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center" title="Qty">
           <input type="number" name="item_price" value="{{ item.unit_price or 0 }}" min="0" step="0.01"
-                 style="width:80px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center" placeholder="Price" title="Unit Price">
+                 style="width:90px;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .5rem;font-size:.9rem;text-align:center" placeholder="Price" title="Unit Price">
           <button type="button" onclick="this.closest('.item-row').remove()"
                   style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700">✕</button>
         </div>
         {% endfor %}
       </div>
+
+      <!-- Exact Time Delivery & Delivery Fee row -->
+      <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.65rem 1rem;margin-bottom:.75rem">
+        <label style="display:flex;align-items:center;gap:.45rem;font-size:.88rem;font-weight:600;color:#374151;cursor:pointer">
+          <input type="checkbox" name="exact_time_delivery" value="1"
+                 {% if b.exact_time_delivery %}checked{% endif %}
+                 style="width:16px;height:16px;accent-color:#2563eb">
+          Exact Time Delivery <span style="color:#6b7280;font-weight:400">(+$175.00)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:.45rem;font-size:.88rem;font-weight:600;color:#374151">
+          Delivery Fee ($)
+          <input type="number" name="delivery_fee" value="{{ b.delivery_fee or 0 }}" min="0" step="0.01"
+                 style="width:90px;border:1px solid #d1d5db;border-radius:6px;padding:.35rem .5rem;font-size:.9rem;text-align:center">
+        </label>
+      </div>
+
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <button type="button" id="add-item-btn"
                 style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:6px;padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer">+ Add Item</button>
         <button type="submit"
-                style="background:#16a34a;color:white;border:none;border-radius:6px;padding:.45rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer">💾 Save Items</button>
+                style="background:#16a34a;color:white;border:none;border-radius:6px;padding:.45rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer">💾 Save &amp; Recalculate</button>
       </div>
+      <p style="font-size:.78rem;color:#6b7280;margin-top:.5rem;margin-bottom:0">Totals, tax, and grand total are automatically recalculated on save.</p>
     </form>
   </div>
   <script>
@@ -5130,9 +5154,9 @@ def update_booking_items(booking_id):
     names  = request.form.getlist("item_name")
     qtys   = request.form.getlist("item_qty")
     prices = request.form.getlist("item_price")
-    # Pad prices list in case it's shorter
     while len(prices) < len(names):
         prices.append("0")
+
     # Build product price map as fallback
     _prod_map = {p["name"].lower(): float(p.get("price") or 0) for p in get_products()}
     items = []
@@ -5150,15 +5174,57 @@ def update_booking_items(booking_id):
             if up == 0:
                 up = _prod_map.get(name.lower(), 0)
             items.append({"name": name, "qty": q, "unit_price": up, "total": round(up * q, 2)})
+
+    # Exact time delivery & delivery fee
+    exact_time = bool(request.form.get("exact_time_delivery"))
+    try:
+        delivery_fee = round(float(request.form.get("delivery_fee") or 0), 2)
+    except Exception:
+        delivery_fee = 0.0
+
+    # Recalculate all totals
+    items_subtotal = round(sum(i["total"] for i in items), 2)
+    exact_fee      = 175.0 if exact_time else 0.0
+    pre_tax        = round(items_subtotal + delivery_fee + exact_fee, 2)
+
     conn = get_db()
     if conn:
         try:
-            cur = conn.cursor()
-            cur.execute("UPDATE bookings SET items_json=%s WHERE id=%s",
-                        (json.dumps(items), booking_id))
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            # Fetch current discount info so we can reapply it
+            cur.execute("SELECT discount_type, discount_value, tax_rate FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            disc_type  = row["discount_type"]  if row else None
+            disc_value = float(row["discount_value"] or 0) if row else 0.0
+            tax_rate   = float(row["tax_rate"]  or 0.0635) if row else 0.0635
+
+            # Reapply discount
+            disc_amount = 0.0
+            if disc_type == "percent" and disc_value > 0:
+                disc_amount = round(pre_tax * disc_value / 100.0, 2)
+            elif disc_type == "amount" and disc_value > 0:
+                disc_amount = min(round(disc_value, 2), pre_tax)
+
+            taxable    = round(pre_tax - disc_amount, 2)
+            tax_amount = round(taxable * tax_rate, 2)
+            grand_total = round(taxable + tax_amount, 2)
+
+            cur2 = conn.cursor()
+            cur2.execute("""
+                UPDATE bookings SET
+                    items_json=%s,
+                    items_subtotal=%s,
+                    exact_time_delivery=%s,
+                    delivery_fee=%s,
+                    discount_amount=%s,
+                    tax_amount=%s,
+                    grand_total=%s
+                WHERE id=%s
+            """, (json.dumps(items), items_subtotal, exact_time, delivery_fee,
+                  disc_amount, tax_amount, grand_total, booking_id))
             conn.commit()
-            cur.close()
-            conn.close()
+            cur.close(); cur2.close(); conn.close()
+            log.info(f"Booking #{booking_id} items updated — subtotal ${items_subtotal}, total ${grand_total}")
         except Exception as e:
             log.error(f"Update items error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
