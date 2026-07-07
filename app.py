@@ -3067,6 +3067,102 @@ ADMIN_BOOKING_HTML = """
     <div style="background:#f0f9ff;border-left:3px solid #38bdf8;padding:.6rem .9rem;margin-top:.9rem;border-radius:0 6px 6px 0;font-size:.82rem;color:#0c4a6e">
       ℹ️ <strong>Delivery times are approximate</strong> unless the customer has opted for exact-time delivery/pickup.
     </div>
+
+    <!-- Booking Calendar -->
+    <div style="margin-top:1.25rem">
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#6b7280;margin-bottom:.75rem">📅 Confirmed Bookings Calendar</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <button onclick="calPrev()" style="background:none;border:1px solid #d1d5db;border-radius:6px;padding:.25rem .65rem;cursor:pointer;font-size:.9rem;color:#374151">‹</button>
+        <span id="cal-title" style="font-weight:700;font-size:.9rem;color:#1a202c"></span>
+        <button onclick="calNext()" style="background:none;border:1px solid #d1d5db;border-radius:6px;padding:.25rem .65rem;cursor:pointer;font-size:.9rem;color:#374151">›</button>
+      </div>
+      <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:.78rem"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.75rem;font-size:.75rem">
+        <span style="display:flex;align-items:center;gap:.3rem"><span style="width:12px;height:12px;border-radius:3px;background:#fef3c7;border:1px solid #f59e0b;display:inline-block"></span>This booking</span>
+        <span style="display:flex;align-items:center;gap:.3rem"><span style="width:12px;height:12px;border-radius:3px;background:#dcfce7;border:1px solid #86efac;display:inline-block"></span>Confirmed</span>
+        <span style="display:flex;align-items:center;gap:.3rem"><span style="width:12px;height:12px;border-radius:3px;background:#dbeafe;border:1px solid #93c5fd;display:inline-block"></span>Accepted</span>
+      </div>
+    </div>
+
+    <script>
+    (function(){
+      const CAL_BOOKINGS = {{ cal_bookings | tojson }};
+      const THIS_START   = "{{ b.event_start_date or '' }}"[:10];
+      const THIS_END     = "{{ b.event_end_date or '' }}"[:10];
+      const THIS_ID      = {{ b.id }};
+
+      // Start calendar at this booking's month
+      let calYear, calMonth;
+      if(THIS_START){
+        const d=new Date(THIS_START+'T00:00:00');
+        calYear=d.getFullYear(); calMonth=d.getMonth();
+      } else {
+        const now=new Date();
+        calYear=now.getFullYear(); calMonth=now.getMonth();
+      }
+
+      const MONTHS=['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+      const DAYS=['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+      function dateStr(y,m,d){ return y+'-'+(String(m+1).padStart(2,'0'))+'-'+(String(d).padStart(2,'0')); }
+      function inRange(ds, start, end){ return ds>=start && ds<=end; }
+
+      function render(){
+        document.getElementById('cal-title').textContent=MONTHS[calMonth]+' '+calYear;
+        const grid=document.getElementById('cal-grid');
+        grid.innerHTML='';
+        // Day headers
+        DAYS.forEach(d=>{
+          const h=document.createElement('div');
+          h.textContent=d;
+          h.style.cssText='text-align:center;font-weight:700;color:#9ca3af;padding:4px 2px;font-size:.7rem';
+          grid.appendChild(h);
+        });
+        const firstDay=new Date(calYear,calMonth,1).getDay();
+        const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+        // Empty cells before first day
+        for(let i=0;i<firstDay;i++){
+          const e=document.createElement('div'); grid.appendChild(e);
+        }
+        for(let d=1;d<=daysInMonth;d++){
+          const ds=dateStr(calYear,calMonth,d);
+          const cell=document.createElement('div');
+          cell.textContent=d;
+          let bg='transparent', border='transparent', color='#374151', fw='400';
+
+          // Check if this day falls in THIS booking's range
+          const isThis=THIS_START&&THIS_END&&inRange(ds,THIS_START,THIS_END);
+          if(isThis){ bg='#fef3c7'; border='#f59e0b'; fw='700'; }
+
+          // Check confirmed/accepted bookings (others)
+          let tip='';
+          CAL_BOOKINGS.forEach(bk=>{
+            if(bk.id===THIS_ID) return;
+            if(bk.start&&bk.end&&inRange(ds,bk.start,bk.end)){
+              if(!isThis){
+                bg=bk.status==='confirmed'?'#dcfce7':'#dbeafe';
+                border=bk.status==='confirmed'?'#86efac':'#93c5fd';
+              } else {
+                // Overlap — show red ring
+                border='#f87171';
+              }
+              fw='700';
+              tip+=(tip?', ':'')+bk.name+' #'+bk.id;
+            }
+          });
+
+          cell.style.cssText=`text-align:center;padding:5px 2px;border-radius:5px;cursor:default;font-weight:${fw};color:${color};background:${bg};border:1.5px solid ${border};font-size:.78rem;line-height:1.4;min-height:24px`;
+          if(tip) cell.title=tip;
+          grid.appendChild(cell);
+        }
+      }
+
+      window.calPrev=function(){ calMonth--; if(calMonth<0){calMonth=11;calYear--;} render(); };
+      window.calNext=function(){ calMonth++; if(calMonth>11){calMonth=0;calYear++;} render(); };
+      render();
+    })();
+    </script>
   </div>
 
   <div class="card">
@@ -4496,12 +4592,39 @@ def admin_booking(booking_id):
 
     booking_inv_issues = get_booking_inventory_check(booking_id)
 
+    # Fetch all confirmed/accepted booking date ranges for the calendar
+    cal_bookings = []
+    try:
+        conn3 = get_db()
+        if conn3:
+            cur3 = conn3.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur3.execute("""
+                SELECT id, full_name, event_start_date, event_end_date, status
+                FROM bookings
+                WHERE status IN ('confirmed','accepted')
+                  AND event_start_date IS NOT NULL
+                ORDER BY event_start_date
+            """)
+            for row in cur3.fetchall():
+                r = _row(row)
+                cal_bookings.append({
+                    "id":    r["id"],
+                    "name":  r.get("full_name",""),
+                    "start": str(r.get("event_start_date",""))[:10],
+                    "end":   str(r.get("event_end_date",""))[:10],
+                    "status": r.get("status",""),
+                })
+            cur3.close(); conn3.close()
+    except Exception as e:
+        log.error(f"Calendar bookings fetch error: {e}")
+
     try:
         return render_template_string(ADMIN_BOOKING_HTML,
             business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until,
             products=get_products(), payment_links=get_payment_links(booking_id),
             matched_customer=matched_customer, weekend_residential=weekend_residential,
-            booking_inv_issues=booking_inv_issues)
+            booking_inv_issues=booking_inv_issues,
+            cal_bookings=cal_bookings)
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
         return "Error rendering booking — please contact support.", 500
