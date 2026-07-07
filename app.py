@@ -3071,7 +3071,7 @@ addRow(); addRow();
   nameInput.addEventListener('input', function() {
     clearTimeout(debounce);
     const q = this.value.trim();
-    if (q.length < 2) { suggestions.style.display='none'; return; }
+    if (q.length < 1) { suggestions.style.display='none'; return; }
     debounce = setTimeout(() => {
       fetch('/admin/customer-search?q=' + encodeURIComponent(q))
         .then(r => r.json())
@@ -5228,26 +5228,36 @@ def edit_booking(booking_id):
 @app.route("/admin/customer-search")
 @admin_required
 def customer_search():
-    """Return up to 8 customers whose name matches the query string (JSON)."""
+    """Return up to 10 customers whose name matches the query string (JSON)."""
     q = request.args.get("q", "").strip()
-    if len(q) < 2:
+    if len(q) < 1:
         return jsonify([])
     try:
         with get_db() as conn:
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute("""
-                SELECT DISTINCT ON (LOWER(full_name))
-                    full_name, email, phone, company_name,
-                    event_street, event_city, event_state, event_zip
-                FROM bookings
-                WHERE full_name ILIKE %s
-                ORDER BY LOWER(full_name), id DESC
-                LIMIT 8
+                SELECT full_name, email, phone, company_name,
+                       event_street, event_city, event_state, event_zip
+                FROM (
+                    SELECT full_name, email, phone, company_name,
+                           event_street, event_city, event_state, event_zip,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY LOWER(TRIM(full_name))
+                               ORDER BY id DESC
+                           ) AS rn
+                    FROM bookings
+                    WHERE full_name ILIKE %s
+                      AND full_name IS NOT NULL
+                      AND TRIM(full_name) != ''
+                ) sub
+                WHERE rn = 1
+                ORDER BY full_name
+                LIMIT 10
             """, (f"%{q}%",))
             rows = [dict(r) for r in cur.fetchall()]
         return jsonify(rows)
     except Exception as e:
-        log.error(f"customer_search: {e}")
+        log.error(f"customer_search error: {e}")
         return jsonify([])
 
 
