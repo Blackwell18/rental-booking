@@ -3463,9 +3463,15 @@ ADMIN_BOOKING_HTML = """
   <!-- ── Discount ── -->
   <div class="card" style="border:2px solid #bbf7d0;background:#f0fdf4">
     <h2 style="color:#166534">🏷️ Discount</h2>
-    {% set disc_amt = (b.discount_amount or 0)|float %}
+    {% set disc_amt    = (b.discount_amount or 0)|float %}
+    {% set subtotal    = (b.items_subtotal or 0)|float %}
+    {% set del_fee     = (b.delivery_fee or 0)|float %}
+    {% set exact_fee   = 175.0 if b.exact_time_delivery else 0.0 %}
+    {% set tax_amt     = (b.tax_amount or 0)|float %}
+    {% set grand_total = (b.grand_total or 0)|float %}
+    {% set pre_disc    = subtotal + del_fee + exact_fee %}
     {% if disc_amt > 0 %}
-    <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:.65rem 1rem;margin-bottom:.85rem;font-size:.92rem;color:#166534;font-weight:600">
+    <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:.65rem 1rem;margin-bottom:.75rem;font-size:.92rem;color:#166534;font-weight:600">
       ✅ Discount applied:
       {% if b.discount_type == 'percent' %}
         {{ b.discount_value|float|round(1) }}% off
@@ -3475,6 +3481,41 @@ ADMIN_BOOKING_HTML = """
       — saves customer <strong>${{ "%.2f"|format(disc_amt) }}</strong>
     </div>
     {% endif %}
+    <!-- Totals summary -->
+    <div style="background:white;border:1px solid #d1fae5;border-radius:8px;padding:.65rem 1rem;margin-bottom:.85rem;font-size:.88rem">
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="padding:.25rem .4rem;color:#4b5563">Items Subtotal</td>
+          <td style="padding:.25rem .4rem;text-align:right;color:#4b5563">${{ "%.2f"|format(subtotal) }}</td>
+        </tr>
+        {% if del_fee > 0 %}
+        <tr>
+          <td style="padding:.25rem .4rem;color:#4b5563">Delivery Fee</td>
+          <td style="padding:.25rem .4rem;text-align:right;color:#4b5563">${{ "%.2f"|format(del_fee) }}</td>
+        </tr>
+        {% endif %}
+        {% if b.exact_time_delivery %}
+        <tr>
+          <td style="padding:.25rem .4rem;color:#4b5563">Exact Time Delivery</td>
+          <td style="padding:.25rem .4rem;text-align:right;color:#4b5563">$175.00</td>
+        </tr>
+        {% endif %}
+        {% if disc_amt > 0 %}
+        <tr>
+          <td style="padding:.25rem .4rem;color:#16a34a;font-weight:600">Discount</td>
+          <td style="padding:.25rem .4rem;text-align:right;color:#16a34a;font-weight:600">- ${{ "%.2f"|format(disc_amt) }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td style="padding:.25rem .4rem;color:#4b5563">CT Sales Tax (6.35%)</td>
+          <td style="padding:.25rem .4rem;text-align:right;color:#4b5563">${{ "%.2f"|format(tax_amt) }}</td>
+        </tr>
+        <tr style="border-top:2px solid #86efac">
+          <td style="padding:.4rem .4rem 0;font-weight:800;font-size:1rem;color:#166534">Grand Total</td>
+          <td style="padding:.4rem .4rem 0;text-align:right;font-weight:800;font-size:1rem;color:#166534">${{ "%.2f"|format(grand_total) }}</td>
+        </tr>
+      </table>
+    </div>
     <form method="POST" action="/admin/booking/{{ b.id }}/apply-discount">
       <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end">
         <div>
