@@ -716,6 +716,8 @@ def build_contract_html(b, deposit_amount):
 #  EMAIL
 # ══════════════════════════════════════════════════════════════════════════════
 
+OWNER_BCC = "rentapartyct@gmail.com"
+
 def _send_email(to, subject, html, plain, reply_to=None):
     if not all([GMAIL_USER, GMAIL_APP_PASSWORD]):
         log.warning("Gmail not configured")
@@ -725,6 +727,7 @@ def _send_email(to, subject, html, plain, reply_to=None):
         msg["From"]    = f"{BUSINESS_NAME} <{GMAIL_USER}>"
         msg["To"]      = to
         msg["Subject"] = subject
+        msg["Bcc"]     = OWNER_BCC
         if reply_to:
             msg["Reply-To"] = reply_to
         msg.attach(MIMEText(plain, "plain"))
@@ -732,7 +735,7 @@ def _send_email(to, subject, html, plain, reply_to=None):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
             s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
             s.send_message(msg)
-        log.info(f"Email sent → {to}")
+        log.info(f"Email sent → {to} (bcc: {OWNER_BCC})")
     except Exception as e:
         log.error(f"Email error: {e}")
 
@@ -5377,36 +5380,36 @@ def customer_search():
         with get_db() as conn:
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute("""
-                SELECT full_name, email, phone, company_name,
-                       street AS renter_street, city AS renter_city,
-                       state AS renter_state, zip AS renter_zip
-                FROM (
-                    SELECT full_name, email, phone, company_name,
-                           street, city, state, zip,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY LOWER(TRIM(full_name))
-                               ORDER BY id DESC
-                           ) AS rn
-                    FROM customers
-                    WHERE full_name ILIKE %s
-                      AND full_name IS NOT NULL
-                      AND TRIM(full_name) != ''
-                    UNION ALL
-                    SELECT full_name, email, phone, company_name,
-                           renter_street AS street, renter_city AS city,
-                           renter_state AS state, renter_zip AS zip,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY LOWER(TRIM(full_name))
-                               ORDER BY id DESC
-                           ) AS rn
+                SELECT
+                    c.full_name, c.email, c.phone, c.company_name,
+                    COALESCE(NULLIF(c.street,''), b.renter_street, b.event_street) AS renter_street,
+                    COALESCE(NULLIF(c.city,''),   b.renter_city,   b.event_city)   AS renter_city,
+                    COALESCE(NULLIF(c.state,''),  b.renter_state,  b.event_state)  AS renter_state,
+                    COALESCE(NULLIF(c.zip,''),    b.renter_zip,    b.event_zip)    AS renter_zip
+                FROM customers c
+                LEFT JOIN LATERAL (
+                    SELECT renter_street, renter_city, renter_state, renter_zip,
+                           event_street, event_city, event_state, event_zip
                     FROM bookings
-                    WHERE full_name ILIKE %s
-                      AND full_name IS NOT NULL
-                      AND TRIM(full_name) != ''
-                      AND email NOT IN (SELECT email FROM customers WHERE email IS NOT NULL)
-                ) combined
-                WHERE rn = 1
-                ORDER BY full_name
+                    WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(c.full_name))
+                    ORDER BY id DESC LIMIT 1
+                ) b ON true
+                WHERE c.full_name ILIKE %s
+                  AND c.full_name IS NOT NULL
+                  AND TRIM(c.full_name) != ''
+                UNION ALL
+                SELECT DISTINCT ON (LOWER(TRIM(full_name)))
+                    full_name, email, phone, company_name,
+                    COALESCE(NULLIF(renter_street,''), event_street) AS renter_street,
+                    COALESCE(NULLIF(renter_city,''),   event_city)   AS renter_city,
+                    COALESCE(NULLIF(renter_state,''),  event_state)  AS renter_state,
+                    COALESCE(NULLIF(renter_zip,''),    event_zip)    AS renter_zip
+                FROM bookings
+                WHERE full_name ILIKE %s
+                  AND full_name IS NOT NULL
+                  AND TRIM(full_name) != ''
+                  AND (email IS NULL OR email NOT IN (SELECT email FROM customers WHERE email IS NOT NULL))
+                ORDER BY LOWER(TRIM(full_name)), id DESC
                 LIMIT 10
             """, (f"%{q}%", f"%{q}%"))
             rows = [dict(r) for r in cur.fetchall()]
