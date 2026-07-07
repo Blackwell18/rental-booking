@@ -2783,10 +2783,8 @@ ADMIN_BOOKING_EDIT_HTML = """
       <div><label>Delivery Time</label><input name="setup_time" type="time" value="{{ b.setup_time or '' }}"></div>
       <div><label>Venue Type</label>
         <select name="venue_type">
-          <option value="venue" {% if b.venue_type=='venue' %}selected{% endif %}>Venue</option>
-          <option value="backyard" {% if b.venue_type=='backyard' %}selected{% endif %}>Backyard</option>
-          <option value="park" {% if b.venue_type=='park' %}selected{% endif %}>Park</option>
-          <option value="other" {% if b.venue_type=='other' %}selected{% endif %}>Other</option>
+          <option value="venue"        {% if b.venue_type=='venue'        %}selected{% endif %}>Venue</option>
+          <option value="residential"  {% if b.venue_type=='residential'  %}selected{% endif %}>Residential</option>
         </select>
       </div>
     </div>
@@ -2906,11 +2904,8 @@ ADMIN_NEW_BOOKING_HTML = """
       <div><label>Pickup Time</label><input name="event_end_time" type="time" value="10:00"></div>
       <div><label>Venue Type</label>
         <select name="venue_type">
-          <option value="residential">Residential</option>
           <option value="venue">Venue</option>
-          <option value="backyard">Backyard</option>
-          <option value="park">Park</option>
-          <option value="other">Other</option>
+          <option value="residential">Residential</option>
         </select>
       </div>
       <div>
