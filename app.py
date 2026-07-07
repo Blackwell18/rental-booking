@@ -199,6 +199,7 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS stripe_session_id TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_payment_link TEXT",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS final_reminder_sent BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS auto_invoice_sent BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(5,4) DEFAULT 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(10,2) DEFAULT 0",
@@ -7811,7 +7812,12 @@ def pwa_icon_512():
 
 @app.route("/cron/send-reminders")
 def cron_send_reminders():
-    """Called by Render cron job (or external scheduler) once daily."""
+    """Called by Render cron job (or external scheduler) once daily.
+
+    Two passes:
+    1. confirmed bookings (deposit paid) → send remaining balance 2 days before event
+    2. accepted bookings (full amount due) → send full invoice 5 days before event
+    """
     secret = request.args.get("secret", "")
     cron_secret = os.getenv("CRON_SECRET", "")
     if cron_secret and secret != cron_secret:
@@ -7822,25 +7828,28 @@ def cron_send_reminders():
         return "DB unavailable", 500
 
     sent = []
+
+    # ── Pass 1: confirmed bookings, 2 days out (remaining 75%) ───────────────
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        target_date = (date.today() + timedelta(days=2)).isoformat()
+        target_2day = (date.today() + timedelta(days=2)).isoformat()
         cur.execute("""
             SELECT * FROM bookings
             WHERE status = 'confirmed'
               AND event_start_date = %s
               AND (final_reminder_sent IS NULL OR final_reminder_sent = FALSE)
-        """, (target_date,))
-        bookings_due = [dict(r) for r in cur.fetchall()]
+        """, (target_2day,))
+        bookings_2day = [dict(r) for r in cur.fetchall()]
         cur.close()
-        conn.close()
     except Exception as e:
-        return f"DB error: {e}", 500
+        conn.close()
+        return f"DB error (pass 1): {e}", 500
 
-    for b in bookings_due:
+    for b in bookings_2day:
         try:
             grand_total  = float(b.get("grand_total") or 0)
-            remaining    = round(grand_total * 0.75, 2)
+            amount_paid  = float(b.get("amount_paid") or 0)
+            remaining    = round(max(grand_total - amount_paid, grand_total * 0.75), 2)
             items_list   = ", ".join(
                 f"{i['qty']}x {i['name']}"
                 for i in json.loads(b.get("items_json") or "[]")
@@ -7861,16 +7870,64 @@ def cron_send_reminders():
                     "UPDATE bookings SET final_payment_link=%s, final_reminder_sent=TRUE WHERE id=%s",
                     (payment_link, b["id"])
                 )
-                conn2.commit()
-                cur2.close()
-                conn2.close()
+                conn2.commit(); cur2.close(); conn2.close()
 
             b["final_payment_link"] = payment_link
             send_final_payment_email(b, remaining, payment_link)
             sent.append(b["id"])
-            log.info(f"Cron: final reminder sent for booking #{b['id']}")
+            log.info(f"Cron: 2-day final reminder sent for booking #{b['id']}")
         except Exception as e:
-            log.error(f"Cron error for booking #{b.get('id')}: {e}")
+            log.error(f"Cron pass-1 error for booking #{b.get('id')}: {e}")
+
+    # ── Pass 2: accepted bookings, 5 days out (full amount due) ──────────────
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        target_5day = (date.today() + timedelta(days=5)).isoformat()
+        cur.execute("""
+            SELECT * FROM bookings
+            WHERE status = 'accepted'
+              AND event_start_date = %s
+              AND (auto_invoice_sent IS NULL OR auto_invoice_sent = FALSE)
+        """, (target_5day,))
+        bookings_5day = [dict(r) for r in cur.fetchall()]
+        cur.close()
+        conn.close()
+    except Exception as e:
+        return f"DB error (pass 2): {e}", 500
+
+    for b in bookings_5day:
+        try:
+            grand_total  = float(b.get("grand_total") or 0)
+            if grand_total <= 0:
+                continue
+            items_list   = ", ".join(
+                f"{i['qty']}x {i['name']}"
+                for i in json.loads(b.get("items_json") or "[]")
+            )
+            product_name = f"Full Invoice — Booking #{b['id']}"
+            payment_link, plink_id, err = create_stripe_payment_link(
+                b["id"], grand_total, b.get("email"), items_list, product_name
+            )
+            if err:
+                log.warning(f"Cron 5-day Stripe error #{b['id']}: {err}")
+            if payment_link:
+                save_payment_link(b["id"], product_name, grand_total, payment_link, plink_id)
+
+            conn3 = get_db()
+            if conn3:
+                cur3 = conn3.cursor()
+                cur3.execute(
+                    "UPDATE bookings SET final_payment_link=%s, auto_invoice_sent=TRUE WHERE id=%s",
+                    (payment_link, b["id"])
+                )
+                conn3.commit(); cur3.close(); conn3.close()
+
+            b["final_payment_link"] = payment_link
+            send_final_payment_email(b, grand_total, payment_link)
+            sent.append(b["id"])
+            log.info(f"Cron: 5-day full invoice sent for booking #{b['id']}")
+        except Exception as e:
+            log.error(f"Cron pass-2 error for booking #{b.get('id')}: {e}")
 
     return jsonify({"sent": sent, "count": len(sent)})
 
