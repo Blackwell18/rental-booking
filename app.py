@@ -2796,10 +2796,10 @@ ADMIN_BOOKING_EDIT_HTML = """
       </div>
     </div>
     <div class="field-grid" style="margin-top:.75rem">
-      <div><label>Event Street</label><input name="event_street" value="{{ b.event_street or '' }}"></div>
-      <div><label>Event City</label><input name="event_city" value="{{ b.event_city or '' }}"></div>
-      <div><label>Event State</label><input name="event_state" value="{{ b.event_state or '' }}"></div>
-      <div><label>Event ZIP</label><input name="event_zip" value="{{ b.event_zip or '' }}"></div>
+      <div><label>Event Street</label><input name="event_street" id="eb_event_street" value="{{ b.event_street or '' }}" autocomplete="off"></div>
+      <div><label>Event City</label><input name="event_city" id="eb_event_city" value="{{ b.event_city or '' }}"></div>
+      <div><label>Event State</label><input name="event_state" id="eb_event_state" value="{{ b.event_state or '' }}"></div>
+      <div><label>Event ZIP</label><input name="event_zip" id="eb_event_zip" value="{{ b.event_zip or '' }}"></div>
       <div class="single" style="grid-column:1/-1"><label>Delivery Location / Notes on Venue</label><input name="delivery_location" value="{{ b.delivery_location or '' }}"></div>
     </div>
   </div>
@@ -2885,7 +2885,41 @@ ADMIN_BOOKING_EDIT_HTML = """
     setTimeout(() => { suggestions.style.display='none'; }, 150);
   });
 })();
+
+// ── Google Maps Places Autocomplete for Edit Booking Event Address ─────────────
+function initEditEventAutocomplete() {
+  var streetEl = document.getElementById('eb_event_street');
+  if (!streetEl || !window.google) return;
+  var ac = new google.maps.places.Autocomplete(streetEl, {
+    types: ['address'],
+    componentRestrictions: { country: 'us' },
+    fields: ['address_components']
+  });
+  streetEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') e.preventDefault();
+  });
+  ac.addListener('place_changed', function() {
+    var place = ac.getPlace();
+    if (!place.address_components) return;
+    var streetNum = '', route = '', city = '', state = '', zip = '';
+    place.address_components.forEach(function(comp) {
+      var t = comp.types;
+      if (t.includes('street_number'))                    streetNum = comp.long_name;
+      else if (t.includes('route'))                       route     = comp.long_name;
+      else if (t.includes('locality'))                    city      = comp.long_name;
+      else if (t.includes('administrative_area_level_1')) state     = comp.short_name;
+      else if (t.includes('postal_code'))                 zip       = comp.long_name;
+    });
+    streetEl.value = [streetNum, route].filter(Boolean).join(' ');
+    document.getElementById('eb_event_city').value  = city;
+    document.getElementById('eb_event_state').value = state;
+    document.getElementById('eb_event_zip').value   = zip;
+  });
+}
 </script>
+{% if google_maps_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initEditEventAutocomplete" async defer></script>
+{% endif %}
 </body></html>
 """
 
@@ -3237,7 +3271,45 @@ function syncPartialAmt() {
     setTimeout(() => { suggestions.style.display='none'; }, 150);
   });
 })();
+
+// ── Google Maps Places Autocomplete for Event Address ─────────────────────────
+function initEventAutocomplete() {
+  var streetEl = document.getElementById('nb_street');
+  if (!streetEl || !window.google) return;
+  var ac = new google.maps.places.Autocomplete(streetEl, {
+    types: ['address'],
+    componentRestrictions: { country: 'us' },
+    fields: ['address_components']
+  });
+  // Prevent form submit on Enter inside autocomplete dropdown
+  streetEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') e.preventDefault();
+  });
+  ac.addListener('place_changed', function() {
+    var place = ac.getPlace();
+    if (!place.address_components) return;
+    var streetNum = '', route = '', city = '', state = '', zip = '';
+    place.address_components.forEach(function(comp) {
+      var t = comp.types;
+      if (t.includes('street_number'))                   streetNum = comp.long_name;
+      else if (t.includes('route'))                      route     = comp.long_name;
+      else if (t.includes('locality'))                   city      = comp.long_name;
+      else if (t.includes('administrative_area_level_1')) state    = comp.short_name;
+      else if (t.includes('postal_code'))                zip       = comp.long_name;
+    });
+    streetEl.value = [streetNum, route].filter(Boolean).join(' ');
+    var cityEl = document.getElementById('nb_city');
+    document.getElementById('nb_state').value = state;
+    document.getElementById('nb_zip').value   = zip;
+    cityEl.value = city;
+    // Trigger the delivery fee lookup (the IIFE listens for 'change' on city)
+    cityEl.dispatchEvent(new Event('change'));
+  });
+}
 </script>
+{% if google_maps_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initEventAutocomplete" async defer></script>
+{% endif %}
 </body></html>
 """
 
@@ -5310,7 +5382,7 @@ def edit_booking(booking_id):
         except Exception as e:
             log.error(f"Edit booking fetch: {e}")
             return redirect(url_for("admin_dashboard"))
-        return render_template_string(ADMIN_BOOKING_EDIT_HTML, business_name=BUSINESS_NAME, b=b)
+        return render_template_string(ADMIN_BOOKING_EDIT_HTML, business_name=BUSINESS_NAME, b=b, google_maps_key=GOOGLE_MAPS_KEY)
     # POST — save changes
     f = request.form
     fields = {
@@ -5437,7 +5509,8 @@ def customer_search():
 def new_booking():
     if request.method == "GET":
         return render_template_string(ADMIN_NEW_BOOKING_HTML,
-            business_name=BUSINESS_NAME, products=get_products())
+            business_name=BUSINESS_NAME, products=get_products(),
+            google_maps_key=GOOGLE_MAPS_KEY)
     # POST — create booking
     f = request.form
     try:
