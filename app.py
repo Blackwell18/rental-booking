@@ -2883,10 +2883,14 @@ ADMIN_NEW_BOOKING_HTML = """
   <div class="card">
     <h2>Customer</h2>
     <div class="fg">
-      <div><label>Full Name *</label><input name="full_name" required placeholder="Jane Smith"></div>
-      <div><label>Email</label><input name="email" type="email" placeholder="jane@email.com"></div>
-      <div><label>Phone</label><input name="phone" placeholder="(555) 000-0000"></div>
-      <div><label>Company</label><input name="company_name" placeholder="Optional"></div>
+      <div style="position:relative">
+        <label>Full Name *</label>
+        <input name="full_name" id="full_name_input" required placeholder="Jane Smith" autocomplete="off">
+        <ul id="name-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:white;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);margin:2px 0;padding:0;list-style:none;max-height:220px;overflow-y:auto"></ul>
+      </div>
+      <div><label>Email</label><input name="email" id="nb_email" type="email" placeholder="jane@email.com"></div>
+      <div><label>Phone</label><input name="phone" id="nb_phone" placeholder="(555) 000-0000"></div>
+      <div><label>Company</label><input name="company_name" id="nb_company" placeholder="Optional"></div>
     </div>
   </div>
 
@@ -3055,6 +3059,55 @@ function prepSubmit() {
 
 // Start with two blank rows
 addRow(); addRow();
+
+// ── Customer autocomplete ────────────────────────────────────────────────────
+(function() {
+  const nameInput  = document.getElementById('full_name_input');
+  const suggestions = document.getElementById('name-suggestions');
+  let debounce;
+
+  const LI_STYLE = 'padding:.55rem .85rem;cursor:pointer;font-size:.92rem;border-bottom:1px solid #f1f5f9';
+
+  nameInput.addEventListener('input', function() {
+    clearTimeout(debounce);
+    const q = this.value.trim();
+    if (q.length < 2) { suggestions.style.display='none'; return; }
+    debounce = setTimeout(() => {
+      fetch('/admin/customer-search?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+          suggestions.innerHTML = '';
+          if (!data.length) { suggestions.style.display='none'; return; }
+          data.forEach(c => {
+            const li = document.createElement('li');
+            li.style.cssText = LI_STYLE;
+            li.innerHTML = '<strong>' + c.full_name + '</strong>' +
+              (c.email ? ' <span style="color:#64748b;font-size:.82rem">— ' + c.email + '</span>' : '');
+            li.addEventListener('mousedown', function(e) {
+              e.preventDefault();
+              nameInput.value = c.full_name;
+              document.getElementById('nb_email').value   = c.email        || '';
+              document.getElementById('nb_phone').value   = c.phone        || '';
+              document.getElementById('nb_company').value = c.company_name || '';
+              // fill event address if present
+              if (c.event_street) document.querySelector('[name=event_street]').value = c.event_street;
+              if (c.event_city)   document.querySelector('[name=event_city]').value   = c.event_city;
+              if (c.event_state)  document.querySelector('[name=event_state]').value  = c.event_state;
+              if (c.event_zip)    document.querySelector('[name=event_zip]').value    = c.event_zip;
+              suggestions.style.display = 'none';
+            });
+            suggestions.appendChild(li);
+          });
+          suggestions.style.display = 'block';
+        })
+        .catch(() => { suggestions.style.display='none'; });
+    }, 250);
+  });
+
+  nameInput.addEventListener('blur', function() {
+    setTimeout(() => { suggestions.style.display='none'; }, 150);
+  });
+})();
 </script>
 </body></html>
 """
@@ -5170,6 +5223,32 @@ def edit_booking(booking_id):
     except Exception as e:
         log.error(f"Edit booking save: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/customer-search")
+@admin_required
+def customer_search():
+    """Return up to 8 customers whose name matches the query string (JSON)."""
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    try:
+        with get_db() as conn:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("""
+                SELECT DISTINCT ON (LOWER(full_name))
+                    full_name, email, phone, company_name,
+                    event_street, event_city, event_state, event_zip
+                FROM bookings
+                WHERE full_name ILIKE %s
+                ORDER BY LOWER(full_name), id DESC
+                LIMIT 8
+            """, (f"%{q}%",))
+            rows = [dict(r) for r in cur.fetchall()]
+        return jsonify(rows)
+    except Exception as e:
+        log.error(f"customer_search: {e}")
+        return jsonify([])
 
 
 @app.route("/admin/booking/new", methods=["GET", "POST"])
