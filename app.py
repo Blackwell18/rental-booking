@@ -797,38 +797,172 @@ def send_customer_email(b):
     <div style="text-align:center;margin:1.25rem 0">
       <a href="{view_url}"
          style="display:inline-block;background:#2b6cb0;color:white;padding:.75rem 2rem;border-radius:8px;font-weight:700;font-size:.95rem;text-decoration:none">
-        📋 View Your Order
+        &#x1F4CB; View Your Order
       </a>
       <p style="margin:.5rem 0 0;font-size:.78rem;color:#718096">Bookmark this link to check your order anytime</p>
     </div>""" if view_url else ""
-    subject = f"We received your rental request! — {BUSINESS_NAME}"
+
+    # ── Build items table rows ──────────────────────────────────────────
+    items = json.loads(b.get("items_json") or "[]")
+    item_rows = ""
+    for it in items:
+        item_rows += (
+            f"<tr>"
+            f"<td style='padding:.45rem .6rem;border-bottom:1px solid #e2e8f0'>{it.get('name','')}</td>"
+            f"<td style='padding:.45rem .6rem;border-bottom:1px solid #e2e8f0;text-align:center'>{it.get('qty',1)}</td>"
+            f"<td style='padding:.45rem .6rem;border-bottom:1px solid #e2e8f0;text-align:right'>${float(it.get('total',0)):.2f}</td>"
+            f"</tr>"
+        )
+
+    subtotal     = float(b.get("items_subtotal") or 0)
+    delivery_fee = float(b.get("delivery_fee") or 0)
+    exact_fee    = 175.0 if b.get("exact_time_delivery") else 0.0
+    tax          = float(b.get("tax_amount") or 0)
+    grand_total  = float(b.get("grand_total") or 0)
+
+    delivery_row = (
+        f"<tr><td colspan='2' style='padding:.4rem .6rem;color:#4a5568'>Delivery Fee</td>"
+        f"<td style='padding:.4rem .6rem;text-align:right'>${delivery_fee:.2f}</td></tr>"
+    ) if delivery_fee else ""
+    exact_row = (
+        f"<tr><td colspan='2' style='padding:.4rem .6rem;color:#4a5568'>Exact Time Delivery</td>"
+        f"<td style='padding:.4rem .6rem;text-align:right'>${exact_fee:.2f}</td></tr>"
+    ) if exact_fee else ""
+
+    # ── Event details ───────────────────────────────────────────────────
+    start_date   = b.get("event_start_date") or ""
+    end_date     = b.get("event_end_date") or ""
+    start_time   = b.get("event_start_time") or ""
+    end_time     = b.get("event_end_time") or ""       # pickup time
+    setup_time   = b.get("setup_time") or ""           # delivery time
+    venue_type   = b.get("venue_type") or ""
+    event_addr   = ", ".join(filter(None, [
+        b.get("event_street",""), b.get("event_city",""),
+        b.get("event_state",""), b.get("event_zip","")
+    ]))
+    delivery_addr = b.get("delivery_address") or ""
+
+    date_display = f"{start_date} - {end_date}" if end_date and end_date != start_date else start_date
+
+    time_rows_html = ""
+    if start_time:
+        time_rows_html += f"<tr><td style='padding:.3rem .5rem;color:#718096;font-size:.88rem'>Event Start</td><td style='padding:.3rem .5rem;font-size:.88rem'>{start_time}</td></tr>"
+    if setup_time:
+        time_rows_html += f"<tr><td style='padding:.3rem .5rem;color:#718096;font-size:.88rem'>Delivery Time</td><td style='padding:.3rem .5rem;font-size:.88rem'>{setup_time}</td></tr>"
+    if end_time:
+        time_rows_html += f"<tr><td style='padding:.3rem .5rem;color:#718096;font-size:.88rem'>Pickup Time</td><td style='padding:.3rem .5rem;font-size:.88rem'>{end_time}</td></tr>"
+
+    venue_row   = f"<tr><td style='padding:.3rem .5rem;color:#718096;font-size:.88rem'>Venue Type</td><td style='padding:.3rem .5rem;font-size:.88rem'>{venue_type}</td></tr>" if venue_type else ""
+    addr_row    = f"<tr><td style='padding:.3rem .5rem;color:#718096;font-size:.88rem'>Event Address</td><td style='padding:.3rem .5rem;font-size:.88rem'>{event_addr}</td></tr>" if event_addr else ""
+    del_row     = f"<tr><td style='padding:.3rem .5rem;color:#718096;font-size:.88rem'>Delivery To</td><td style='padding:.3rem .5rem;font-size:.88rem'>{delivery_addr}</td></tr>" if delivery_addr and delivery_addr != event_addr else ""
+    cust_addr   = b.get("customer_address") or ""
+    cust_addr_row = f"<tr><td style='padding:.3rem .5rem;color:#718096;font-size:.88rem'>Your Address</td><td style='padding:.3rem .5rem;font-size:.88rem'>{cust_addr}</td></tr>" if cust_addr else ""
+
+    subject = f"We received your rental request! - {BUSINESS_NAME}"
     html = f"""
 <html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
-<div style="max-width:500px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+<div style="max-width:580px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
   <div style="background:linear-gradient(135deg,#1a365d,#2b6cb0);padding:2rem;color:white;text-align:center">
     <h2 style="margin:0">Request Received!</h2>
     <p style="margin:.5rem 0 0;opacity:.85">{BUSINESS_NAME}</p>
   </div>
   <div style="padding:2rem">
     <p>Hi <strong>{first}</strong>,</p>
-    <p style="color:#4a5568;line-height:1.7;margin:.75rem 0">Thank you for your rental inquiry! We've received your request for <strong>{b.get('event_start_date')}</strong>.
-    We will review your booking and get back to you shortly with an invoice and next steps.</p>
+    <p style="color:#4a5568;line-height:1.7;margin:.75rem 0">
+      Thank you for your rental inquiry! We have received your request and will review it shortly.
+      Below is a full summary of everything you submitted for your records.
+    </p>
+
     <div style="background:#f0f4f8;border-radius:8px;padding:1rem;margin:1rem 0;text-align:center">
       <p style="margin:0;font-weight:600;color:#2d3748">Booking Reference</p>
       <p style="margin:.3rem 0 0;font-size:1.5rem;font-weight:700;color:#2b6cb0">#{b.get('id')}</p>
     </div>
     {view_btn}
-    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:.85rem 1rem;margin:1rem 0">
+
+    <h3 style="margin:1.5rem 0 .5rem;color:#1a365d;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #e2e8f0;padding-bottom:.4rem">Contact Information</h3>
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="padding:.3rem .5rem;color:#718096;font-size:.88rem;width:38%">Name</td><td style="padding:.3rem .5rem;font-size:.88rem">{b.get('full_name','')}</td></tr>
+      <tr><td style="padding:.3rem .5rem;color:#718096;font-size:.88rem">Email</td><td style="padding:.3rem .5rem;font-size:.88rem">{b.get('email','')}</td></tr>
+      <tr><td style="padding:.3rem .5rem;color:#718096;font-size:.88rem">Phone</td><td style="padding:.3rem .5rem;font-size:.88rem">{b.get('phone','')}</td></tr>
+      {cust_addr_row}
+    </table>
+
+    <h3 style="margin:1.5rem 0 .5rem;color:#1a365d;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #e2e8f0;padding-bottom:.4rem">Event Details</h3>
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="padding:.3rem .5rem;color:#718096;font-size:.88rem;width:38%">Date(s)</td><td style="padding:.3rem .5rem;font-size:.88rem">{date_display}</td></tr>
+      {time_rows_html}
+      {venue_row}
+      {addr_row}
+      {del_row}
+    </table>
+
+    <h3 style="margin:1.5rem 0 .5rem;color:#1a365d;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #e2e8f0;padding-bottom:.4rem">Items Ordered</h3>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:#f7fafc">
+          <th style="padding:.45rem .6rem;text-align:left;color:#4a5568;font-size:.85rem">Item</th>
+          <th style="padding:.45rem .6rem;text-align:center;color:#4a5568;font-size:.85rem">Qty</th>
+          <th style="padding:.45rem .6rem;text-align:right;color:#4a5568;font-size:.85rem">Price</th>
+        </tr>
+      </thead>
+      <tbody>{item_rows}</tbody>
+    </table>
+    <table style="width:100%;border-collapse:collapse;margin-top:.25rem">
+      <tr><td colspan="2" style="padding:.4rem .6rem;color:#4a5568;font-size:.88rem">Items Subtotal</td>
+          <td style="padding:.4rem .6rem;text-align:right;font-size:.88rem">${subtotal:.2f}</td></tr>
+      {delivery_row}
+      {exact_row}
+      <tr><td colspan="2" style="padding:.4rem .6rem;color:#4a5568;font-size:.88rem">CT Sales Tax (6.35%)</td>
+          <td style="padding:.4rem .6rem;text-align:right;font-size:.88rem">${tax:.2f}</td></tr>
+      <tr style="background:#f0f4f8;font-weight:700">
+        <td colspan="2" style="padding:.55rem .6rem;border-top:2px solid #cbd5e0;font-size:.9rem">Estimated Total</td>
+        <td style="padding:.55rem .6rem;border-top:2px solid #cbd5e0;text-align:right;font-size:.9rem">${grand_total:.2f}</td>
+      </tr>
+    </table>
+
+    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:.85rem 1rem;margin:1.25rem 0">
       <p style="margin:0;font-size:.88rem;color:#78350f;line-height:1.6">
-        <strong>📋 Please note:</strong> The initial quote is an estimate and the final price may vary.
-        Any price difference will be clearly explained in the invoice we send you before any payment is required.
+        <strong>Please note:</strong> This is an estimate based on your submission.
+        The final invoice will be sent to you before any payment is required.
       </p>
     </div>
-    <p style="color:#4a5568;line-height:1.7">Keep this reference number handy.{f" Questions? Call <strong>{BUSINESS_PHONE}</strong>." if BUSINESS_PHONE else ""}</p>
-    <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
+    <p style="color:#4a5568;line-height:1.7;font-size:.9rem">
+      Keep your booking reference handy.{f' Questions? Call <strong>{BUSINESS_PHONE}</strong>.' if BUSINESS_PHONE else ''}
+    </p>
+    <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">- The {BUSINESS_NAME} Team</p>
   </div>
 </div></body></html>"""
-    plain = f"Hi {first},\n\nThank you! Your rental request for {b.get('event_start_date')} has been received.\n\nBooking Reference: #{b.get('id')}\n{f'View your order: {view_url}' if view_url else ''}\n\nPlease note: the initial quote is an estimate and the final price may vary. The exact pricing will be clearly detailed in the invoice we send you.\n\nWe'll review and send you an invoice soon.\n\n— {BUSINESS_NAME}"
+
+    item_lines = "\n".join(
+        f"  {it.get('name','')} x{it.get('qty',1)}  ${float(it.get('total',0)):.2f}"
+        for it in items
+    )
+    plain = (
+        f"Hi {first},\n\n"
+        f"Thank you for your rental inquiry! Here is a summary of your submission.\n\n"
+        f"BOOKING REFERENCE: #{b.get('id')}\n"
+        + (f"View your order: {view_url}\n" if view_url else "") +
+        f"\n--- CONTACT ---\n"
+        f"Name:  {b.get('full_name','')}\n"
+        f"Email: {b.get('email','')}\n"
+        f"Phone: {b.get('phone','')}\n"
+        + (f"Address: {cust_addr}\n" if cust_addr else "") +
+        f"\n--- EVENT ---\n"
+        f"Date(s): {date_display}\n"
+        + (f"Event Start:   {start_time}\n" if start_time else "")
+        + (f"Delivery Time: {setup_time}\n" if setup_time else "")
+        + (f"Pickup Time:   {end_time}\n" if end_time else "")
+        + (f"Venue: {venue_type}\n" if venue_type else "")
+        + (f"Address: {event_addr}\n" if event_addr else "") +
+        f"\n--- ITEMS ORDERED ---\n{item_lines}\n\n"
+        f"Subtotal:    ${subtotal:.2f}\n"
+        + (f"Delivery:    ${delivery_fee:.2f}\n" if delivery_fee else "")
+        + (f"Exact Time:  ${exact_fee:.2f}\n" if exact_fee else "") +
+        f"Tax (6.35%): ${tax:.2f}\n"
+        f"Est. Total:  ${grand_total:.2f}\n\n"
+        f"Please note: this is an estimate. The final invoice will be sent before any payment is required.\n\n"
+        f"- {BUSINESS_NAME}"
+    )
     _send_email(email, subject, html, plain)
 
 
