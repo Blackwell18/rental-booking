@@ -3525,9 +3525,17 @@ ADMIN_BOOKING_HTML = """
         </tr>
         {% endif %}
         {% if disc_amt > 0 %}
+        <tr style="border-top:1px dashed #d1d5db">
+          <td style="padding:.35rem .4rem;color:#374151;font-weight:600">Total Before Discount</td>
+          <td style="padding:.35rem .4rem;text-align:right;color:#374151;font-weight:600">${{ "%.2f"|format(subtotal + del_fee + exact_fee) }}</td>
+        </tr>
         <tr>
           <td style="padding:.25rem .4rem;color:#16a34a;font-weight:600">Discount</td>
           <td style="padding:.25rem .4rem;text-align:right;color:#16a34a;font-weight:600">- ${{ "%.2f"|format(disc_amt) }}</td>
+        </tr>
+        <tr>
+          <td style="padding:.25rem .4rem;color:#374151;font-weight:600">Total After Discount</td>
+          <td style="padding:.25rem .4rem;text-align:right;color:#374151;font-weight:600">${{ "%.2f"|format(subtotal + del_fee + exact_fee - disc_amt) }}</td>
         </tr>
         {% endif %}
         <tr>
