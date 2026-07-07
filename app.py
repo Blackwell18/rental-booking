@@ -1397,13 +1397,13 @@ def send_final_payment_email(b, remaining_amount, payment_link):
       <p style="font-weight:700;color:#c05621">Remaining Balance Due: ${remaining_amount:.2f}</p>
       <p style="color:#744210;font-size:.9rem">Please contact us to complete your payment.{f" Call {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}</p>"""
 
-    subject = f"Final Payment Due — Your Event is in 2 Days! | {BUSINESS_NAME}"
+    subject = f"Final Payment Due — Your Delivery is in 2 Days! | {BUSINESS_NAME}"
     html = f"""
 <html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
 <div style="max-width:640px;margin:0 auto">
 
   <div style="background:linear-gradient(135deg,#c05621,#dd6b20);border-radius:12px 12px 0 0;padding:1.75rem 2rem;color:white;text-align:center">
-    <div style="font-size:2rem;margin-bottom:.4rem">&#8987; Your Event is in 2 Days!</div>
+    <div style="font-size:2rem;margin-bottom:.4rem">&#8987; Your Delivery is in 2 Days!</div>
     <h2 style="margin:0;font-weight:700;font-size:1.2rem">Final Payment Due — {BUSINESS_NAME}</h2>
     <p style="margin:.5rem 0 0;opacity:.88;font-size:.95rem">Booking #{b.get('id')} &bull; {event_date}</p>
   </div>
@@ -1412,17 +1412,17 @@ def send_final_payment_email(b, remaining_amount, payment_link):
 
     <p style="color:#2d3748;font-size:1.05rem;margin-bottom:.75rem">Hi <strong>{first}</strong>,</p>
     <p style="color:#4a5568;line-height:1.7;margin-bottom:1.25rem">
-      This is your final payment reminder. Your event is <strong>2 days away</strong> and your remaining balance
+      This is your final payment reminder. Your delivery is <strong>2 days away</strong> and your remaining balance
       is due now to ensure everything is ready for delivery.
     </p>
 
-    <!-- Event Summary -->
+    <!-- Delivery Summary -->
     <div style="background:#fff8f3;border:1.5px solid #fbd38d;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem;font-size:.9rem;color:#2d3748">
-      <div style="margin-bottom:.3rem"><strong>&#128197; Event Date:</strong> {event_date}</div>
+      <div style="margin-bottom:.3rem"><strong>&#128197; Delivery Date:</strong> {event_date}</div>
       <div style="margin-bottom:.3rem"><strong>&#8986; Event Start Time:</strong> {event_time}</div>
-      <div style="margin-bottom:.3rem"><strong>&#128337; Setup Time:</strong> {setup_time}</div>
+      <div style="margin-bottom:.3rem"><strong>&#128666; Delivery Time:</strong> {setup_time}</div>
       <div style="margin-bottom:.3rem"><strong>&#128205; Location:</strong> {event_addr}</div>
-      <div><strong>&#128666; Deliver to:</strong> {b.get('delivery_location','')}</div>
+      <div><strong>&#128204; Deliver to:</strong> {b.get('delivery_location','')}</div>
     </div>
 
     <!-- Invoice summary -->
@@ -1497,11 +1497,11 @@ def send_final_payment_email(b, remaining_amount, payment_link):
 
     plain = f"""Hi {first},
 
-YOUR EVENT IS IN 2 DAYS — FINAL PAYMENT REQUIRED
+YOUR DELIVERY IS IN 2 DAYS — FINAL PAYMENT REQUIRED
 
 Booking #{b.get('id')} | {event_date}
 Location: {event_addr}
-Event Time: {event_time} | Setup Time: {setup_time}
+Event Start Time: {event_time} | Delivery Time: {setup_time}
 
 PAYMENT SUMMARY
   Total Invoice:    ${grand_total:.2f}
