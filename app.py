@@ -3463,7 +3463,15 @@ ADMIN_BOOKING_HTML = """
         {% if b.exact_time_delivery %}
         <tr><td colspan="3">Exact Time Delivery</td><td style="text-align:right;font-weight:600">$175.00</td></tr>
         {% endif %}
-        <tr><td colspan="3">Delivery Fee ({{ b.distance_miles or '?' }} mi)</td><td style="text-align:right;font-weight:600">${{ "%.2f"|format(b.delivery_fee or 0) }}</td></tr>
+        <tr>
+          <td colspan="3">
+            Delivery Fee ({{ b.distance_miles or '?' }} mi)
+            <form method="POST" action="/admin/booking/{{ b.id }}/recalc-delivery" style="display:inline;margin-left:.5rem">
+              <button type="submit" style="font-size:.7rem;padding:.15rem .5rem;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;border-radius:4px;cursor:pointer">🔄 Recalc</button>
+            </form>
+          </td>
+          <td style="text-align:right;font-weight:600">${{ "%.2f"|format(b.delivery_fee or 0) }}</td>
+        </tr>
         {% if (b.discount_amount or 0)|float > 0 %}
         <tr style="background:#f0fdf4">
           <td colspan="3" style="color:#16a34a;font-weight:600">
@@ -5671,6 +5679,44 @@ def remove_discount(booking_id):
         cur.close(); conn.close()
     except Exception as e:
         log.error(f"Remove discount error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/recalc-delivery", methods=["POST"])
+@admin_required
+def recalc_delivery(booking_id):
+    """Recalculate delivery fee from stored event address and update grand total."""
+    try:
+        conn = get_db()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+        b = dict(cur.fetchone())
+        # Build address from stored fields
+        addr_parts = [b.get("event_street",""), b.get("event_city",""),
+                      b.get("event_state",""), b.get("event_zip","")]
+        address = ", ".join(p for p in addr_parts if p)
+        if not address:
+            return redirect(url_for("admin_booking", booking_id=booking_id))
+        miles = get_distance_miles(address)
+        fee, _ = calc_delivery_fee(miles)
+        # Recalculate grand total
+        subtotal   = float(b.get("items_subtotal") or 0)
+        exact_fee  = 175.0 if b.get("exact_time_delivery") else 0.0
+        tax_rate   = float(b.get("tax_rate") or 0.0635)
+        tax_exempt = bool(b.get("tax_exempt"))
+        pre_tax    = subtotal + exact_fee + fee
+        tax        = 0.0 if tax_exempt else round(pre_tax * tax_rate, 2)
+        grand      = round(pre_tax + tax, 2)
+        cur2 = conn.cursor()
+        cur2.execute("""
+            UPDATE bookings
+            SET delivery_fee=%s, distance_miles=%s, tax_amount=%s, grand_total=%s
+            WHERE id=%s
+        """, (fee, miles, tax, grand, booking_id))
+        conn.commit()
+        cur.close(); cur2.close(); conn.close()
+    except Exception as e:
+        log.error(f"recalc_delivery: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
