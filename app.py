@@ -207,6 +207,7 @@ def init_db():
             "UPDATE inventory SET price = 85 WHERE TRIM(name) SIMILAR TO 'Marquee [A-Za-z]'",
             # Admin-only private notes
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS admin_notes TEXT",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS view_token TEXT DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_type VARCHAR(10) DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_value DECIMAL(10,2) DEFAULT 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) DEFAULT 0",
@@ -789,6 +790,17 @@ def send_customer_email(b):
     first = b.get("full_name", "").split()[0]
     if not email:
         return
+    token = b.get("view_token") or ""
+    base_url = os.environ.get("APP_BASE_URL", "").rstrip("/")
+    view_url = f"{base_url}/booking/view/{token}" if token and base_url else ""
+    view_btn = f"""
+    <div style="text-align:center;margin:1.25rem 0">
+      <a href="{view_url}"
+         style="display:inline-block;background:#2b6cb0;color:white;padding:.75rem 2rem;border-radius:8px;font-weight:700;font-size:.95rem;text-decoration:none">
+        📋 View Your Order
+      </a>
+      <p style="margin:.5rem 0 0;font-size:.78rem;color:#718096">Bookmark this link to check your order anytime</p>
+    </div>""" if view_url else ""
     subject = f"We received your rental request! — {BUSINESS_NAME}"
     html = f"""
 <html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
@@ -805,6 +817,7 @@ def send_customer_email(b):
       <p style="margin:0;font-weight:600;color:#2d3748">Booking Reference</p>
       <p style="margin:.3rem 0 0;font-size:1.5rem;font-weight:700;color:#2b6cb0">#{b.get('id')}</p>
     </div>
+    {view_btn}
     <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:.85rem 1rem;margin:1rem 0">
       <p style="margin:0;font-size:.88rem;color:#78350f;line-height:1.6">
         <strong>📋 Please note:</strong> The initial quote is an estimate and the final price may vary.
@@ -815,7 +828,7 @@ def send_customer_email(b):
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
   </div>
 </div></body></html>"""
-    plain = f"Hi {first},\n\nThank you! Your rental request for {b.get('event_start_date')} has been received.\n\nBooking Reference: #{b.get('id')}\n\nPlease note: the initial quote is an estimate and the final price may vary. The exact pricing will be clearly detailed in the invoice we send you.\n\nWe'll review and send you an invoice soon.\n\n— {BUSINESS_NAME}"
+    plain = f"Hi {first},\n\nThank you! Your rental request for {b.get('event_start_date')} has been received.\n\nBooking Reference: #{b.get('id')}\n{f'View your order: {view_url}' if view_url else ''}\n\nPlease note: the initial quote is an estimate and the final price may vary. The exact pricing will be clearly detailed in the invoice we send you.\n\nWe'll review and send you an invoice soon.\n\n— {BUSINESS_NAME}"
     _send_email(email, subject, html, plain)
 
 
@@ -857,6 +870,9 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
     tax_amount_val  = float(b.get("tax_amount") or 0)
     tax_rate_val    = float(b.get("tax_rate") or 0)
     is_tax_exempt_b = bool(b.get("tax_exempt"))
+    disc_amount     = float(b.get("discount_amount") or 0)
+    disc_type       = b.get("discount_type") or ""
+    disc_value      = float(b.get("discount_value") or 0)
 
     item_rows = ""
     for it in items:
@@ -867,6 +883,14 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${it['unit_price']:.2f}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${it['total']:.2f}</td>
         </tr>"""
+
+    if disc_amount > 0:
+        disc_label = f"{disc_value:.1f}% Discount" if disc_type == "percent" else f"${disc_value:.2f} Discount"
+        disc_row_html  = f'<tr style="background:#f0fdf4"><td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#166534;font-weight:600">🏷️ {disc_label}</td><td style="padding:8px 12px;text-align:right;font-weight:700;border-bottom:1px solid #e2e8f0;color:#16a34a">- ${disc_amount:.2f}</td></tr>'
+        disc_row_plain = f"  {disc_label}:    -${disc_amount:.2f}\n"
+    else:
+        disc_row_html  = ""
+        disc_row_plain = ""
 
     if is_tax_exempt_b:
         tax_row_html  = '<tr><td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#276749">CT Sales Tax <span style="font-size:.76rem;background:#c6f6d5;color:#276749;border-radius:4px;padding:.1rem .35rem;margin-left:.3rem">TAX EXEMPT</span></td><td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0;color:#276749">$0.00</td></tr>'
@@ -939,6 +963,7 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
           <td colspan="3" style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#718096">Delivery Fee ({b.get('distance_miles','?')} mi)</td>
           <td style="padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0">${b.get('delivery_fee',0):.2f}</td>
         </tr>
+        {disc_row_html}
         {tax_row_html}
         <tr style="background:#1a365d;color:white">
           <td colspan="3" style="padding:11px 12px;font-weight:700;font-size:1rem">TOTAL</td>
@@ -990,7 +1015,7 @@ EVENT DETAILS
 
 INVOICE
 {"".join(f"  {i['qty']}x {i['name']} @ ${i['unit_price']:.2f} = ${i['total']:.2f}\n" for i in items)}{"  Exact Time Delivery: $175.00\n" if exact else ""}  Delivery Fee: ${b.get('delivery_fee',0):.2f}
-{tax_row_plain}  ─────────────────────────────
+{disc_row_plain}{tax_row_plain}  ─────────────────────────────
   TOTAL: ${grand_total:.2f}
 
 PAYMENT REQUIRED
@@ -1039,12 +1064,19 @@ def send_receipt_email(b):
 
     delivery_fee  = float(b.get("delivery_fee") or 0)
     late_fee      = float(b.get("late_night_fee") or 0)
+    r_disc_amount = float(b.get("discount_amount") or 0)
+    r_disc_type   = b.get("discount_type") or ""
+    r_disc_value  = float(b.get("discount_value") or 0)
     if delivery_fee:
         item_rows += f"""<tr><td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0" colspan="3">Delivery Fee</td>
           <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;text-align:right">${delivery_fee:,.2f}</td></tr>"""
     if late_fee:
         item_rows += f"""<tr><td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0" colspan="3">Late Night Fee</td>
           <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;text-align:right">${late_fee:,.2f}</td></tr>"""
+    if r_disc_amount > 0:
+        r_disc_label = f"{r_disc_value:.1f}% Discount" if r_disc_type == "percent" else f"${r_disc_value:.2f} Discount"
+        item_rows += f"""<tr style="background:#f0fdf4"><td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#166534;font-weight:600" colspan="3">🏷️ {r_disc_label}</td>
+          <td style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#16a34a">- ${r_disc_amount:,.2f}</td></tr>"""
 
     balance_row = ""
     if balance > 0.01:
@@ -3697,6 +3729,8 @@ def submit():
                 notes,
             ))
             booking_id = cur.fetchone()[0]
+            view_token = secrets.token_urlsafe(24)
+            cur.execute("UPDATE bookings SET view_token=%s WHERE id=%s", (view_token, booking_id))
             conn.commit()
             cur.close()
             conn.close()
@@ -3705,7 +3739,8 @@ def submit():
             log.error(f"DB insert error: {e}")
 
     booking_data = {
-        "id": booking_id, "full_name": full_name, "company_name": company_name,
+        "id": booking_id, "view_token": view_token if booking_id else None,
+        "full_name": full_name, "company_name": company_name,
         "renter_street": renter_street, "renter_city": renter_city,
         "renter_state": renter_state, "renter_zip": renter_zip,
         "phone": phone, "email": email,
@@ -3982,6 +4017,173 @@ function setMode(m){
 </script>
 </body></html>
 """
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROUTES — CUSTOMER ORDER VIEW (read-only, token-gated)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/booking/view/<token>")
+def customer_booking_view(token):
+    if not token:
+        return "Invalid link.", 404
+    conn = get_db()
+    if not conn:
+        return "Unable to load booking. Please try again later.", 503
+    b, items = None, []
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE view_token=%s", (token,))
+        row = cur.fetchone()
+        if row:
+            b = _row(row)
+            try: items = json.loads(b.get("items_json") or "[]")
+            except Exception: items = []
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"Customer view error: {e}")
+    if not b:
+        return "Booking not found or link has expired.", 404
+
+    STATUS_LABELS = {
+        "pending":   ("🕐 Under Review",  "#92400e", "#fef3c7"),
+        "accepted":  ("✅ Accepted",       "#1e40af", "#dbeafe"),
+        "confirmed": ("✅ Confirmed",      "#166534", "#dcfce7"),
+        "denied":    ("❌ Denied",         "#991b1b", "#fee2e2"),
+        "cancelled": ("🚫 Cancelled",      "#6b7280", "#f3f4f6"),
+    }
+    status_key = (b.get("status") or "pending").lower()
+    status_label, status_color, status_bg = STATUS_LABELS.get(status_key, ("Unknown", "#6b7280", "#f3f4f6"))
+
+    disc_amount = float(b.get("discount_amount") or 0)
+    disc_type   = b.get("discount_type") or ""
+    disc_value  = float(b.get("discount_value") or 0)
+
+    items_html = ""
+    for it in items:
+        up  = float(it.get("unit_price") or 0)
+        tot = float(it.get("total") or round(up * int(it.get("qty",1)), 2))
+        items_html += f"""
+        <tr>
+          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb">{it.get('name','')}</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:center">{it.get('qty','')}</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:right">${up:.2f}</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">${tot:.2f}</td>
+        </tr>"""
+
+    exact_fee = float(b.get("exact_time_fee") or 0)
+    late_fee  = float(b.get("late_night_fee") or 0)
+    if exact_fee:
+        items_html += f'<tr><td colspan="3" style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280">Exact Time Delivery</td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">${exact_fee:.2f}</td></tr>'
+    if late_fee:
+        items_html += f'<tr><td colspan="3" style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280">Late Night Fee</td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">${late_fee:.2f}</td></tr>'
+    delivery_fee = float(b.get("delivery_fee") or 0)
+    if delivery_fee:
+        miles_str = f"{b.get('distance_miles','?')} mi" if b.get("distance_miles") else ""
+        items_html += f'<tr><td colspan="3" style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280">Delivery Fee {miles_str}</td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">${delivery_fee:.2f}</td></tr>'
+    if disc_amount > 0:
+        disc_lbl = f"{disc_value:.1f}% Discount" if disc_type == "percent" else f"${disc_value:.2f} Discount"
+        items_html += f'<tr style="background:#f0fdf4"><td colspan="3" style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#166534;font-weight:600">🏷️ {disc_lbl}</td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700;color:#16a34a">- ${disc_amount:.2f}</td></tr>'
+    tax_amount = float(b.get("tax_amount") or 0)
+    tax_rate   = float(b.get("tax_rate") or 0)
+    if b.get("tax_exempt"):
+        items_html += '<tr><td colspan="3" style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280">CT Sales Tax <span style="font-size:.75rem;background:#dcfce7;color:#166534;border-radius:4px;padding:.1rem .35rem;margin-left:.3rem">TAX EXEMPT</span></td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:right;color:#166534">$0.00</td></tr>'
+    elif tax_amount:
+        items_html += f'<tr><td colspan="3" style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280">CT Sales Tax ({tax_rate*100:.2f}%)</td><td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">${tax_amount:.2f}</td></tr>'
+
+    grand_total = float(b.get("grand_total") or 0)
+    amount_paid = float(b.get("amount_paid") or 0)
+    balance_due = max(round(grand_total - amount_paid, 2), 0)
+
+    venue_map = {"venue": "Event Venue", "backyard": "Backyard", "residential": "Residential", "park": "Park", "other": "Other"}
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your Order — {BUSINESS_NAME}</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c;padding:1.5rem 1rem}}
+  .wrap{{max-width:680px;margin:0 auto}}
+  .card{{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.07);padding:1.5rem;margin-bottom:1.25rem}}
+  .section-title{{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin-bottom:.9rem}}
+  .row{{display:grid;grid-template-columns:1fr 1fr;gap:.5rem 1.5rem}}
+  .field label{{font-size:.75rem;color:#6b7280;font-weight:600;display:block;margin-bottom:.2rem}}
+  .field span{{font-size:.95rem;color:#1a202c}}
+  table{{width:100%;border-collapse:collapse;font-size:.9rem}}
+  th{{padding:9px 14px;background:#f8fafc;color:#6b7280;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;text-align:left}}
+  th:last-child{{text-align:right}}
+  .grand-row td{{padding:13px 14px;background:#1a365d;color:white;font-weight:700;font-size:1rem}}
+  .grand-row td:last-child{{text-align:right;font-size:1.15rem}}
+  @media(max-width:500px){{.row{{grid-template-columns:1fr}}}}
+</style>
+</head><body>
+<div class="wrap">
+
+  <div style="text-align:center;margin-bottom:1.5rem">
+    <div style="font-size:1.5rem;font-weight:800;color:#1a365d">{BUSINESS_NAME}</div>
+    <div style="font-size:.88rem;color:#6b7280;margin-top:.25rem">Order Confirmation</div>
+  </div>
+
+  <!-- Status banner -->
+  <div style="background:{status_bg};border-radius:10px;padding:.85rem 1.25rem;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between">
+    <span style="font-weight:700;color:{status_color};font-size:.95rem">{status_label}</span>
+    <span style="font-size:.8rem;color:{status_color};opacity:.75">Booking #{b.get('id')}</span>
+  </div>
+
+  <!-- Your Information -->
+  <div class="card">
+    <div class="section-title">Your Information</div>
+    <div class="row">
+      <div class="field"><label>Name</label><span>{b.get('full_name') or '—'}</span></div>
+      <div class="field"><label>Email</label><span>{b.get('email') or '—'}</span></div>
+      <div class="field"><label>Phone</label><span>{b.get('phone') or '—'}</span></div>
+      {'<div class="field"><label>Company</label><span>' + str(b.get('company_name')) + '</span></div>' if b.get('company_name') else ''}
+      <div class="field" style="grid-column:1/-1"><label>Address</label>
+        <span>{b.get('renter_street') or ''}{', ' + str(b.get('renter_city')) if b.get('renter_city') else ''}{', ' + str(b.get('renter_state')) if b.get('renter_state') else ''} {b.get('renter_zip') or ''}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Details -->
+  <div class="card">
+    <div class="section-title">Event Details</div>
+    <div class="row">
+      <div class="field"><label>Delivery Date</label><span>{b.get('event_start_date') or '—'}</span></div>
+      <div class="field"><label>Pickup Date</label><span>{b.get('event_end_date') or '—'}</span></div>
+      <div class="field"><label>Delivery / Setup Time</label><span>{b.get('setup_time') or '—'}</span></div>
+      <div class="field"><label>Pickup Time</label><span>{b.get('event_end_time') or '—'}</span></div>
+      <div class="field"><label>Venue Type</label><span>{venue_map.get(b.get('venue_type',''), b.get('venue_type','') or '—')}</span></div>
+      <div class="field" style="grid-column:1/-1"><label>Event Address</label>
+        <span>{b.get('event_street') or ''}{', ' + str(b.get('event_city')) if b.get('event_city') else ''}{', ' + str(b.get('event_state')) if b.get('event_state') else ''} {b.get('event_zip') or ''}</span>
+      </div>
+      <div class="field" style="grid-column:1/-1"><label>Deliver Items To</label><span>{b.get('delivery_location') or '—'}</span></div>
+      {'<div class="field" style="grid-column:1/-1"><label>Notes</label><span>' + str(b.get('notes')) + '</span></div>' if b.get('notes') else ''}
+    </div>
+  </div>
+
+  <!-- Items & Totals -->
+  <div class="card">
+    <div class="section-title">Items &amp; Totals</div>
+    <table>
+      <thead><tr>
+        <th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit</th><th style="text-align:right">Total</th>
+      </tr></thead>
+      <tbody>
+        {items_html}
+        <tr class="grand-row"><td colspan="3">Grand Total</td><td>${grand_total:.2f}</td></tr>
+      </tbody>
+    </table>
+    {f'<div style="margin-top:.85rem;padding:.75rem 1rem;background:#f0fdf4;border-radius:8px;display:flex;justify-content:space-between;font-size:.9rem"><span style="color:#166534;font-weight:600">✅ Amount Paid</span><span style="color:#166534;font-weight:700">${amount_paid:.2f}</span></div>' if amount_paid > 0 else ''}
+    {f'<div style="margin-top:.5rem;padding:.75rem 1rem;background:#fff5f5;border-radius:8px;display:flex;justify-content:space-between;font-size:.9rem"><span style="color:#991b1b;font-weight:600">⚠️ Balance Due</span><span style="color:#991b1b;font-weight:700">${balance_due:.2f}</span></div>' if balance_due > 0.01 else ''}
+  </div>
+
+  <div style="text-align:center;color:#9ca3af;font-size:.8rem;padding:.5rem 0 1.5rem">
+    {f'Questions? Call <strong style="color:#374151">{BUSINESS_PHONE}</strong> or reply to your confirmation email.' if BUSINESS_PHONE else 'Reply to your confirmation email with any questions.'}
+    <br>This page is view-only. To make changes, please contact us directly.
+  </div>
+
+</div></body></html>"""
+    return html
 
 
 # ══════════════════════════════════════════════════════════════════════════════
