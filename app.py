@@ -5372,48 +5372,61 @@ def edit_booking(booking_id):
 @app.route("/admin/customer-search")
 @admin_required
 def customer_search():
-    """Search both customers table and bookings table, return up to 10 matches."""
+    """Search customers + bookings tables, merge in Python, return up to 10 matches."""
     q = request.args.get("q", "").strip()
     if len(q) < 1:
         return jsonify([])
+    pat = f"%{q}%"
     try:
-        with get_db() as conn:
-            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            cur.execute("""
-                SELECT
-                    c.full_name, c.email, c.phone, c.company_name,
-                    COALESCE(NULLIF(c.street,''), b.renter_street, b.event_street) AS renter_street,
-                    COALESCE(NULLIF(c.city,''),   b.renter_city,   b.event_city)   AS renter_city,
-                    COALESCE(NULLIF(c.state,''),  b.renter_state,  b.event_state)  AS renter_state,
-                    COALESCE(NULLIF(c.zip,''),    b.renter_zip,    b.event_zip)    AS renter_zip
-                FROM customers c
-                LEFT JOIN LATERAL (
-                    SELECT renter_street, renter_city, renter_state, renter_zip,
-                           event_street, event_city, event_state, event_zip
-                    FROM bookings
-                    WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(c.full_name))
-                    ORDER BY id DESC LIMIT 1
-                ) b ON true
-                WHERE c.full_name ILIKE %s
-                  AND c.full_name IS NOT NULL
-                  AND TRIM(c.full_name) != ''
-                UNION ALL
-                SELECT DISTINCT ON (LOWER(TRIM(full_name)))
-                    full_name, email, phone, company_name,
-                    COALESCE(NULLIF(renter_street,''), event_street) AS renter_street,
-                    COALESCE(NULLIF(renter_city,''),   event_city)   AS renter_city,
-                    COALESCE(NULLIF(renter_state,''),  event_state)  AS renter_state,
-                    COALESCE(NULLIF(renter_zip,''),    event_zip)    AS renter_zip
-                FROM bookings
-                WHERE full_name ILIKE %s
-                  AND full_name IS NOT NULL
-                  AND TRIM(full_name) != ''
-                  AND (email IS NULL OR email NOT IN (SELECT email FROM customers WHERE email IS NOT NULL))
-                ORDER BY LOWER(TRIM(full_name)), id DESC
-                LIMIT 10
-            """, (f"%{q}%", f"%{q}%"))
-            rows = [dict(r) for r in cur.fetchall()]
-        return jsonify(rows)
+        conn = get_db()
+        if not conn:
+            return jsonify([])
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # 1. Pull from customers table
+        cur.execute("""
+            SELECT full_name, email, phone, company_name,
+                   street AS renter_street, city AS renter_city,
+                   state AS renter_state, zip AS renter_zip
+            FROM customers
+            WHERE full_name ILIKE %s
+              AND full_name IS NOT NULL AND TRIM(full_name) != ''
+            ORDER BY full_name LIMIT 20
+        """, (pat,))
+        cust_rows = {r["full_name"].strip().lower(): dict(r) for r in cur.fetchall()}
+
+        # 2. Pull from bookings table (most recent per name)
+        cur.execute("""
+            SELECT DISTINCT ON (LOWER(TRIM(full_name)))
+                full_name, email, phone, company_name,
+                COALESCE(NULLIF(renter_street,''), event_street) AS renter_street,
+                COALESCE(NULLIF(renter_city,''),   event_city)   AS renter_city,
+                COALESCE(NULLIF(renter_state,''),  event_state)  AS renter_state,
+                COALESCE(NULLIF(renter_zip,''),    event_zip)    AS renter_zip
+            FROM bookings
+            WHERE full_name ILIKE %s
+              AND full_name IS NOT NULL AND TRIM(full_name) != ''
+            ORDER BY LOWER(TRIM(full_name)), id DESC
+            LIMIT 20
+        """, (pat,))
+        book_rows = {r["full_name"].strip().lower(): dict(r) for r in cur.fetchall()}
+        cur.close(); conn.close()
+
+        # 3. Merge: customers table wins; bookings fills gaps
+        merged = {}
+        for key, c in cust_rows.items():
+            merged[key] = c
+        for key, b in book_rows.items():
+            if key not in merged:
+                merged[key] = b
+            else:
+                # fill blank address fields from booking record
+                for f in ("renter_street","renter_city","renter_state","renter_zip"):
+                    if not merged[key].get(f):
+                        merged[key][f] = b.get(f) or ""
+
+        results = sorted(merged.values(), key=lambda x: x.get("full_name",""))[:10]
+        return jsonify(results)
     except Exception as e:
         log.error(f"customer_search error: {e}")
         return jsonify([])
