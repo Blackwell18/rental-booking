@@ -4113,7 +4113,7 @@ def submit():
         log.info(f"Push attempt — booking_id={booking_id}, NTFY_TOPIC={_ntfy!r}, APP_BASE_URL={_base!r}")
         _admin_link = f"{_base}/admin/booking/{booking_id}" if _base else f"https://rental-booking-biv0.onrender.com/admin/booking/{booking_id}"
         send_push(
-            title=f"New Booking #{booking_id} — {full_name}",
+            title=f"New Booking #{booking_id} - {full_name}",
             body=f"{_fmt_date(event_start_date)} | Total: ${grand_total:.2f}\n{_admin_link}",
             click_url=_admin_link
         )
