@@ -735,21 +735,25 @@ def _send_email(to, subject, html, plain, reply_to=None):
         log.error(f"Email error: {e}")
 
 
-def send_push(title, body):
-    """Send a push notification to the owner via ntfy.sh (free, no account needed)."""
+def send_push(title, body, click_url=""):
+    """Send a push notification to the owner via ntfy.sh (free, no account needed).
+    Tapping the notification opens click_url directly in the browser."""
     topic = os.getenv("NTFY_TOPIC", "")
     if not topic:
         log.warning("Push notification skipped — NTFY_TOPIC not set")
         return
     try:
+        headers = {
+            "Title":    title,
+            "Priority": "high",
+            "Tags":     "bell",
+        }
+        if click_url:
+            headers["Click"] = click_url
         resp = requests.post(
             f"https://ntfy.sh/{topic}",
             data=body.encode("utf-8"),
-            headers={
-                "Title":    title,
-                "Priority": "high",
-                "Tags":     "bell",
-            },
+            headers=headers,
             timeout=10
         )
         if resp.status_code >= 400:
@@ -4107,7 +4111,8 @@ def submit():
     _admin_link = f"{_base}/admin/booking/{booking_id}" if _base else f"/admin/booking/{booking_id}"
     send_push(
         title=f"New Booking #{booking_id} — {full_name}",
-        body=f"{_fmt_date(event_start_date)} | Total: ${grand_total:.2f}\n{_admin_link}"
+        body=f"{_fmt_date(event_start_date)} | Total: ${grand_total:.2f}\nTap to view & respond",
+        click_url=_admin_link
     )
 
     # Upsert customer record — if email already exists update their info, else insert
@@ -7851,10 +7856,16 @@ def test_sms():
     if not topic:
         return "<pre>Missing env var: NTFY_TOPIC\n\nAdd it on Render and redeploy.</pre>", 400
     try:
+        base_url = os.environ.get("APP_BASE_URL", "").rstrip("/")
         resp = requests.post(
             f"https://ntfy.sh/{topic}",
-            data="Test from Rent a Party — notifications are working!".encode("utf-8"),
-            headers={"Title": "Test Notification", "Priority": "high", "Tags": "white_check_mark"},
+            data="Test from Rent a Party — tap to open admin panel".encode("utf-8"),
+            headers={
+                "Title": "Test Notification",
+                "Priority": "high",
+                "Tags": "white_check_mark",
+                "Click": f"{base_url}/admin" if base_url else "https://rental-booking-biv0.onrender.com/admin",
+            },
             timeout=10
         )
         if resp.status_code >= 400:
