@@ -4111,7 +4111,7 @@ def submit():
     _admin_link = f"{_base}/admin/booking/{booking_id}" if _base else f"/admin/booking/{booking_id}"
     send_push(
         title=f"New Booking #{booking_id} — {full_name}",
-        body=f"{_fmt_date(event_start_date)} | Total: ${grand_total:.2f}\nTap to view & respond",
+        body=f"{_fmt_date(event_start_date)} | Total: ${grand_total:.2f}\n{_admin_link}",
         click_url=_admin_link
     )
 
