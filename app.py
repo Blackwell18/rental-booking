@@ -2761,14 +2761,18 @@ ADMIN_BOOKING_EDIT_HTML = """
   <div class="card">
     <h2>Customer</h2>
     <div class="field-grid">
-      <div><label>Full Name</label><input name="full_name" value="{{ b.full_name or '' }}"></div>
-      <div><label>Company</label><input name="company_name" value="{{ b.company_name or '' }}"></div>
-      <div><label>Email</label><input name="email" type="email" value="{{ b.email or '' }}"></div>
-      <div><label>Phone</label><input name="phone" value="{{ b.phone or '' }}"></div>
-      <div><label>Street</label><input name="renter_street" value="{{ b.renter_street or '' }}"></div>
-      <div><label>City</label><input name="renter_city" value="{{ b.renter_city or '' }}"></div>
-      <div><label>State</label><input name="renter_state" value="{{ b.renter_state or '' }}"></div>
-      <div><label>ZIP</label><input name="renter_zip" value="{{ b.renter_zip or '' }}"></div>
+      <div style="position:relative">
+        <label>Full Name</label>
+        <input name="full_name" id="eb_name" value="{{ b.full_name or '' }}" autocomplete="off">
+        <ul id="eb-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:white;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);margin:2px 0;padding:0;list-style:none;max-height:200px;overflow-y:auto"></ul>
+      </div>
+      <div><label>Company</label><input name="company_name" id="eb_company" value="{{ b.company_name or '' }}"></div>
+      <div><label>Email</label><input name="email" type="email" id="eb_email" value="{{ b.email or '' }}"></div>
+      <div><label>Phone</label><input name="phone" id="eb_phone" value="{{ b.phone or '' }}"></div>
+      <div><label>Street</label><input name="renter_street" id="eb_street" value="{{ b.renter_street or '' }}"></div>
+      <div><label>City</label><input name="renter_city" id="eb_city" value="{{ b.renter_city or '' }}"></div>
+      <div><label>State</label><input name="renter_state" id="eb_state" value="{{ b.renter_state or '' }}"></div>
+      <div><label>ZIP</label><input name="renter_zip" id="eb_zip" value="{{ b.renter_zip or '' }}"></div>
     </div>
   </div>
 
@@ -2831,6 +2835,54 @@ ADMIN_BOOKING_EDIT_HTML = """
   </div>
 </form>
 </div>
+<script>
+(function() {
+  const nameInput   = document.getElementById('eb_name');
+  const suggestions = document.getElementById('eb-suggestions');
+  if (!nameInput) return;
+  const LI_STYLE = 'padding:.55rem .85rem;cursor:pointer;font-size:.92rem;border-bottom:1px solid #f1f5f9';
+  let debounce;
+
+  nameInput.addEventListener('input', function() {
+    clearTimeout(debounce);
+    const q = this.value.trim();
+    if (q.length < 1) { suggestions.style.display='none'; return; }
+    debounce = setTimeout(() => {
+      fetch('/admin/customer-search?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+          suggestions.innerHTML = '';
+          if (!data.length) { suggestions.style.display='none'; return; }
+          data.forEach(c => {
+            const li = document.createElement('li');
+            li.style.cssText = LI_STYLE;
+            li.innerHTML = '<strong>' + c.full_name + '</strong>' +
+              (c.email ? ' <span style="color:#64748b;font-size:.82rem">— ' + c.email + '</span>' : '');
+            li.addEventListener('mousedown', function(e) {
+              e.preventDefault();
+              nameInput.value = c.full_name;
+              if (c.email)         document.getElementById('eb_email').value   = c.email;
+              if (c.phone)         document.getElementById('eb_phone').value   = c.phone;
+              if (c.company_name)  document.getElementById('eb_company').value = c.company_name;
+              if (c.renter_street) document.getElementById('eb_street').value  = c.renter_street;
+              if (c.renter_city)   document.getElementById('eb_city').value    = c.renter_city;
+              if (c.renter_state)  document.getElementById('eb_state').value   = c.renter_state;
+              if (c.renter_zip)    document.getElementById('eb_zip').value     = c.renter_zip;
+              suggestions.style.display = 'none';
+            });
+            suggestions.appendChild(li);
+          });
+          suggestions.style.display = 'block';
+        })
+        .catch(() => { suggestions.style.display='none'; });
+    }, 250);
+  });
+
+  nameInput.addEventListener('blur', function() {
+    setTimeout(() => { suggestions.style.display='none'; }, 150);
+  });
+})();
+</script>
 </body></html>
 """
 
