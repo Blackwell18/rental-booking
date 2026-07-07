@@ -3230,8 +3230,17 @@ ADMIN_BOOKING_HTML = """
     <div class="row">
       <span class="k">Dates</span><span class="v">{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }} - {{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '' }}</span>
       <span class="k">Event Start Time</span><span class="v">{{ b.event_start_time }}</span>
-      <span class="k">Pickup Time</span><span class="v">{{ b.event_end_time }}</span>
-      <span class="k">Delivery Time</span><span class="v">{{ b.setup_time }}</span>
+      <span class="k">Delivery Time</span>
+      <span class="v">
+        <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="display:inline-flex;align-items:center;gap:.4rem;margin:0" id="timeForm">
+          <input type="time" name="setup_time" value="{{ b.setup_time or '' }}"
+            style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
+          <span style="color:#6b7280;font-size:.85rem">Pickup:</span>
+          <input type="time" name="event_end_time" value="{{ b.event_end_time or '' }}"
+            style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
+          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .75rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
+        </form>
+      </span>
       <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type }}</span>
       {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
       <span class="k">Event Address</span><span class="v">{{ b.event_street }}, {{ b.event_city }}, {{ b.event_state }} {{ b.event_zip }}</span>
@@ -5486,6 +5495,25 @@ def remove_discount(booking_id):
         cur.close(); conn.close()
     except Exception as e:
         log.error(f"Remove discount error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/update-times", methods=["POST"])
+@admin_required
+def update_booking_times(booking_id):
+    setup_time     = request.form.get("setup_time", "").strip()
+    event_end_time = request.form.get("event_end_time", "").strip()
+    try:
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute(
+            "UPDATE bookings SET setup_time=%s, event_end_time=%s WHERE id=%s",
+            (setup_time or None, event_end_time or None, booking_id)
+        )
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"update_booking_times: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
