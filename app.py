@@ -3111,10 +3111,12 @@ ADMIN_BOOKING_HTML = """
 </head>
 <body>
 <header>
-  <h1>Booking #{{ b.id }}</h1>
+  <div style="display:flex;align-items:center;gap:.75rem">
+    <a href="/admin" title="Dashboard" style="display:flex;align-items:center;justify-content:center;width:2.1rem;height:2.1rem;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:8px;text-decoration:none;font-size:1.1rem;line-height:1">🏠</a>
+    <h1>Booking #{{ b.id }}</h1>
+  </div>
   <div style="display:flex;gap:.75rem;align-items:center">
     <a href="/admin/booking/{{ b.id }}/edit" style="background:rgba(255,255,255,.15);color:white;text-decoration:none;font-size:.85rem;font-weight:600;padding:.4rem .9rem;border-radius:7px;border:1px solid rgba(255,255,255,.3)">✏️ Edit Booking</a>
-    <a href="/admin/dashboard" style="color:white;text-decoration:none;font-size:.9rem">Back to Dashboard</a>
   </div>
 </header>
 <div class="container">
