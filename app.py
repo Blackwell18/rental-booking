@@ -207,6 +207,9 @@ def init_db():
             "UPDATE inventory SET price = 85 WHERE TRIM(name) SIMILAR TO 'Marquee [A-Za-z]'",
             # Admin-only private notes
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS admin_notes TEXT",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_type VARCHAR(10) DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_value DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) DEFAULT 0",
         ]
         for m in migrations:
             try:
@@ -3046,6 +3049,16 @@ ADMIN_BOOKING_HTML = """
         <tr><td colspan="3">Exact Time Delivery</td><td style="text-align:right;font-weight:600">$175.00</td></tr>
         {% endif %}
         <tr><td colspan="3">Delivery Fee ({{ b.distance_miles or '?' }} mi)</td><td style="text-align:right;font-weight:600">${{ "%.2f"|format(b.delivery_fee or 0) }}</td></tr>
+        {% if (b.discount_amount or 0)|float > 0 %}
+        <tr style="background:#f0fdf4">
+          <td colspan="3" style="color:#16a34a;font-weight:600">
+            🏷️ Discount
+            {% if b.discount_type == 'percent' %}({{ b.discount_value|float|round(1) }}% off)
+            {% else %}(${{ "%.2f"|format(b.discount_value|float) }} off){% endif %}
+          </td>
+          <td style="text-align:right;font-weight:600;color:#16a34a">- ${{ "%.2f"|format(b.discount_amount|float) }}</td>
+        </tr>
+        {% endif %}
         {% if b.tax_exempt %}
         <tr style="background:#f0fff4"><td colspan="3" style="color:#276749">CT Sales Tax <span style="font-size:.78rem;background:#c6f6d5;color:#276749;border-radius:4px;padding:.1rem .4rem;margin-left:.4rem">TAX EXEMPT</span></td><td style="text-align:right;color:#276749">$0.00</td></tr>
         {% elif b.tax_amount %}
@@ -3173,6 +3186,46 @@ ADMIN_BOOKING_HTML = """
   {% if b.notes %}
   <div class="card"><h2>Notes</h2><p style="color:#4a5568;line-height:1.6">{{ b.notes }}</p></div>
   {% endif %}
+
+  <!-- ── Discount ── -->
+  <div class="card" style="border:2px solid #bbf7d0;background:#f0fdf4">
+    <h2 style="color:#166534">🏷️ Discount</h2>
+    {% set disc_amt = (b.discount_amount or 0)|float %}
+    {% if disc_amt > 0 %}
+    <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:.65rem 1rem;margin-bottom:.85rem;font-size:.92rem;color:#166534;font-weight:600">
+      ✅ Discount applied:
+      {% if b.discount_type == 'percent' %}
+        {{ b.discount_value|float|round(1) }}% off
+      {% else %}
+        ${{ "%.2f"|format(b.discount_value|float) }} off
+      {% endif %}
+      — saves customer <strong>${{ "%.2f"|format(disc_amt) }}</strong>
+    </div>
+    {% endif %}
+    <form method="POST" action="/admin/booking/{{ b.id }}/apply-discount">
+      <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end">
+        <div>
+          <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem">Discount Type</label>
+          <select name="discount_type" style="border:1px solid #d1d5db;border-radius:7px;padding:.45rem .7rem;font-size:.9rem;background:white">
+            <option value="amount" {% if b.discount_type == 'amount' %}selected{% endif %}>$ Fixed Amount</option>
+            <option value="percent" {% if b.discount_type == 'percent' %}selected{% endif %}>% Percentage</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem">Value</label>
+          <input type="number" name="discount_value" min="0" step="0.01"
+            value="{{ b.discount_value|float if b.discount_value else '' }}"
+            placeholder="e.g. 25"
+            style="border:1px solid #d1d5db;border-radius:7px;padding:.45rem .7rem;font-size:.9rem;width:110px">
+        </div>
+        <button type="submit" style="background:#16a34a;color:white;border:none;border-radius:7px;padding:.5rem 1.2rem;font-size:.88rem;font-weight:700;cursor:pointer">Apply Discount</button>
+        {% if disc_amt > 0 %}
+        <a href="/admin/booking/{{ b.id }}/remove-discount" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:7px;padding:.5rem 1rem;font-size:.88rem;font-weight:600;text-decoration:none">Remove</a>
+        {% endif %}
+      </div>
+      <p style="font-size:.78rem;color:#6b7280;margin-top:.6rem;margin-bottom:0">Discount is applied to items subtotal before tax. Grand total is recalculated automatically.</p>
+    </form>
+  </div>
 
   <!-- ── Admin Private Notes ── -->
   <div class="card" style="border:2px solid #fde68a;background:#fffbeb">
@@ -4706,6 +4759,97 @@ def update_admin_notes(booking_id):
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"Admin notes update error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/apply-discount", methods=["POST"])
+@admin_required
+def apply_discount(booking_id):
+    disc_type  = request.form.get("discount_type", "amount").strip()
+    disc_value = float(request.form.get("discount_value") or 0)
+    if disc_type not in ("amount", "percent") or disc_value <= 0:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+        row = cur.fetchone()
+        if not row:
+            cur.close(); conn.close()
+            return redirect(url_for("admin_booking", booking_id=booking_id))
+        b = _row(row)
+
+        items_subtotal = float(b.get("items_subtotal") or 0)
+        delivery_fee   = float(b.get("delivery_fee")   or 0)
+        exact_fee      = float(b.get("exact_time_fee") or 0)
+        late_night_fee = float(b.get("late_night_fee") or 0)
+        tax_rate       = float(b.get("tax_rate")       or 0.0635)
+        tax_exempt     = bool(b.get("tax_exempt"))
+
+        # Calculate discount amount
+        if disc_type == "percent":
+            disc_amount = round(items_subtotal * (disc_value / 100.0), 2)
+        else:
+            disc_amount = round(min(disc_value, items_subtotal), 2)
+
+        discounted_subtotal = round(items_subtotal - disc_amount, 2)
+        pre_tax = round(discounted_subtotal + delivery_fee + exact_fee + late_night_fee, 2)
+        tax_amount  = 0.0 if tax_exempt else round(pre_tax * tax_rate, 2)
+        grand_total = round(pre_tax + tax_amount, 2)
+
+        cur.execute("""
+            UPDATE bookings
+            SET discount_type=%s, discount_value=%s, discount_amount=%s,
+                tax_amount=%s, grand_total=%s
+            WHERE id=%s
+        """, (disc_type, disc_value, disc_amount, tax_amount, grand_total, booking_id))
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"Apply discount error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/remove-discount")
+@admin_required
+def remove_discount(booking_id):
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+        row = cur.fetchone()
+        if not row:
+            cur.close(); conn.close()
+            return redirect(url_for("admin_booking", booking_id=booking_id))
+        b = _row(row)
+
+        # Restore grand total without discount
+        items_subtotal = float(b.get("items_subtotal") or 0)
+        delivery_fee   = float(b.get("delivery_fee")   or 0)
+        exact_fee      = float(b.get("exact_time_fee") or 0)
+        late_night_fee = float(b.get("late_night_fee") or 0)
+        tax_rate       = float(b.get("tax_rate")       or 0.0635)
+        tax_exempt     = bool(b.get("tax_exempt"))
+
+        pre_tax    = round(items_subtotal + delivery_fee + exact_fee + late_night_fee, 2)
+        tax_amount = 0.0 if tax_exempt else round(pre_tax * tax_rate, 2)
+        grand_total = round(pre_tax + tax_amount, 2)
+
+        cur.execute("""
+            UPDATE bookings
+            SET discount_type=NULL, discount_value=0, discount_amount=0,
+                tax_amount=%s, grand_total=%s
+            WHERE id=%s
+        """, (tax_amount, grand_total, booking_id))
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"Remove discount error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
