@@ -4107,13 +4107,19 @@ def submit():
     send_customer_email(booking_data)
 
     # ── Push notification to owner ───────────────────────────────────────────
-    _base = os.environ.get("APP_BASE_URL", "").rstrip("/")
-    _admin_link = f"{_base}/admin/booking/{booking_id}" if _base else f"/admin/booking/{booking_id}"
-    send_push(
-        title=f"New Booking #{booking_id} — {full_name}",
-        body=f"{_fmt_date(event_start_date)} | Total: ${grand_total:.2f}\n{_admin_link}",
-        click_url=_admin_link
-    )
+    try:
+        _base = os.environ.get("APP_BASE_URL", "").rstrip("/")
+        _ntfy = os.environ.get("NTFY_TOPIC", "")
+        log.info(f"Push attempt — booking_id={booking_id}, NTFY_TOPIC={_ntfy!r}, APP_BASE_URL={_base!r}")
+        _admin_link = f"{_base}/admin/booking/{booking_id}" if _base else f"https://rental-booking-biv0.onrender.com/admin/booking/{booking_id}"
+        send_push(
+            title=f"New Booking #{booking_id} — {full_name}",
+            body=f"{_fmt_date(event_start_date)} | Total: ${grand_total:.2f}\n{_admin_link}",
+            click_url=_admin_link
+        )
+        log.info("Push notification dispatched successfully")
+    except Exception as _pe:
+        log.error(f"Push notification failed in submit: {_pe}")
 
     # Upsert customer record — if email already exists update their info, else insert
     cust_conn = get_db()
