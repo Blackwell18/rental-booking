@@ -6884,19 +6884,19 @@ ADMIN_CUSTOMER_EDIT_HTML = """
         </div>
         <div class="form-group span2">
           <label>Street Address</label>
-          <input type="text" name="street" value="{{ c.street or '' }}">
+          <input type="text" name="street" id="cust_street" value="{{ c.street or '' }}" autocomplete="off">
         </div>
         <div class="form-group">
           <label>City</label>
-          <input type="text" name="city" value="{{ c.city or '' }}">
+          <input type="text" name="city" id="cust_city" value="{{ c.city or '' }}">
         </div>
         <div class="form-group">
           <label>State</label>
-          <input type="text" name="state" value="{{ c.state or '' }}" maxlength="2">
+          <input type="text" name="state" id="cust_state" value="{{ c.state or '' }}" maxlength="2">
         </div>
         <div class="form-group">
           <label>Zip</label>
-          <input type="text" name="zip" value="{{ c.zip or '' }}" maxlength="10">
+          <input type="text" name="zip" id="cust_zip" value="{{ c.zip or '' }}" maxlength="10">
         </div>
         <div class="form-group span2">
           <label>Notes</label>
@@ -6942,6 +6942,40 @@ ADMIN_CUSTOMER_EDIT_HTML = """
   </div>
   {% endif %}
 </div>
+<script>
+function initCustStreetAutocomplete() {
+  var streetEl = document.getElementById('cust_street');
+  if (!streetEl || !window.google) return;
+  var ac = new google.maps.places.Autocomplete(streetEl, {
+    types: ['address'],
+    componentRestrictions: { country: 'us' },
+    fields: ['address_components']
+  });
+  streetEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') e.preventDefault();
+  });
+  ac.addListener('place_changed', function() {
+    var place = ac.getPlace();
+    if (!place.address_components) return;
+    var streetNum = '', route = '', city = '', state = '', zip = '';
+    place.address_components.forEach(function(comp) {
+      var t = comp.types;
+      if (t.includes('street_number'))                    streetNum = comp.long_name;
+      else if (t.includes('route'))                       route     = comp.long_name;
+      else if (t.includes('locality'))                    city      = comp.long_name;
+      else if (t.includes('administrative_area_level_1')) state     = comp.short_name;
+      else if (t.includes('postal_code'))                 zip       = comp.long_name;
+    });
+    streetEl.value = [streetNum, route].filter(Boolean).join(' ');
+    document.getElementById('cust_city').value  = city;
+    document.getElementById('cust_state').value = state;
+    document.getElementById('cust_zip').value   = zip;
+  });
+}
+</script>
+{% if google_maps_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initCustStreetAutocomplete" async defer></script>
+{% endif %}
 </body></html>
 """
 
@@ -7175,7 +7209,8 @@ def admin_customer_edit(customer_id):
     if not c:
         return redirect(url_for("admin_customers", err="Customer not found"))
     return render_template_string(ADMIN_CUSTOMER_EDIT_HTML,
-        business_name=BUSINESS_NAME, c=c, bookings=bookings)
+        business_name=BUSINESS_NAME, c=c, bookings=bookings,
+        google_maps_key=GOOGLE_MAPS_KEY)
 
 
 @app.route("/admin/customers/<int:customer_id>/save", methods=["POST"])
