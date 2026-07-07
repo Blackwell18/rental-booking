@@ -3221,8 +3221,8 @@ ADMIN_BOOKING_HTML = """
     <script>
     (function(){
       const CAL_BOOKINGS = {{ cal_bookings | tojson }};
-      const THIS_START   = "{{ b.event_start_date or '' }}"[:10];
-      const THIS_END     = "{{ b.event_end_date or '' }}"[:10];
+      const THIS_START   = "{{ b.event_start_date or '' }}".slice(0,10);
+      const THIS_END     = "{{ b.event_end_date or '' }}".slice(0,10);
       const THIS_ID      = {{ b.id }};
 
       // Start calendar at this booking's month
