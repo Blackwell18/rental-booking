@@ -365,7 +365,7 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         query = """
             SELECT items_json FROM bookings
-            WHERE status IN ('confirmed', 'accepted')
+            WHERE status IN ('confirmed', 'partial', 'accepted')
               AND event_start_date <= %s
               AND event_end_date   >= %s
         """
@@ -412,7 +412,7 @@ def get_inventory_conflicts():
         cur.execute("""
             SELECT id, full_name, event_start_date, event_end_date, items_json
             FROM bookings
-            WHERE status IN ('confirmed','accepted')
+            WHERE status IN ('confirmed','partial','accepted')
               AND event_start_date IS NOT NULL
               AND event_end_date   IS NOT NULL
         """)
@@ -490,7 +490,7 @@ def get_booking_inventory_check(booking_id):
         cur.execute("""
             SELECT id, items_json, event_start_date, event_end_date
             FROM bookings
-            WHERE status IN ('confirmed','accepted')
+            WHERE status IN ('confirmed','partial','accepted')
               AND id != %s
               AND event_start_date IS NOT NULL
               AND event_end_date   IS NOT NULL
@@ -2374,6 +2374,7 @@ ADMIN_DASH_HTML = """
     .badge-pending{background:#fef9c3;color:#854d0e}
     .badge-accepted{background:#dbeafe;color:#1e40af}
     .badge-confirmed{background:#dcfce7;color:#166534}
+    .badge-partial{background:#ede9fe;color:#7c3aed}
     .badge-denied{background:#fee2e2;color:#991b1b}
     .badge-cancelled{background:#f3f4f6;color:#6b7280}
 
@@ -2476,7 +2477,8 @@ ADMIN_DASH_HTML = """
     <a href="/admin/dashboard?status=pending&sort=created_asc" class="tab {% if status_filter=='pending' and not past_filter %}active{% endif %}" style="{% if status_filter=='pending' and not past_filter %}color:#d97706;border-bottom-color:#d97706;{% endif %}">🆕&nbsp;New{% if stats.pending > 0 %}&nbsp;<span style="background:#d97706;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.pending }}</span>{% endif %}</a>
     <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
     <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Accepted&nbsp;({{ stats.accepted }})</a>
-    <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' and not past_filter %}active{% endif %}">Confirmed&nbsp;({{ stats.confirmed }})</a>
+    <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' and not past_filter %}active{% endif %}">Paid in Full&nbsp;({{ stats.confirmed }})</a>
+    <a href="/admin/dashboard?status=partial{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='partial' and not past_filter %}active{% endif %}" style="{% if status_filter=='partial' and not past_filter %}color:#7c3aed;border-bottom-color:#7c3aed;{% endif %}">💳&nbsp;Partial{% if stats.partial > 0 %}&nbsp;<span style="background:#7c3aed;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.partial }}</span>{% endif %}</a>
     <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    and not past_filter %}active{% endif %}">Denied</a>
     <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' and not past_filter %}active{% endif %}">Cancelled</a>
     <a href="/admin/dashboard?past=1" class="tab {% if past_filter %}active{% endif %}" style="{% if past_filter %}color:#6366f1;border-bottom-color:#6366f1;{% endif %}">🕓&nbsp;Past&nbsp;({{ stats.past }})</a>
@@ -2804,7 +2806,8 @@ ADMIN_BOOKING_EDIT_HTML = """
         <select name="status">
           <option value="pending"   {% if b.status=='pending'   %}selected{% endif %}>Pending</option>
           <option value="accepted"  {% if b.status=='accepted'  %}selected{% endif %}>Accepted (Awaiting Payment)</option>
-          <option value="confirmed" {% if b.status=='confirmed' %}selected{% endif %}>Confirmed (Paid)</option>
+          <option value="confirmed" {% if b.status=='confirmed' %}selected{% endif %}>Confirmed (Paid in Full)</option>
+          <option value="partial"   {% if b.status=='partial'   %}selected{% endif %}>Confirmed (Partial Payment)</option>
           <option value="denied"    {% if b.status=='denied'    %}selected{% endif %}>Denied</option>
           <option value="cancelled" {% if b.status=='cancelled' %}selected{% endif %}>Cancelled</option>
         </select>
@@ -2912,7 +2915,8 @@ ADMIN_NEW_BOOKING_HTML = """
       </div>
       <div><label>Status</label>
         <select name="status">
-          <option value="confirmed">Confirmed (Paid/Partial)</option>
+          <option value="confirmed">Confirmed (Paid in Full)</option>
+          <option value="partial">Confirmed (Partial Payment)</option>
           <option value="accepted">Accepted (Awaiting Payment)</option>
           <option value="pending">Pending Review</option>
         </select>
@@ -3389,8 +3393,8 @@ ADMIN_BOOKING_HTML = """
             if(bk.id===THIS_ID) return;
             if(bk.start&&bk.end&&inRange(ds,bk.start,bk.end)){
               if(!isThis){
-                bg=bk.status==='confirmed'?'#dcfce7':'#dbeafe';
-                border=bk.status==='confirmed'?'#86efac':'#93c5fd';
+                bg=bk.status==='confirmed'?'#dcfce7':bk.status==='partial'?'#ede9fe':'#dbeafe';
+                border=bk.status==='confirmed'?'#86efac':bk.status==='partial'?'#c4b5fd':'#93c5fd';
               } else {
                 // Overlap — show red ring
                 border='#f87171';
@@ -3791,8 +3795,14 @@ ADMIN_BOOKING_HTML = """
     {% endif %}
     {% if b.status == 'accepted' %}
     <form method="POST" action="/admin/booking/{{ b.id }}/confirm">
-      <button class="btn btn-confirm" onclick="return confirm('Manually mark this booking as paid/confirmed? Only do this if you have confirmed payment outside of Stripe.')">
-        Mark as Paid (Manual)
+      <button class="btn btn-confirm" onclick="return confirm('Mark as Paid in Full?')">
+        Mark as Paid in Full
+      </button>
+    </form>
+    <form method="POST" action="/admin/booking/{{ b.id }}/confirm" style="display:inline">
+      <input type="hidden" name="partial" value="1">
+      <button class="btn" style="background:#7c3aed;color:white" onclick="return confirm('Mark as Partial Payment received?')">
+        Mark as Partial Payment
       </button>
     </form>
     {% endif %}
@@ -3801,7 +3811,7 @@ ADMIN_BOOKING_HTML = """
       <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel Booking</button>
     </form>
     {% endif %}
-    {% if b.status == 'confirmed' %}
+    {% if b.status in ('confirmed', 'partial') %}
     <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
       <input type="hidden" name="custom_amount" id="final-amount-input">
       <button type="button" class="btn btn-reminder" id="final-btn">
@@ -4498,11 +4508,12 @@ def customer_booking_view(token):
         return "Booking not found or link has expired.", 404
 
     STATUS_LABELS = {
-        "pending":   ("🕐 Under Review",  "#92400e", "#fef3c7"),
-        "accepted":  ("✅ Accepted",       "#1e40af", "#dbeafe"),
-        "confirmed": ("✅ Confirmed",      "#166534", "#dcfce7"),
-        "denied":    ("❌ Denied",         "#991b1b", "#fee2e2"),
-        "cancelled": ("🚫 Cancelled",      "#6b7280", "#f3f4f6"),
+        "pending":   ("🕐 Under Review",      "#92400e", "#fef3c7"),
+        "accepted":  ("✅ Accepted",           "#1e40af", "#dbeafe"),
+        "confirmed": ("✅ Paid in Full",       "#166534", "#dcfce7"),
+        "partial":   ("💳 Partial Payment",   "#7c3aed", "#ede9fe"),
+        "denied":    ("❌ Denied",             "#991b1b", "#fee2e2"),
+        "cancelled": ("🚫 Cancelled",          "#6b7280", "#f3f4f6"),
     }
     status_key = (b.get("status") or "pending").lower()
     status_label, status_color, status_bg = STATUS_LABELS.get(status_key, ("Unknown", "#6b7280", "#f3f4f6"))
@@ -4675,7 +4686,7 @@ def admin_dashboard():
     sort_by         = request.args.get("sort", "created")   # date | name | id | created
     conn = get_db()
     bookings = []
-    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0}
+    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "partial": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0}
     inventory_status = []
 
     if conn:
@@ -4685,7 +4696,8 @@ def admin_dashboard():
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='pending'"); stats["pending"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='accepted'"); stats["accepted"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='confirmed'"); stats["confirmed"] = cur.fetchone()[0]
-            cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='confirmed'")
+            cur.execute("SELECT COUNT(*) FROM bookings WHERE status='partial'"); stats["partial"] = cur.fetchone()[0]
+            cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status IN ('confirmed','partial')")
             stats["revenue"] = float(cur.fetchone()[0])
             cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='accepted'")
             stats["amount_due"] = float(cur.fetchone()[0])
@@ -4957,7 +4969,7 @@ def admin_booking(booking_id):
             cur3.execute("""
                 SELECT id, full_name, event_start_date, event_end_date, status
                 FROM bookings
-                WHERE status IN ('confirmed','accepted')
+                WHERE status IN ('confirmed','partial','accepted')
                   AND event_start_date IS NOT NULL
                 ORDER BY event_start_date
             """)
@@ -5111,12 +5123,13 @@ def deny_booking(booking_id):
 @app.route("/admin/booking/<int:booking_id>/confirm", methods=["POST"])
 @admin_required
 def confirm_booking(booking_id):
-    """Manually confirm a booking (mark as paid) — locks inventory."""
+    """Manually confirm a booking — full or partial payment."""
+    new_status = "partial" if request.form.get("partial") == "1" else "confirmed"
     conn = get_db()
     if conn:
         try:
             cur = conn.cursor()
-            cur.execute("UPDATE bookings SET status='confirmed' WHERE id=%s", (booking_id,))
+            cur.execute("UPDATE bookings SET status=%s WHERE id=%s", (new_status, booking_id,))
             conn.commit()
             cur2 = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur2.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
@@ -6542,6 +6555,7 @@ ADMIN_CUSTOMER_EDIT_HTML = """
     .badge-pending{background:#fef9c3;color:#854d0e}
     .badge-accepted{background:#dbeafe;color:#1e40af}
     .badge-confirmed{background:#dcfce7;color:#166534}
+    .badge-partial{background:#ede9fe;color:#7c3aed}
     .badge-denied{background:#fee2e2;color:#991b1b}
     .badge-cancelled{background:#f3f4f6;color:#6b7280}
     @media(max-width:600px){.form-grid{grid-template-columns:1fr}.main{padding:1rem}}
@@ -8072,7 +8086,7 @@ def cron_send_reminders():
         target_2day = (date.today() + timedelta(days=2)).isoformat()
         cur.execute("""
             SELECT * FROM bookings
-            WHERE status = 'confirmed'
+            WHERE status IN ('confirmed', 'partial')
               AND event_start_date = %s
               AND (final_reminder_sent IS NULL OR final_reminder_sent = FALSE)
         """, (target_2day,))
