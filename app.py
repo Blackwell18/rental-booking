@@ -6863,106 +6863,95 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 <script>
-const BDATA = {{ bookings_json|safe }};
-let cur = new Date(); cur.setDate(1);
+var BDATA = {{ bookings_json|tojson }};
+var cur = new Date(); cur.setDate(1);
+
+document.addEventListener('click', function(e){
+  var m = document.getElementById('export-menu');
+  if(m && !m.contains(e.target)) m.style.display='none';
+});
 
 function toggleExportMenu(e){
   e.stopPropagation();
-  const m=document.getElementById('export-menu');
-  m.style.display=m.style.display==='none'?'block':'none';
+  var m=document.getElementById('export-menu');
+  m.style.display = m.style.display==='block' ? 'none' : 'block';
 }
-document.addEventListener('click',()=>{
-  const m=document.getElementById('export-menu');
-  if(m) m.style.display='none';
-});
 
 function pad(n){return String(n).padStart(2,'0');}
-function toICSDate(ds){return ds.replace(/-/g,'');}
-function toICSDateTime(ds,timeStr){
-  const base=ds.replace(/-/g,'');
-  if(!timeStr) return base;
-  const [h,m]=(timeStr+':00').split(':');
-  return base+'T'+pad(h)+pad(m)+'00';
-}
 
 function exportICS(){
-  let ics='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Rent a Party LLC//Admin//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
-  BDATA.forEach(b=>{
-    const uid='booking-'+b.id+'@rental-booking';
-    const dtstart=b.time?toICSDateTime(b.start,b.time):toICSDate(b.start);
-    const dtend=toICSDate(b.end);
-    const allday=!b.time;
-    ics+='BEGIN:VEVENT\r\n';
-    ics+='UID:'+uid+'\r\n';
-    if(allday){
-      ics+='DTSTART;VALUE=DATE:'+dtstart+'\r\n';
-      ics+='DTEND;VALUE=DATE:'+dtend+'\r\n';
-    } else {
-      ics+='DTSTART:'+dtstart+'\r\n';
-      ics+='DTEND:'+dtend+'\r\n';
-    }
-    ics+='SUMMARY:Booking #'+b.id+' — '+b.name+'\r\n';
-    ics+='DESCRIPTION:Status: '+b.status+'\r\n';
-    ics+='STATUS:'+(b.status==='confirmed'?'CONFIRMED':'TENTATIVE')+'\r\n';
-    ics+='END:VEVENT\r\n';
+  var lines=['BEGIN:VCALENDAR','VERSION:2.0',
+    'PRODID:-//Rent a Party LLC//Admin//EN',
+    'CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  BDATA.forEach(function(b){
+    var sd=b.start.replace(/-/g,''), ed=b.end.replace(/-/g,'');
+    var dtstart = b.time ? sd+'T'+b.time.replace(':','')+'00' : 'DATE:'+sd;
+    var dtend   = 'DATE:'+ed;
+    lines.push('BEGIN:VEVENT',
+      'UID:booking-'+b.id+'@rental-booking',
+      (b.time ? 'DTSTART:'+dtstart : 'DTSTART;VALUE='+dtstart),
+      'DTEND;VALUE='+dtend,
+      'SUMMARY:Booking #'+b.id+' - '+b.name,
+      'DESCRIPTION:Status: '+b.status,
+      'STATUS:'+(b.status==='confirmed'?'CONFIRMED':'TENTATIVE'),
+      'END:VEVENT');
   });
-  ics+='END:VCALENDAR';
-  const blob=new Blob([ics],{type:'text/calendar'});
-  const a=document.createElement('a');
+  lines.push('END:VCALENDAR');
+  var blob=new Blob([lines.join('\r\n')],{type:'text/calendar'});
+  var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='rent-a-party-bookings.ics';
-  a.click();
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   document.getElementById('export-menu').style.display='none';
 }
 
 function exportCSV(){
-  const rows=[['ID','Name','Start Date','End Date','Start Time','Status']];
-  BDATA.forEach(b=>rows.push([b.id,b.name,b.start,b.end,b.time||'',b.status]));
-  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv'});
-  const a=document.createElement('a');
+  var rows=[['ID','Name','Start Date','End Date','Start Time','Status']];
+  BDATA.forEach(function(b){rows.push([b.id,b.name,b.start,b.end,b.time||'',b.status]);});
+  var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='rent-a-party-bookings.csv';
-  a.click();
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   document.getElementById('export-menu').style.display='none';
 }
 
 function renderCal(){
-  const y=cur.getFullYear(), m=cur.getMonth();
-  document.getElementById('cal-title').textContent=cur.toLocaleDateString('en-US',{month:'long',year:'numeric'});
-  const grid=document.getElementById('cal-grid');
-  grid.innerHTML='';
-  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d=>{
-    const h=document.createElement('div');h.className='cal-hdr';h.textContent=d;grid.appendChild(h);
-  });
-  const first=new Date(y,m,1), last=new Date(y,m+1,0);
-  const today=new Date().toISOString().slice(0,10);
-  for(let i=0;i<first.getDay();i++){
-    const el=document.createElement('div');el.className='cal-cell other-month';grid.appendChild(el);
-  }
-  for(let d=1;d<=last.getDate();d++){
-    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const bks=BDATA.filter(b=>b.start<=ds&&b.end>=ds);
-    const cell=document.createElement('div');
-    cell.className='cal-cell'+(ds===today?' today':'')+(bks.length?' has-events':'');
-    const dots=bks.slice(0,6).map(b=>`<span class="cal-dot dot-${b.status}"></span>`).join('');
-    cell.innerHTML=`<div class="cal-date">${d}</div><div>${dots}</div>${bks.length?`<div class="cal-count">${bks.length} booking${bks.length!==1?'s':''}</div>`:''}`;
-    if(bks.length) cell.onclick=()=>showPopup(ds,bks);
-    grid.appendChild(cell);
-  }
+  try {
+    var y=cur.getFullYear(), mo=cur.getMonth();
+    var titleEl=document.getElementById('cal-title');
+    if(titleEl) titleEl.textContent=cur.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    var grid=document.getElementById('cal-grid');
+    if(!grid) return;
+    grid.innerHTML='';
+    ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d){
+      var h=document.createElement('div');h.className='cal-hdr';h.textContent=d;grid.appendChild(h);
+    });
+    var first=new Date(y,mo,1), last=new Date(y,mo+1,0);
+    var today=new Date().toISOString().slice(0,10);
+    for(var i=0;i<first.getDay();i++){
+      var el=document.createElement('div');el.className='cal-cell other-month';grid.appendChild(el);
+    }
+    for(var d=1;d<=last.getDate();d++){
+      var ds=y+'-'+pad(mo+1)+'-'+pad(d);
+      var bks=BDATA.filter(function(b){return b.start<=ds&&b.end>=ds;});
+      var cell=document.createElement('div');
+      cell.className='cal-cell'+(ds===today?' today':'')+(bks.length?' has-events':'');
+      var dots=bks.slice(0,6).map(function(b){return '<span class="cal-dot dot-'+b.status+'"></span>';}).join('');
+      cell.innerHTML='<div class="cal-date">'+d+'</div><div>'+dots+'</div>'+(bks.length?'<div class="cal-count">'+bks.length+' booking'+(bks.length!==1?'s':'')+'</div>':'');
+      (function(ds2,bks2){if(bks2.length)cell.onclick=function(){showPopup(ds2,bks2);};})(ds,bks);
+      grid.appendChild(cell);
+    }
+  } catch(err){ console.error('renderCal error:',err); }
 }
 
 function showPopup(ds,bks){
-  const d=new Date(ds+'T12:00:00');
+  var d=new Date(ds+'T12:00:00');
   document.getElementById('popup-title').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  document.getElementById('popup-body').innerHTML=bks.map(b=>`
-    <div class="pb">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
-        <a href="/admin/booking/${b.id}" class="pb-name" style="color:#2563eb;text-decoration:none">#${b.id} ${b.name}</a>
-        <span class="badge badge-${b.status}">${b.status}</span>
-      </div>
-      <div class="pb-meta">${b.start===b.end?b.start:b.start+' → '+b.end}${b.time?' · '+b.time:''}</div>
-    </div>`).join('');
+  document.getElementById('popup-body').innerHTML=bks.map(function(b){
+    return '<div class="pb"><div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem"><a href="/admin/booking/'+b.id+'" class="pb-name" style="color:#2563eb;text-decoration:none">#'+b.id+' '+b.name+'</a><span class="badge badge-'+b.status+'">'+b.status+'</span></div><div class="pb-meta">'+(b.start===b.end?b.start:b.start+' to '+b.end)+(b.time?' at '+b.time:'')+'</div></div>';
+  }).join('');
   document.getElementById('popup').classList.add('show');
   document.getElementById('popup-overlay').classList.add('show');
 }
@@ -6970,7 +6959,12 @@ function closePopup(){document.getElementById('popup').classList.remove('show');
 function prevMonth(){cur.setMonth(cur.getMonth()-1);renderCal();}
 function nextMonth(){cur.setMonth(cur.getMonth()+1);renderCal();}
 function goToday(){cur=new Date();cur.setDate(1);renderCal();}
-renderCal();
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', renderCal);
+} else {
+  renderCal();
+}
 </script>
 </body></html>
 """
