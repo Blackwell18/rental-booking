@@ -4095,6 +4095,20 @@ ADMIN_BOOKING_HTML = """
   <div class="card">
     <h2>Send Custom Payment Link</h2>
     <p style="color:#6b7280;font-size:.88rem;margin-bottom:1rem">Create a Stripe payment link for any amount and email it directly to the customer.</p>
+    {% set balance_due = ((b.grand_total or 0)|float - (b.amount_paid or 0)|float) %}
+    {% if balance_due > 0.50 and b.status in ('confirmed', 'accepted', 'pending') %}
+    <div style="margin-bottom:.85rem">
+      <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link"
+            onsubmit="return confirm('Send a ${{ '%.2f'|format(balance_due) }} payment link to {{ b.email }}?')">
+        <input type="hidden" name="amount" value="{{ '%.2f'|format(balance_due) }}">
+        <input type="hidden" name="label" value="Balance Due — Booking #{{ b.id }}">
+        <button type="submit"
+                style="background:#15803d;color:white;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.5rem">
+          💳 Send Balance Payment Link — ${{ '%.2f'|format(balance_due) }}
+        </button>
+      </form>
+    </div>
+    {% endif %}
     <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap">
       <div>
         <label style="display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem">Amount ($)</label>
