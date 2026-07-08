@@ -90,6 +90,7 @@ def _fmt_date(d):
 
 BUSINESS_NAME    = os.getenv("BUSINESS_NAME",    "Rent a Party, LLC")
 DEPOT_ADDRESS    = os.getenv("DEPOT_ADDRESS",    "799 New Haven Rd, Naugatuck, CT 06770")
+CALENDAR_TOKEN   = os.getenv("CALENDAR_TOKEN",   secrets.token_hex(16))
 BUSINESS_PHONE   = os.getenv("BUSINESS_PHONE",   "")
 BUSINESS_EMAIL   = os.getenv("BUSINESS_EMAIL",   "")
 BUSINESS_ADDRESS = os.getenv("BUSINESS_ADDRESS", "")
@@ -6826,7 +6827,7 @@ ADMIN_CALENDAR_HTML = """<!DOCTYPE html>
         <div style="position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:165px;z-index:200;overflow:hidden">
           <a href="/admin/calendar.ics" download="bookings.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151">&#128197; Download .ics</a>
           <a href="/admin/calendar.csv" download="bookings.csv" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128196; Download CSV</a>
-          <a href="webcal://{{ cal_host }}/admin/calendar.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Subscribe (webcal)</a>
+          <a href="webcal://{{ cal_host }}/admin/calendar.ics?token={{ cal_token }}" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Subscribe (webcal)</a>
         </div>
       </details>
     </div>
@@ -7364,9 +7365,14 @@ def delete_inventory(item_id):
 
 
 @app.route("/admin/calendar.ics")
-@admin_required
 def admin_calendar_ics():
-    """Serve iCal feed for webcal:// subscription."""
+    """Serve iCal feed — accessible via token or active admin session."""
+    token = request.args.get("token", "")
+    if token != CALENDAR_TOKEN:
+        # Fall back to session check
+        if not session.get("admin_logged_in"):
+            return redirect("/admin")
+
     conn = get_db()
     bookings = []
     if conn:
@@ -7517,6 +7523,7 @@ def admin_calendar():
         cells=cells,
         bookings_json=json.dumps(bookings),
         cal_host=request.host,
+        cal_token=CALENDAR_TOKEN,
     )
 
 @app.route("/admin/route")
@@ -8555,13 +8562,4 @@ def customer_import_template():
     writer = _csv.writer(output)
     writer.writerow(["full_name", "company_name", "email", "phone", "street", "city", "state", "zip", "notes"])
     writer.writerow(["Jane Smith", "ABC Corp", "jane@example.com", "555-1234", "123 Main St", "Hartford", "CT", "06101", ""])
-    csv_bytes = output.getvalue().encode("utf-8")
-    return Response(
-        csv_bytes,
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=customer_import_template.csv"}
-    )
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
+    csv_bytes = output.getvalue().encode("utf-8"
