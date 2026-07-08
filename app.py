@@ -7659,4 +7659,64 @@ def import_customers():
                         for r in rows:
                             name = (r.get("full_name") or "").strip()
                             if not name:
-                      
+
+                                skipped += 1
+                                continue
+                            email = (r.get("email") or "").strip().lower()
+                            try:
+                                cur.execute(
+                                    "INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes) "
+                                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (email) DO NOTHING",
+                                    (
+                                        name,
+                                        (r.get("company_name") or "").strip(),
+                                        email or None,
+                                        (r.get("phone") or "").strip(),
+                                        (r.get("street") or "").strip(),
+                                        (r.get("city") or "").strip(),
+                                        (r.get("state") or "").strip().upper(),
+                                        (r.get("zip") or "").strip(),
+                                        (r.get("notes") or "").strip(),
+                                    )
+                                )
+                                if cur.rowcount:
+                                    imported += 1
+                                else:
+                                    skipped += 1
+                            except Exception as row_e:
+                                log.error(f"import row error: {row_e}")
+                                skipped += 1
+                        conn.commit()
+                        cur.close()
+                        conn.close()
+                        flash_ok = f"Imported {imported} customer(s). {skipped} skipped (duplicate or blank)."
+            except Exception as e:
+                log.error(f"import_customers error: {e}")
+                flash_err = "Error reading CSV. Please check the format and column headers."
+    return render_template_string(ADMIN_CUSTOMER_IMPORT_HTML,
+        business_name=BUSINESS_NAME,
+        preview=preview,
+        flash_ok=flash_ok,
+        flash_err=flash_err,
+    )
+
+
+@app.route("/admin/customers/import/template")
+@admin_required
+def customer_import_template():
+    import csv as _csv
+    import io as _io
+    output = _io.StringIO()
+    writer = _csv.writer(output)
+    writer.writerow(["full_name", "company_name", "email", "phone", "street", "city", "state", "zip", "notes"])
+    writer.writerow(["Jane Smith", "ABC Corp", "jane@example.com", "555-1234", "123 Main St", "Hartford", "CT", "06101", ""])
+    csv_bytes = output.getvalue().encode("utf-8")
+    return Response(
+        csv_bytes,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=customer_import_template.csv"}
+    )
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
