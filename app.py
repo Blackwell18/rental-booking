@@ -7041,13 +7041,35 @@ ADMIN_ROUTE_HTML = """
     {% endif %}
   </div>
 
-  {# Depot origin card #}
-  <div style="display:flex;gap:1rem;align-items:center;padding:.5rem .25rem .1rem">
-    <div style="width:2rem;display:flex;justify-content:center">
-      <div style="width:2rem;height:2rem;border-radius:50%;background:#6b7280;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#127968;</div>
+  {# ── Origin section: current location → depot ── #}
+  <div id="origin-section">
+    <!-- Current location card (shown when GPS available) -->
+    <div id="curr-loc-card" style="display:none;flex-direction:row;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
+      <div style="width:2rem;display:flex;justify-content:center">
+        <div style="width:2rem;height:2rem;border-radius:50%;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#128205;</div>
+      </div>
+      <div style="font-size:.82rem;font-weight:500;color:#374151">
+        <strong>Your Location</strong> <span id="curr-loc-label" style="color:#6b7280;font-size:.75rem">(detecting…)</span>
+      </div>
     </div>
-    <div style="font-size:.82rem;color:#6b7280;font-weight:500">
-      <strong style="color:#374151">Start:</strong> {{ depot_address }}
+    <!-- leg: current → depot -->
+    <div id="curr-to-depot-leg" style="display:none;flex-direction:row;align-items:center;gap:.6rem;padding:.3rem 0 .3rem 1rem">
+      <div style="width:2rem;flex-shrink:0;display:flex;justify-content:center">
+        <div style="width:2px;height:32px;background:#d1d5db"></div>
+      </div>
+      <a id="curr-to-depot-link" class="leg-link" target="_blank" href="#">
+        <span class="leg-spin">&#9696;</span> Calculating…
+      </a>
+    </div>
+    <!-- Depot card -->
+    <div style="display:flex;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
+      <div style="width:2rem;display:flex;justify-content:center;flex-direction:column;align-items:center;gap:.25rem">
+        <div style="width:2rem;height:2rem;border-radius:50%;background:#6b7280;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#127968;</div>
+        <div class="stop-eta" id="eta-depot" style="font-size:.62rem"></div>
+      </div>
+      <div style="font-size:.82rem;color:#6b7280;font-weight:500">
+        <strong style="color:#374151">Depot:</strong> {{ depot_address }}
+      </div>
     </div>
   </div>
   <div style="display:flex;margin-left:.95rem"><div style="width:2px;height:24px;background:#d1d5db"></div></div>
@@ -7159,6 +7181,17 @@ function setEta(idx,dt){
   el.classList.add('show');
 }
 
+function getCurrentPos(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation){reject(new Error('no geo'));return;}
+    navigator.geolocation.getCurrentPosition(
+      p=>resolve({lat:p.coords.latitude,lon:p.coords.longitude}),
+      e=>reject(e),
+      {timeout:8000,maximumAge:60000}
+    );
+  });
+}
+
 async function loadDistances(){
   const startTime=new Date();
   // Geocode depot + all stop addresses
@@ -7169,8 +7202,38 @@ async function loadDistances(){
     if(i>0) await new Promise(r=>setTimeout(r,1100));
     try{ coords[unique[i]]=await geocode(unique[i]); }catch(e){}
   }
-  // Leg 0: depot → stop 1
+
   let cumSecs=0;
+  let chainStart=coords[DEPOT]; // default: start chain from depot
+
+  // Try geolocation → current → depot leg
+  try{
+    const geoPos=await getCurrentPos();
+    // Show current location card
+    document.getElementById('curr-loc-card').style.display='flex';
+    document.getElementById('curr-loc-label').textContent=`${geoPos.lat.toFixed(4)}, ${geoPos.lon.toFixed(4)}`;
+    document.getElementById('curr-to-depot-leg').style.display='flex';
+    const depotCoord=coords[DEPOT];
+    if(depotCoord){
+      const info=await getDrivingInfo(geoPos,depotCoord);
+      if(info){
+        const ctdLink=document.getElementById('curr-to-depot-link');
+        ctdLink.href=`https://www.google.com/maps/dir/${geoPos.lat},${geoPos.lon}/${encodeURIComponent(DEPOT)}`;
+        ctdLink.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+        cumSecs+=info.rawSecs;
+        const etaDepot=new Date(startTime.getTime()+cumSecs*1000);
+        const ed=document.getElementById('eta-depot');
+        if(ed){ed.textContent=fmtTime(etaDepot);ed.classList.add('show');}
+      }
+    }
+    chainStart=geoPos; // recalculate depot→stop1 from geoPos for cumulative ETAs
+    // reset cumSecs to depotArrival then add depot→stop1
+    // actually keep cumSecs as-is (includes drive to depot)
+  }catch(e){
+    // Geolocation denied or unavailable — silent fallback to depot start
+  }
+
+  // Leg: (depot or current) → stop 1
   const depotCoord=coords[DEPOT];
   const stop1Coord=STOPS[0]&&coords[STOPS[0].addr];
   if(depotCoord&&stop1Coord){
@@ -7178,11 +7241,11 @@ async function loadDistances(){
       const info=await getDrivingInfo(depotCoord,stop1Coord);
       if(info){
         cumSecs+=info.rawSecs;
-        const eta1=new Date(startTime.getTime()+cumSecs*1000);
-        setEta(1,eta1);
+        setEta(1,new Date(startTime.getTime()+cumSecs*1000));
       }
     }catch(e){}
   }
+
   // Legs between stops
   for(let i=1;i<STOPS.length;i++){
     const el=document.getElementById('leg-link-'+i);
@@ -7193,8 +7256,7 @@ async function loadDistances(){
       if(info){
         if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
         cumSecs+=info.rawSecs;
-        const eta=new Date(startTime.getTime()+cumSecs*1000);
-        setEta(i+1,eta);
+        setEta(i+1,new Date(startTime.getTime()+cumSecs*1000));
       } else {
         if(el) el.innerHTML='⇕ Open in Maps';
       }
