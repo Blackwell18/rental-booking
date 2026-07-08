@@ -582,7 +582,11 @@ def create_stripe_payment_link(booking_id, deposit_amount, customer_email, items
         )
         kwargs = {
             "line_items": [{"price": price.id, "quantity": 1}],
-            "metadata": {"booking_id": str(booking_id)},
+            "metadata": {
+                "booking_id": str(booking_id),
+                "payment_type": "deposit",
+                "amount": str(deposit_amount),
+            },
         }
         if BASE_URL:
             kwargs["after_completion"] = {
@@ -6639,26 +6643,67 @@ def stripe_webhook():
         sess = event["data"]["object"]
         if sess.get("payment_status") == "paid":
             booking_id = sess.get("metadata", {}).get("booking_id")
+            amount_paid_cents = sess.get("amount_total") or 0
+            amount_paid_dollars = round(amount_paid_cents / 100, 2)
             if booking_id:
                 conn = get_db()
                 if conn:
                     try:
-                        cur = conn.cursor()
-                        cur.execute(
-                            "UPDATE bookings SET status='confirmed', stripe_session_id=%s WHERE id=%s AND status='accepted'",
-                            (sess.get("id"), int(booking_id))
-                        )
-                        conn.commit()
-                        # Fetch booking for receipt
-                        cur2 = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-                        cur2.execute("SELECT * FROM bookings WHERE id=%s", (int(booking_id),))
-                        row = cur2.fetchone()
-                        cur2.close()
+                        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                        cur.execute("SELECT * FROM bookings WHERE id=%s", (int(booking_id),))
+                        row = cur.fetchone()
+                        if row:
+                            b = _row(row)
+                            current_status = b.get("status", "")
+                            current_paid   = float(b.get("amount_paid") or 0)
+                            grand_total    = float(b.get("grand_total") or 0)
+                            new_paid       = round(current_paid + amount_paid_dollars, 2)
+
+                            if current_status == "accepted":
+                                # ── Deposit payment: confirm the booking ──
+                                cur.execute(
+                                    "UPDATE bookings SET status='confirmed', amount_paid=%s, stripe_session_id=%s WHERE id=%s",
+                                    (new_paid, sess.get("id"), int(booking_id))
+                                )
+                                conn.commit()
+                                b["amount_paid"] = new_paid
+                                b["status"] = "confirmed"
+                                send_receipt_email(b)
+                                log.info(f"Booking #{booking_id} deposit confirmed (${amount_paid_dollars:.2f})")
+
+                            elif current_status in ("confirmed", "pending"):
+                                # ── Final / additional payment ──
+                                balance = round(grand_total - new_paid, 2)
+                                new_status = "paid" if balance <= 0.50 else "confirmed"
+                                cur.execute(
+                                    "UPDATE bookings SET amount_paid=%s, status=%s WHERE id=%s",
+                                    (new_paid, new_status, int(booking_id))
+                                )
+                                conn.commit()
+                                b["amount_paid"] = new_paid
+                                b["status"] = new_status
+                                # Send receipt to customer
+                                send_receipt_email(b)
+                                # Notify admin
+                                _notify_subject = f"{'PAID IN FULL' if new_status == 'paid' else 'Payment Received'} — Booking #{booking_id}"
+                                _notify_body = (
+                                    f"<p><strong>{b.get('full_name')}</strong> just paid "
+                                    f"<strong>${amount_paid_dollars:.2f}</strong> on Booking #{booking_id}.</p>"
+                                    f"<p>Amount paid to date: <strong>${new_paid:.2f}</strong> / ${grand_total:.2f}</p>"
+                                    f"<p>Balance remaining: <strong>${max(balance,0):.2f}</strong></p>"
+                                    f"<p>Status updated to: <strong>{new_status.upper()}</strong></p>"
+                                    f'<p><a href="{BASE_URL}/admin/booking/{booking_id}">View Booking</a></p>'
+                                )
+                                _send_email(
+                                    OWNER_BCC,
+                                    _notify_subject,
+                                    f"<html><body style='font-family:sans-serif;padding:1rem'>{_notify_body}</body></html>",
+                                    _notify_subject,
+                                )
+                                log.info(f"Booking #{booking_id} payment received ${amount_paid_dollars:.2f}, status={new_status}")
+
                         cur.close()
                         conn.close()
-                        if row:
-                            send_receipt_email(_row(row))
-                        log.info(f"Booking #{booking_id} auto-confirmed via Stripe webhook")
                     except Exception as e:
                         log.error(f"Webhook DB error: {e}")
 
@@ -8521,41 +8566,38 @@ def import_customers():
                         for r in rows:
                             name = (r.get("full_name") or "").strip()
                             if not name:
-
                                 skipped += 1
                                 continue
-                            email = (r.get("email") or "").strip().lower()
+                            email_val = (r.get("email") or "").strip().lower()
                             try:
                                 cur.execute(
-                                    "INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes) "
-                                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (email) DO NOTHING",
+                                    "INSERT INTO customers "
+                                    "(full_name, company_name, email, phone, street, city, state, zip, notes) "
+                                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                                    "ON CONFLICT (email) DO NOTHING",
                                     (
                                         name,
                                         (r.get("company_name") or "").strip(),
-                                        email or None,
+                                        email_val or None,
                                         (r.get("phone") or "").strip(),
                                         (r.get("street") or "").strip(),
                                         (r.get("city") or "").strip(),
-                                        (r.get("state") or "").strip().upper(),
+                                        (r.get("state") or "").strip(),
                                         (r.get("zip") or "").strip(),
                                         (r.get("notes") or "").strip(),
-                                    )
+                                    ),
                                 )
-                                if cur.rowcount:
-                                    imported += 1
-                                else:
-                                    skipped += 1
-                            except Exception as row_e:
-                                log.error(f"import row error: {row_e}")
+                                imported += 1
+                            except Exception:
                                 skipped += 1
                         conn.commit()
                         cur.close()
                         conn.close()
-                        flash_ok = f"Imported {imported} customer(s). {skipped} skipped (duplicate or blank)."
-            except Exception as e:
-                log.error(f"import_customers error: {e}")
-                flash_err = "Error reading CSV. Please check the format and column headers."
-    return render_template_string(ADMIN_CUSTOMER_IMPORT_HTML,
+                        flash_ok = f"Imported {imported} customers ({skipped} skipped)."
+            except Exception as ex:
+                flash_err = f"Error reading CSV: {ex}"
+
+    return render_template_string(ADMIN_CUSTOMERS_IMPORT_HTML,
         business_name=BUSINESS_NAME,
         preview=preview,
         flash_ok=flash_ok,
