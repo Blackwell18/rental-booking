@@ -2334,10 +2334,10 @@ ADMIN_DASH_HTML = """
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
 
     /* Top bar */
-    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.25rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;flex-wrap:wrap;gap:.4rem}
     .topbar-brand{font-size:1rem;font-weight:700;color:#111827;display:flex;align-items:center;gap:.5rem}
     .topbar-brand span{font-size:1.25rem}
-    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;text-decoration:none;transition:all .15s}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .65rem;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;text-decoration:none;transition:all .15s;white-space:nowrap}
     .logout-btn:hover{border-color:#9ca3af;color:#374151}
 
     /* Layout */
@@ -2435,7 +2435,7 @@ ADMIN_DASH_HTML = """
 
 <div class="topbar">
   <div class="topbar-brand"><img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
-  <div style="display:flex;align-items:center;gap:.5rem">
+  <div style="display:flex;align-items:center;gap:.25rem;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;max-width:calc(100vw - 160px)">
     <a href="/admin/dashboard" style="color:#2563eb;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .75rem;border-radius:6px;background:#eff6ff">Dashboard</a>
     <a href="/admin/inventory" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Inventory</a>
     <a href="/admin/customers" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Customers</a>
@@ -4557,13 +4557,13 @@ ADMIN_INVENTORY_HTML = """
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
-    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.25rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;flex-wrap:wrap;gap:.4rem}
     .topbar-brand{font-size:1rem;font-weight:700;color:#111827}
-    .topbar-nav{display:flex;gap:.5rem;align-items:center}
-    .nav-link{color:#6b7280;text-decoration:none;font-size:.85rem;font-weight:500;padding:.38rem .75rem;border-radius:6px;transition:all .12s}
+    .topbar-nav{display:flex;gap:.25rem;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;max-width:100%}
+    .nav-link{color:#6b7280;text-decoration:none;font-size:.85rem;font-weight:500;padding:.38rem .65rem;border-radius:6px;transition:all .12s;white-space:nowrap}
     .nav-link:hover{background:#f3f4f6;color:#111827}
     .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
-    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;text-decoration:none}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .65rem;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;text-decoration:none;white-space:nowrap}
     .main{max-width:900px;margin:0 auto;padding:1.75rem}
     .page-title{font-size:1.4rem;font-weight:700;color:#111827;margin-bottom:.35rem}
     .page-sub{font-size:.88rem;color:#6b7280;margin-bottom:1.5rem}
@@ -6545,13 +6545,13 @@ ADMIN_CUSTOMERS_HTML = """
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
-    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.25rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;flex-wrap:wrap;gap:.4rem}
     .topbar-brand{font-size:1rem;font-weight:700;color:#111827}
-    .topbar-nav{display:flex;gap:.5rem;align-items:center}
-    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s}
+    .topbar-nav{display:flex;gap:.25rem;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;max-width:100%}
+    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .65rem;border-radius:6px;transition:all .12s;white-space:nowrap}
     .nav-link:hover{background:#f3f4f6;color:#111827}
     .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
-    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .65rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none;white-space:nowrap}
     .main{max-width:1100px;margin:0 auto;padding:1.75rem}
     .top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem}
     .page-title{font-size:1.4rem;font-weight:700;color:#111827}
@@ -6794,13 +6794,13 @@ ADMIN_CUSTOMER_IMPORT_HTML = """
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
-    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.25rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;flex-wrap:wrap;gap:.4rem}
     .topbar-brand{font-size:1rem;font-weight:700}
-    .topbar-nav{display:flex;gap:.5rem;align-items:center}
-    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px}
+    .topbar-nav{display:flex;gap:.25rem;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;max-width:100%}
+    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .65rem;border-radius:6px;white-space:nowrap}
     .nav-link:hover{background:#f3f4f6;color:#111827}
     .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
-    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .65rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none;white-space:nowrap}
     .main{max-width:750px;margin:0 auto;padding:1.75rem}
     .breadcrumb{font-size:.82rem;color:#9ca3af;margin-bottom:1rem}
     .breadcrumb a{color:#2563eb;text-decoration:none}
@@ -6962,13 +6962,13 @@ ADMIN_CUSTOMER_EDIT_HTML = """
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
-    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.75rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
+    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.25rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;flex-wrap:wrap;gap:.4rem}
     .topbar-brand{font-size:1rem;font-weight:700;color:#111827}
-    .topbar-nav{display:flex;gap:.5rem;align-items:center}
-    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px}
+    .topbar-nav{display:flex;gap:.25rem;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;max-width:100%}
+    .nav-link{color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .65rem;border-radius:6px;white-space:nowrap}
     .nav-link:hover{background:#f3f4f6;color:#111827}
     .nav-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
-    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none}
+    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .65rem;border-radius:6px;font-size:.82rem;font-weight:500;text-decoration:none;white-space:nowrap}
     .main{max-width:700px;margin:0 auto;padding:1.75rem}
     .breadcrumb{font-size:.82rem;color:#9ca3af;margin-bottom:1rem}
     .breadcrumb a{color:#2563eb;text-decoration:none}
