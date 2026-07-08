@@ -2322,93 +2322,90 @@ ADMIN_DASH_HTML = """
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="manifest" href="/admin-manifest.json">
-  <meta name="theme-color" content="#2563eb">
+  <meta name="theme-color" content="#1a365d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <meta name="apple-mobile-web-app-title" content="Admin">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
-  <title>Admin — {{ business_name }}</title>
+  <title>Dashboard — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
-
-    /* Top bar */
-    .topbar{background:white;border-bottom:1px solid #e5e7eb;padding:.9rem 1.25rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;flex-wrap:wrap;gap:.4rem}
-    .topbar-brand{font-size:1rem;font-weight:700;color:#111827;display:flex;align-items:center;gap:.5rem}
-    .topbar-brand span{font-size:1.25rem}
-    .logout-btn{background:white;border:1px solid #d1d5db;color:#6b7280;padding:.38rem .65rem;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;text-decoration:none;transition:all .15s;white-space:nowrap}
-    .logout-btn:hover{border-color:#9ca3af;color:#374151}
-
-    /* Layout */
-    .main{max-width:1280px;margin:0 auto;padding:1.75rem 1.75rem}
-    .page-title{font-size:1.4rem;font-weight:700;color:#111827;margin-bottom:1.25rem}
-
-    /* Metric cards */
-    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.75rem}
-    .metric{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1.25rem 1.5rem}
-    .metric-label{font-size:.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:.35rem;font-weight:600}
-    .metric-value{font-size:1.9rem;font-weight:700;color:#111827;line-height:1}
-
-    /* Inventory grid */
-    .section-title{font-size:.95rem;font-weight:700;color:#374151;margin:0 0 .75rem;text-transform:uppercase;letter-spacing:.4px}
-    .inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.75rem;margin-bottom:1.75rem}
-    .inv-card{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.1rem}
-    .inv-name{font-size:.85rem;font-weight:600;color:#111827;margin-bottom:.55rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .inv-meta{display:flex;justify-content:space-between;align-items:center;font-size:.75rem;margin-bottom:.45rem}
-    .inv-reserved{color:#6b7280}
-    .inv-avail-ok{color:#059669;font-weight:700}
-    .inv-avail-low{color:#d97706;font-weight:700}
-    .inv-avail-zero{color:#dc2626;font-weight:700}
-    .inv-bar{height:5px;border-radius:3px;background:#e5e7eb;overflow:hidden}
-    .inv-fill{height:100%;border-radius:3px}
-
-    /* Tabs + table card */
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:#f0f2f5;color:#111827;min-height:100vh;display:flex}
+    .sidebar{width:200px;min-height:100vh;background:white;border-right:1px solid #e5e7eb;display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;transition:transform .2s}
+    .sb-brand{padding:1.1rem 1rem .9rem;display:flex;align-items:center;gap:.55rem;border-bottom:1px solid #f3f4f6}
+    .sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+    .sb-brand-name{font-size:.82rem;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+    .sb-new-btn{display:block;margin:.85rem .85rem .5rem;padding:.55rem .75rem;background:#16a34a;color:white;border-radius:8px;font-size:.84rem;font-weight:700;text-decoration:none;text-align:center;transition:background .15s}
+    .sb-new-btn:hover{background:#15803d}
+    .sb-nav{display:flex;flex-direction:column;padding:.25rem 0;flex:1}
+    .sb-link{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.84rem;font-weight:500;color:#4b5563;text-decoration:none;transition:all .1s;border-left:3px solid transparent}
+    .sb-link:hover{background:#f9fafb;color:#111827}
+    .sb-link.active{background:#eff6ff;color:#2563eb;font-weight:600;border-left-color:#2563eb}
+    .sb-icon{width:1.1rem;text-align:center;font-size:.95rem}
+    .sb-divider{height:1px;background:#f3f4f6;margin:.4rem 0}
+    .sb-bottom{border-top:1px solid #f3f4f6;padding:.5rem 0}
+    .page-content{margin-left:200px;flex:1;min-height:100vh;display:flex;flex-direction:column}
+    .page-header{background:white;border-bottom:1px solid #e5e7eb;padding:.85rem 1.5rem;display:flex;align-items:center;gap:1rem;position:sticky;top:0;z-index:50}
+    .page-header h1{font-size:1.3rem;font-weight:700;color:#111827;flex:1}
+    .mobile-menu-btn{display:none;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#374151;padding:.25rem;line-height:1}
+    .page-body{padding:1.5rem;flex:1}
+    .day-panels{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem}
+    .day-panel{background:white;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+    .panel-hdr{display:flex;justify-content:space-between;align-items:center;padding:.85rem 1.1rem .65rem;border-bottom:1px solid #f3f4f6}
+    .panel-hdr-title{font-size:.95rem;font-weight:700;color:#111827}
+    .panel-hdr-date{background:white;border:1px solid #d1d5db;color:#374151;padding:.25rem .65rem;border-radius:6px;font-size:.78rem;font-weight:500}
+    .booking-row{display:flex;align-items:center;gap:.75rem;padding:.75rem 1.1rem;border-bottom:1px solid #f9fafb;text-decoration:none;color:inherit;transition:background .1s}
+    .booking-row:hover{background:#fafafa}
+    .bk-time{font-size:.78rem;font-weight:600;color:#374151;width:3.5rem;flex-shrink:0}
+    .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:700;color:white;flex-shrink:0}
+    .bk-info{flex:1;min-width:0}
+    .bk-name{font-size:.86rem;font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bk-email{font-size:.75rem;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bk-items{font-size:.74rem;color:#2563eb;font-weight:500;margin-top:.1rem}
+    .bk-num{font-size:.8rem;font-weight:700;color:#6b7280;flex-shrink:0}
+    .panel-empty{padding:2.5rem;text-align:center;color:#9ca3af;font-size:.88rem}
+    .panel-footer{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1.1rem;border-top:1px solid #f3f4f6}
+    .panel-footer a{font-size:.78rem;color:#2563eb;text-decoration:none;font-weight:500}
+    .panel-footer a:hover{text-decoration:underline}
+    .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem}
+    .section-title-lg{font-size:1.05rem;font-weight:700;color:#111827}
+    .search-wrap{position:relative}
+    .search-input{border:1px solid #d1d5db;border-radius:8px;padding:.4rem 2rem .4rem .85rem;font-size:.85rem;width:220px;outline:none;background:white;transition:border .12s}
+    .search-input:focus{border-color:#2563eb}
+    .search-count{position:absolute;right:.55rem;top:50%;transform:translateY(-50%);font-size:.72rem;color:#9ca3af}
     .tabs{display:flex;background:white;border:1px solid #e5e7eb;border-bottom:none;border-radius:10px 10px 0 0;overflow-x:auto}
-    .tab{padding:.7rem 1.1rem;font-size:.82rem;font-weight:500;color:#6b7280;text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap;flex-shrink:0;transition:all .12s}
+    .tab{padding:.7rem 1rem;font-size:.82rem;font-weight:500;color:#6b7280;text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap;flex-shrink:0;transition:all .12s}
     .tab:hover{color:#111827;background:#f9fafb}
     .tab.active{color:#2563eb;border-bottom-color:#2563eb;font-weight:600}
     .table-card{background:white;border:1px solid #e5e7eb;border-radius:0 0 10px 10px;overflow:hidden}
     .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-    .table-scroll table{min-width:900px}
-
-    /* Table */
+    .table-scroll table{min-width:880px}
     table{width:100%;border-collapse:collapse}
     thead tr{background:#f9fafb}
-    th{padding:.7rem 1rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
-    td{padding:.85rem 1rem;border-bottom:1px solid #f3f4f6;vertical-align:middle;font-size:.86rem;color:#374151}
+    th{padding:.65rem .9rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
+    td{padding:.8rem .9rem;border-bottom:1px solid #f3f4f6;vertical-align:middle;font-size:.85rem;color:#374151}
     tr:last-child td{border-bottom:none}
     tbody tr:hover td{background:#fafafa}
-
-    /* Avatar */
-    .client-cell{display:flex;align-items:center;gap:.6rem}
-    .avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:700;color:white;flex-shrink:0}
-    .client-name{font-weight:600;color:#111827;font-size:.86rem}
-    .client-email{font-size:.75rem;color:#9ca3af;margin-top:.05rem}
-
-    /* Booking status badges */
-    .badge{display:inline-flex;align-items:center;padding:.22rem .65rem;border-radius:20px;font-size:.74rem;font-weight:600;white-space:nowrap}
+    .client-cell{display:flex;align-items:center;gap:.55rem}
+    .client-name{font-weight:600;color:#111827;font-size:.85rem}
+    .client-email{font-size:.74rem;color:#9ca3af;margin-top:.05rem}
+    .badge{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:20px;font-size:.73rem;font-weight:600;white-space:nowrap}
     .badge-pending{background:#fef9c3;color:#854d0e}
     .badge-accepted{background:#dbeafe;color:#1e40af}
     .badge-confirmed{background:#dcfce7;color:#166534}
     .badge-partial{background:#ede9fe;color:#7c3aed}
     .badge-denied{background:#fee2e2;color:#991b1b}
     .badge-cancelled{background:#f3f4f6;color:#6b7280}
-
-    /* Payment status badges */
-    .pay-badge{display:inline-flex;align-items:center;padding:.22rem .65rem;border-radius:20px;font-size:.74rem;font-weight:600;white-space:nowrap}
+    .pay-badge{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:20px;font-size:.73rem;font-weight:600;white-space:nowrap}
     .pay-paid{background:#dcfce7;color:#166534}
     .pay-due{background:#fef9c3;color:#854d0e}
     .pay-partial{background:#dbeafe;color:#1e40af}
-    .pay-none{color:#9ca3af;font-size:.78rem}
-
-    /* Date range */
-    .date-range{display:flex;align-items:center;gap:.35rem;font-size:.83rem;white-space:nowrap}
+    .pay-none{color:#9ca3af;font-size:.77rem}
+    .date-range{display:flex;align-items:center;gap:.3rem;font-size:.82rem;white-space:nowrap}
     .date-arrow{color:#d1d5db;font-size:.7rem}
-
-    /* Action buttons */
-    .action-btns{display:flex;gap:.35rem;flex-wrap:nowrap;align-items:center}
-    .btn{display:inline-block;padding:.3rem .65rem;border-radius:6px;font-size:.76rem;font-weight:600;cursor:pointer;border:1px solid transparent;text-decoration:none;line-height:1.5;white-space:nowrap;transition:all .12s}
+    .action-btns{display:flex;gap:.3rem;flex-wrap:nowrap;align-items:center}
+    .btn{display:inline-block;padding:.28rem .6rem;border-radius:6px;font-size:.75rem;font-weight:600;cursor:pointer;border:1px solid transparent;text-decoration:none;line-height:1.5;white-space:nowrap;transition:all .12s}
     .btn-view{background:#eff6ff;color:#2563eb;border-color:#bfdbfe}
     .btn-view:hover{background:#dbeafe}
     .btn-accept{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
@@ -2418,319 +2415,276 @@ ADMIN_DASH_HTML = """
     .btn-confirm{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
     .btn-confirm:hover{background:#dbeafe}
     .btn-cancel{background:#f9fafb;color:#6b7280;border-color:#d1d5db}
-
     .empty-state{padding:3rem;text-align:center;color:#9ca3af;font-size:.95rem}
-
-    @media(max-width:900px){
-      .metrics{grid-template-columns:1fr 1fr}
-      .main{padding:1rem}
+    @media(max-width:768px){
+      .sidebar{transform:translateX(-100%)}
+      .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+      .page-content{margin-left:0}
+      .mobile-menu-btn{display:block}
+      .day-panels{grid-template-columns:1fr}
+      .page-body{padding:1rem}
     }
-    @media(max-width:540px){
-      .metrics{grid-template-columns:1fr}
-      th,td{padding:.6rem .75rem}
-    }
+    .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:99}
+    .overlay.show{display:block}
   </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="topbar-brand"><img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
-  <div style="display:flex;align-items:center;gap:.25rem;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;max-width:calc(100vw - 160px)">
-    <a href="/admin/dashboard" style="color:#2563eb;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .75rem;border-radius:6px;background:#eff6ff">Dashboard</a>
-    <a href="/admin/inventory" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Inventory</a>
-    <a href="/admin/customers" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">Customers</a>
-    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
-    <a href="/admin/route" class="nav-link">🗺 Route</a>
-    <a href="/admin/formsite-import" style="color:#6b7280;font-size:.85rem;font-weight:500;text-decoration:none;padding:.38rem .75rem;border-radius:6px;transition:all .12s" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">📥 Import</a>
-    <a href="/admin/booking/new" style="background:#16a34a;color:white;font-size:.85rem;font-weight:600;text-decoration:none;padding:.38rem .85rem;border-radius:6px">+ New Booking</a>
-    <a href="/admin/logout" class="logout-btn">Sign Out</a>
-  </div>
-</div>
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 
-<div class="main">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
-    <div class="page-title" style="margin-bottom:0">Dashboard</div>
-    <div style="position:relative">
-      <input type="text" id="dash-search" placeholder="🔍 Search bookings…" oninput="filterDash(this.value)"
-        style="border:1px solid #d1d5db;border-radius:8px;padding:.45rem 1rem;font-size:.88rem;width:260px;outline:none;transition:border .12s;background:white"
-        onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#d1d5db'">
-      <span id="dash-count" style="position:absolute;right:.6rem;top:50%;transform:translateY(-50%);font-size:.75rem;color:#9ca3af"></span>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand">
+    <img src="/logo.png" alt="">
+    <span class="sb-brand-name">{{ business_name }}</span>
+  </div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link active"><span class="sb-icon">🏠</span> Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link"><span class="sb-icon">👥</span> Clients</a>
+    <a href="/admin/inventory" class="sb-link"><span class="sb-icon">📦</span> Inventory</a>
+    <a href="/admin/calendar" class="sb-link"><span class="sb-icon">📅</span> Calendar</a>
+    <a href="/admin/route" class="sb-link"><span class="sb-icon">🗺</span> Route</a>
+    <a href="/admin/formsite-import" class="sb-link"><span class="sb-icon">📥</span> Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link"><span class="sb-icon">🚪</span> Sign Out</a>
+  </div>
+</aside>
+
+<div class="page-content">
+  <div class="page-header">
+    <button class="mobile-menu-btn" onclick="openSidebar()">☰</button>
+    <h1>Dashboard</h1>
+    <div class="search-wrap">
+      <input type="text" class="search-input" id="dash-search" placeholder="Search bookings…" oninput="filterDash(this.value)">
+      <span class="search-count" id="dash-count"></span>
     </div>
   </div>
 
-  <!-- ── Inventory Conflict Alert ── -->
-  {% if inv_conflicts %}
-  <div style="background:#fef2f2;border:2px solid #f87171;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem">
-    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem">
-      <span style="font-size:1.2rem">🚨</span>
-      <span style="font-weight:700;color:#991b1b;font-size:.95rem">Inventory Conflict — {{ inv_conflicts|length }} item{{ 's' if inv_conflicts|length != 1 else '' }} over-committed</span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:.35rem">
+  <div class="page-body">
+
+    {% if inv_conflicts %}
+    <div style="background:#fef2f2;border:2px solid #f87171;border-radius:10px;padding:.9rem 1.1rem;margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;gap:.5rem;font-weight:700;color:#991b1b;font-size:.9rem;margin-bottom:.5rem">
+        <span>🚨</span> Inventory Conflict — {{ inv_conflicts|length }} item{{ 's' if inv_conflicts|length != 1 else '' }} over-committed
+      </div>
       {% for c in inv_conflicts %}
-      <div style="background:white;border:1px solid #fecaca;border-radius:7px;padding:.5rem .85rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem;font-size:.86rem">
-        <div>
-          <a href="/admin/booking/{{ c.booking_id }}" style="font-weight:700;color:#dc2626;text-decoration:none">Booking #{{ c.booking_id }}</a>
-          <span style="color:#374151"> — {{ c.customer }}</span>
-          <span style="color:#9ca3af;font-size:.78rem"> ({{ c.event_date }})</span>
-        </div>
-        <div style="color:#7f1d1d;font-size:.83rem">
-          <strong>{{ c.item }}</strong>: needs <strong>{{ c.needed }}</strong>, only <strong>{{ c.available }}</strong> available
-          <span style="background:#dc2626;color:white;border-radius:4px;padding:.1rem .45rem;font-size:.75rem;font-weight:700;margin-left:.3rem">-{{ c.shortfall }} short</span>
-        </div>
+      <div style="background:white;border:1px solid #fecaca;border-radius:6px;padding:.45rem .8rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.4rem;font-size:.84rem;margin-top:.3rem">
+        <div><a href="/admin/booking/{{ c.booking_id }}" style="font-weight:700;color:#dc2626;text-decoration:none">Booking #{{ c.booking_id }}</a> — {{ c.customer }} <span style="color:#9ca3af;font-size:.78rem">({{ c.event_date }})</span></div>
+        <div style="color:#7f1d1d;font-size:.82rem"><strong>{{ c.item }}</strong>: needs <strong>{{ c.needed }}</strong>, only <strong>{{ c.available }}</strong> available <span style="background:#dc2626;color:white;border-radius:4px;padding:.1rem .4rem;font-size:.73rem;font-weight:700;margin-left:.3rem">-{{ c.shortfall }} short</span></div>
       </div>
       {% endfor %}
     </div>
-  </div>
-  {% endif %}
-
-
-
-  <!-- ── Bookings ── -->
-  {% set df = ('&date_from=' ~ date_from) if date_from else '' %}
-  {% set dt = ('&date_to=' ~ date_to) if date_to else '' %}
-  {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
-  {% set sf = ('&sort=' ~ sort_by) if (sort_by and sort_by != 'date') else '' %}
-  <div class="tabs">
-    <a href="/admin/dashboard?status=pending&sort=created_asc" class="tab {% if status_filter=='pending' and not past_filter %}active{% endif %}" style="{% if status_filter=='pending' and not past_filter %}color:#d97706;border-bottom-color:#d97706;{% endif %}">🆕&nbsp;New{% if stats.pending > 0 %}&nbsp;<span style="background:#d97706;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.pending }}</span>{% endif %}</a>
-    <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔&nbsp;Upcoming&nbsp;{% if stats.upcoming > 0 %}<span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
-    <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Accepted&nbsp;({{ stats.accepted }})</a>
-    <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' and not past_filter %}active{% endif %}">Paid in Full&nbsp;({{ stats.confirmed }})</a>
-    <a href="/admin/dashboard?status=partial{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='partial' and not past_filter %}active{% endif %}" style="{% if status_filter=='partial' and not past_filter %}color:#7c3aed;border-bottom-color:#7c3aed;{% endif %}">💳&nbsp;Partial{% if stats.partial > 0 %}&nbsp;<span style="background:#7c3aed;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.partial }}</span>{% endif %}</a>
-    <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    and not past_filter %}active{% endif %}">Denied</a>
-    <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' and not past_filter %}active{% endif %}">Cancelled</a>
-    <a href="/admin/dashboard?past=1" class="tab {% if past_filter %}active{% endif %}" style="{% if past_filter %}color:#6366f1;border-bottom-color:#6366f1;{% endif %}">🕓&nbsp;Past&nbsp;({{ stats.past }})</a>
-    <a href="/admin/dashboard" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All&nbsp;({{ stats.total }})</a>
-    <a href="/admin/dashboard?archived=1" class="tab {% if archived_filter %}active{% endif %}" style="{% if archived_filter %}color:#9ca3af;border-bottom-color:#9ca3af;{% endif %}">📦&nbsp;Archived</a>
-  </div>
-
-  <!-- ── Date Range + Payment Filter + Sort ── -->
-  <form method="GET" action="/admin/dashboard" style="background:white;border:1px solid #e5e7eb;border-bottom:none;padding:.65rem 1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center">
-    <input type="hidden" name="status" value="{{ status_filter }}">
-    <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-right:.1rem">Event Date:</label>
-    <input type="date" name="date_from" value="{{ date_from }}" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
-    <span style="font-size:.82rem;color:#9ca3af">to</span>
-    <input type="date" name="date_to" value="{{ date_to }}" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
-    <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.5rem">Payment:</label>
-    <select name="pay_filter" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
-      <option value="" {% if not pay_filter %}selected{% endif %}>All</option>
-      <option value="paid"    {% if pay_filter=='paid'    %}selected{% endif %}>Paid In Full</option>
-      <option value="partial" {% if pay_filter=='partial' %}selected{% endif %}>Partially Paid</option>
-      <option value="due"     {% if pay_filter=='due'     %}selected{% endif %}>Payment Due</option>
-    </select>
-    <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.5rem">Sort:</label>
-    <select name="sort" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .55rem;font-size:.82rem;color:#374151">
-      <option value="date"      {% if sort_by=='date'      %}selected{% endif %}>Event Date ↑</option>
-      <option value="date_desc" {% if sort_by=='date_desc' %}selected{% endif %}>Event Date ↓</option>
-      <option value="name"      {% if sort_by=='name'      %}selected{% endif %}>Client A→Z</option>
-      <option value="name_desc" {% if sort_by=='name_desc' %}selected{% endif %}>Client Z→A</option>
-      <option value="id"        {% if sort_by=='id'        %}selected{% endif %}>Booking # ↓</option>
-      <option value="id_asc"    {% if sort_by=='id_asc'    %}selected{% endif %}>Booking # ↑</option>
-      <option value="total"     {% if sort_by=='total'     %}selected{% endif %}>Total ↓</option>
-      <option value="created"   {% if sort_by=='created'   %}selected{% endif %}>Date Added ↓</option>
-    </select>
-    <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer">Apply</button>
-    {% if date_from or date_to or pay_filter %}<a href="/admin/dashboard?status={{ status_filter }}" style="font-size:.78rem;color:#6b7280;text-decoration:none">✕ Clear</a>{% endif %}
-  </form>
-
-  <!-- Bulk action bar (hidden until checkboxes selected) -->
-  <div id="bulkBar" style="display:none;background:#1e3a5f;color:white;padding:.6rem 1rem;display:flex;gap:.75rem;align-items:center;border-radius:8px;margin-bottom:.5rem">
-    <span id="bulkCount" style="font-size:.85rem;font-weight:600"></span>
-    <form method="POST" action="/admin/bookings/bulk-archive" id="bulkArchiveForm">
-      <input type="hidden" name="ids" id="bulkArchiveIds">
-      <button type="button" onclick="bulkAction('archive')" style="background:#f97316;color:white;border:none;border-radius:6px;padding:.3rem .8rem;font-size:.82rem;font-weight:600;cursor:pointer">📦 Archive Selected</button>
-    </form>
-    <form method="POST" action="/admin/bookings/bulk-delete" id="bulkDeleteForm">
-      <input type="hidden" name="ids" id="bulkDeleteIds">
-      <button type="button" onclick="bulkAction('delete')" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:.3rem .8rem;font-size:.82rem;font-weight:600;cursor:pointer">🗑 Delete Selected</button>
-    </form>
-    <button type="button" onclick="clearAll()" style="background:transparent;color:#9ca3af;border:1px solid #4b5563;border-radius:6px;padding:.3rem .8rem;font-size:.82rem;cursor:pointer">✕ Clear</button>
-  </div>
-
-  <div class="table-card">
-    {% if bookings %}
-    <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th style="width:36px;padding-left:.75rem"><input type="checkbox" id="selectAll" onchange="toggleAll(this)" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></th>
-          <th>#</th>
-          <th>Client</th>
-          <th>Status</th>
-          <th>Event Dates</th>
-          <th>Items</th>
-          <th>Total</th>
-          <th>Payment</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for b in bookings %}
-        <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '') | lower }} {{ (b.email or '') | lower }} {{ (b.phone or '') | lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '') | lower }}">
-          <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
-          <td style="font-weight:700;color:#2563eb;font-size:.83rem">#{{ b.id }}</td>
-          <td>
-            <div class="client-cell">
-              <div class="avatar" style="background:{{ b.avatar_color }}">{{ b.avatar_initials }}</div>
-              <div>
-                <div class="client-name">{{ b.full_name }}</div>
-                <div class="client-email">{{ b.email }}</div>
-                {% if b.phone %}<div style="font-size:.75rem;color:#6b7280;margin-top:.1rem"><a href="tel:{{ b.phone }}" style="color:#6b7280;text-decoration:none">📞 {{ b.phone }}</a></div>{% endif %}
-              </div>
-            </div>
-          </td>
-          <td><span class="badge badge-{{ b.status }}">{{ b.status | capitalize }}</span></td>
-          <td>
-            <div class="date-range">
-              <span>{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }}</span>
-              <span class="date-arrow">→</span>
-              <span>{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '' }}</span>
-            </div>
-            {% if b.maps_url %}
-            <a href="{{ b.maps_url }}" target="_blank" rel="noopener noreferrer"
-               style="display:inline-flex;align-items:center;gap:.18rem;margin-top:.25rem;font-size:.73rem;color:#2563eb;text-decoration:none;font-weight:500;opacity:.85"
-               title="{{ b.event_street }}, {{ b.event_city }}, {{ b.event_state }} {{ b.event_zip }}">
-              📍 Map
-            </a>
-            {% endif %}
-          </td>
-          <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;font-size:.8rem">{{ b.items_summary }}</td>
-          <td style="font-weight:700;white-space:nowrap">${{ "%.2f"|format(b.grand_total or 0) }}</td>
-          <td>
-            {% if b.pay_label != '—' %}
-            <span class="pay-badge {{ b.pay_class }}">{{ b.pay_label }}</span>
-            {% else %}
-            <span class="pay-none">—</span>
-            {% endif %}
-          </td>
-          <td>
-            <div class="action-btns">
-              <a href="/admin/booking/{{ b.id }}" class="btn btn-view">View</a>
-              {% if b.status == 'pending' %}
-              <form method="POST" action="/admin/booking/{{ b.id }}/accept" style="display:inline">
-                <button class="btn btn-accept" onclick="return confirm('Accept #{{ b.id }}? This emails {{ b.email }} their invoice + Stripe payment link.')">Accept</button>
-              </form>
-              <form method="POST" action="/admin/booking/{{ b.id }}/deny" style="display:inline">
-                <button class="btn btn-deny" onclick="return confirm('Deny booking #{{ b.id }}?')">Deny</button>
-              </form>
-              {% endif %}
-              {% if b.status == 'accepted' %}
-              <form method="POST" action="/admin/booking/{{ b.id }}/confirm" style="display:inline">
-                <button class="btn btn-confirm" onclick="return confirm('Manually mark #{{ b.id }} as paid?')">Mark Paid</button>
-              </form>
-              {% endif %}
-              {% if b.status not in ('denied', 'cancelled') %}
-              <form method="POST" action="/admin/booking/{{ b.id }}/cancel" style="display:inline">
-                <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel</button>
-              </form>
-              {% endif %}
-              {% if b.delivery_status != 'picked_up' %}
-              <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status" style="display:inline">
-                {% if not b.delivery_status %}
-                <button class="btn" style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;font-size:.75rem"
-                  onclick="return confirm('Mark booking #{{ b.id }} as DELIVERED?')">🚚 Delivered</button>
-                {% elif b.delivery_status == 'delivered' %}
-                <button class="btn" style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd;font-size:.75rem"
-                  onclick="return confirm('Mark booking #{{ b.id }} as PICKED UP?')">✅ Picked Up</button>
-                {% endif %}
-              </form>
-              {% else %}
-              <span style="font-size:.75rem;color:#16a34a;font-weight:600;padding:.28rem .5rem;background:#f0fdf4;border:1px solid #86efac;border-radius:6px">✔ Picked Up</span>
-              {% endif %}
-              <!-- Archive / Delete / Unarchive dropdown -->
-              <form method="POST" id="mgmt-form-{{ b.id }}" action="" style="display:inline">
-                <select onchange="submitMgmt({{ b.id }}, this)" style="border:1px solid #d1d5db;border-radius:6px;padding:.28rem .5rem;font-size:.78rem;color:#374151;cursor:pointer;margin-left:.25rem">
-                  <option value="">⚙ More</option>
-                  {% if b.archived %}
-                  <option value="/admin/booking/{{ b.id }}/unarchive">↩ Unarchive</option>
-                  {% else %}
-                  <option value="/admin/booking/{{ b.id }}/archive">📦 Archive</option>
-                  {% endif %}
-                  <option value="/admin/booking/{{ b.id }}/delete" data-confirm="Permanently delete booking #{{ b.id }}? This cannot be undone.">🗑 Delete</option>
-                </select>
-              </form>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
-    {% else %}
-    <div class="empty-state">No bookings found.</div>
     {% endif %}
+
+    <div class="day-panels">
+      <div class="day-panel">
+        <div class="panel-hdr">
+          <span class="panel-hdr-title">Going out</span>
+          <span class="panel-hdr-date">{{ today_label }}</span>
+        </div>
+        {% if going_out %}
+        {% for b in going_out %}
+        <a href="/admin/booking/{{ b.id }}" class="booking-row">
+          <div class="bk-time">{{ b.event_start_time or '' }}</div>
+          <div class="avatar" style="background:{{ b.avatar_color }}">{{ b.avatar_initials }}</div>
+          <div class="bk-info">
+            <div class="bk-name">{{ b.full_name }}</div>
+            <div class="bk-email">{{ b.email or '' }}</div>
+            <div class="bk-items">{{ b.item_count }} reserved</div>
+          </div>
+          <div class="bk-num">#{{ b.id }}</div>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="panel-empty">No deliveries scheduled today</div>
+        {% endif %}
+        <div class="panel-footer">
+          <a href="/admin/dashboard?past=1">View late ({{ stats.past }})</a>
+          <a href="/admin/dashboard">View all</a>
+        </div>
+      </div>
+
+      <div class="day-panel">
+        <div class="panel-hdr">
+          <span class="panel-hdr-title">Coming back</span>
+          <span class="panel-hdr-date">{{ today_label }}</span>
+        </div>
+        {% if coming_back %}
+        {% for b in coming_back %}
+        <a href="/admin/booking/{{ b.id }}" class="booking-row">
+          <div class="bk-time">{{ b.event_start_time or '' }}</div>
+          <div class="avatar" style="background:{{ b.avatar_color }}">{{ b.avatar_initials }}</div>
+          <div class="bk-info">
+            <div class="bk-name">{{ b.full_name }}</div>
+            <div class="bk-email">{{ b.email or '' }}</div>
+            <div class="bk-items">{{ b.item_count }} reserved</div>
+          </div>
+          <div class="bk-num">#{{ b.id }}</div>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="panel-empty">No results</div>
+        {% endif %}
+        <div class="panel-footer">
+          <a href="/admin/dashboard">View late (0)</a>
+          <a href="/admin/dashboard">View all</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <span class="section-title-lg">All Bookings</span>
+    </div>
+
+    {% set df = ('&date_from=' ~ date_from) if date_from else '' %}
+    {% set dt = ('&date_to=' ~ date_to) if date_to else '' %}
+    {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
+    {% set sf = ('&sort=' ~ sort_by) if (sort_by and sort_by != 'date') else '' %}
+    <div class="tabs">
+      <a href="/admin/dashboard?status=pending&sort=created_asc" class="tab {% if status_filter=='pending' and not past_filter %}active{% endif %}" style="{% if status_filter=='pending' and not past_filter %}color:#d97706;border-bottom-color:#d97706;{% endif %}">🆕 New{% if stats.pending > 0 %} <span style="background:#d97706;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.pending }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔 Upcoming{% if stats.upcoming > 0 %} <span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Accepted ({{ stats.accepted }})</a>
+      <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' and not past_filter %}active{% endif %}">Paid in Full ({{ stats.confirmed }})</a>
+      <a href="/admin/dashboard?status=partial{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='partial' and not past_filter %}active{% endif %}" style="{% if status_filter=='partial' and not past_filter %}color:#7c3aed;border-bottom-color:#7c3aed;{% endif %}">💳 Partial{% if stats.partial > 0 %} <span style="background:#7c3aed;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.partial }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    and not past_filter %}active{% endif %}">Denied</a>
+      <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' and not past_filter %}active{% endif %}">Cancelled</a>
+      <a href="/admin/dashboard?past=1" class="tab {% if past_filter %}active{% endif %}" style="{% if past_filter %}color:#6366f1;border-bottom-color:#6366f1;{% endif %}">🕓 Past ({{ stats.past }})</a>
+      <a href="/admin/dashboard" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All ({{ stats.total }})</a>
+      <a href="/admin/dashboard?archived=1" class="tab {% if archived_filter %}active{% endif %}" style="{% if archived_filter %}color:#9ca3af;border-bottom-color:#9ca3af;{% endif %}">📦 Archived</a>
+    </div>
+
+    <form method="GET" action="/admin/dashboard" style="background:white;border:1px solid #e5e7eb;border-bottom:none;padding:.6rem 1rem;display:flex;flex-wrap:wrap;gap:.55rem;align-items:center">
+      <input type="hidden" name="status" value="{{ status_filter }}">
+      <label style="font-size:.78rem;font-weight:600;color:#6b7280">Event Date:</label>
+      <input type="date" name="date_from" value="{{ date_from }}" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .5rem;font-size:.82rem;color:#374151">
+      <span style="font-size:.82rem;color:#9ca3af">to</span>
+      <input type="date" name="date_to" value="{{ date_to }}" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .5rem;font-size:.82rem;color:#374151">
+      <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.4rem">Payment:</label>
+      <select name="pay_filter" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .5rem;font-size:.82rem;color:#374151">
+        <option value="" {% if not pay_filter %}selected{% endif %}>All</option>
+        <option value="paid"    {% if pay_filter=='paid'    %}selected{% endif %}>Paid In Full</option>
+        <option value="partial" {% if pay_filter=='partial' %}selected{% endif %}>Partially Paid</option>
+        <option value="due"     {% if pay_filter=='due'     %}selected{% endif %}>Payment Due</option>
+      </select>
+      <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.4rem">Sort:</label>
+      <select name="sort" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .5rem;font-size:.82rem;color:#374151">
+        <option value="date"      {% if sort_by=='date'      %}selected{% endif %}>Event Date ↑</option>
+        <option value="date_desc" {% if sort_by=='date_desc' %}selected{% endif %}>Event Date ↓</option>
+        <option value="name"      {% if sort_by=='name'      %}selected{% endif %}>Client A→Z</option>
+        <option value="name_desc" {% if sort_by=='name_desc' %}selected{% endif %}>Client Z→A</option>
+        <option value="id"        {% if sort_by=='id'        %}selected{% endif %}>Booking # ↓</option>
+        <option value="id_asc"    {% if sort_by=='id_asc'    %}selected{% endif %}>Booking # ↑</option>
+        <option value="total"     {% if sort_by=='total'     %}selected{% endif %}>Total ↓</option>
+        <option value="created"   {% if sort_by=='created'   %}selected{% endif %}>Date Added ↓</option>
+      </select>
+      <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.32rem .8rem;font-size:.82rem;font-weight:600;cursor:pointer">Apply</button>
+      {% if date_from or date_to or pay_filter %}<a href="/admin/dashboard?status={{ status_filter }}" style="font-size:.78rem;color:#6b7280;text-decoration:none">✕ Clear</a>{% endif %}
+    </form>
+
+    <div id="bulkBar" style="display:none;background:#1e3a5f;color:white;padding:.55rem 1rem;gap:.75rem;align-items:center;border-radius:0 0 8px 8px;margin-bottom:.4rem">
+      <span id="bulkCount" style="font-size:.84rem;font-weight:600"></span>
+      <form method="POST" action="/admin/bookings/bulk-archive" id="bulkArchiveForm" style="display:inline">
+        <input type="hidden" name="ids" id="bulkArchiveIds">
+        <button type="button" onclick="bulkAction('archive')" style="background:#f97316;color:white;border:none;border-radius:6px;padding:.28rem .75rem;font-size:.81rem;font-weight:600;cursor:pointer">📦 Archive Selected</button>
+      </form>
+      <form method="POST" action="/admin/bookings/bulk-delete" id="bulkDeleteForm" style="display:inline">
+        <input type="hidden" name="ids" id="bulkDeleteIds">
+        <button type="button" onclick="bulkAction('delete')" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:.28rem .75rem;font-size:.81rem;font-weight:600;cursor:pointer">🗑 Delete Selected</button>
+      </form>
+      <button type="button" onclick="clearAll()" style="background:transparent;color:#9ca3af;border:1px solid #4b5563;border-radius:6px;padding:.28rem .75rem;font-size:.81rem;cursor:pointer">✕ Clear</button>
+    </div>
+
+    <div class="table-card">
+      {% if bookings %}
+      <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th style="width:36px;padding-left:.75rem"><input type="checkbox" id="selectAll" onchange="toggleAll(this)" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></th>
+          <th>#</th><th>Client</th><th>Status</th><th>Event Dates</th><th>Items</th><th>Total</th><th>Payment</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% for b in bookings %}
+          <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '')|lower }} {{ (b.email or '')|lower }} {{ (b.phone or '')|lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '')|lower }}">
+            <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
+            <td style="font-weight:700;color:#2563eb;font-size:.83rem">#{{ b.id }}</td>
+            <td>
+              <div class="client-cell">
+                <div class="avatar" style="background:{{ b.avatar_color }}">{{ b.avatar_initials }}</div>
+                <div>
+                  <div class="client-name">{{ b.full_name }}</div>
+                  <div class="client-email">{{ b.email }}</div>
+                  {% if b.phone %}<div style="font-size:.74rem;color:#6b7280;margin-top:.05rem"><a href="tel:{{ b.phone }}" style="color:#6b7280;text-decoration:none">📞 {{ b.phone }}</a></div>{% endif %}
+                </div>
+              </div>
+            </td>
+            <td><span class="badge badge-{{ b.status }}">{{ b.status|capitalize }}</span></td>
+            <td>
+              <div class="date-range">
+                <span>{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }}</span>
+                <span class="date-arrow">→</span>
+                <span>{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '' }}</span>
+              </div>
+              {% if b.maps_url %}<a href="{{ b.maps_url }}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:.15rem;margin-top:.2rem;font-size:.72rem;color:#2563eb;text-decoration:none;font-weight:500">📍 Map</a>{% endif %}
+            </td>
+            <td style="max-width:155px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;font-size:.79rem">{{ b.items_summary }}</td>
+            <td style="font-weight:700;white-space:nowrap">${{ "%.2f"|format(b.grand_total or 0) }}</td>
+            <td>{% if b.pay_label != '—' %}<span class="pay-badge {{ b.pay_class }}">{{ b.pay_label }}</span>{% else %}<span class="pay-none">—</span>{% endif %}</td>
+            <td>
+              <div class="action-btns">
+                <a href="/admin/booking/{{ b.id }}" class="btn btn-view">View</a>
+                {% if b.status == 'pending' %}
+                <form method="POST" action="/admin/booking/{{ b.id }}/accept" style="display:inline"><button class="btn btn-accept" onclick="return confirm('Accept #{{ b.id }}? This emails {{ b.email }} their invoice + Stripe payment link.')">Accept</button></form>
+                <form method="POST" action="/admin/booking/{{ b.id }}/deny" style="display:inline"><button class="btn btn-deny" onclick="return confirm('Deny booking #{{ b.id }}?')">Deny</button></form>
+                {% endif %}
+                {% if b.status == 'accepted' %}
+                <form method="POST" action="/admin/booking/{{ b.id }}/confirm" style="display:inline"><button class="btn btn-confirm" onclick="return confirm('Manually mark #{{ b.id }} as paid?')">Mark Paid</button></form>
+                {% endif %}
+                {% if b.status not in ('denied', 'cancelled') %}
+                <form method="POST" action="/admin/booking/{{ b.id }}/cancel" style="display:inline"><button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel</button></form>
+                {% endif %}
+                {% if b.delivery_status != 'picked_up' %}
+                <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status" style="display:inline">
+                  {% if not b.delivery_status %}<button class="btn" style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;font-size:.74rem" onclick="return confirm('Mark #{{ b.id }} as DELIVERED?')">🚚 Delivered</button>
+                  {% elif b.delivery_status == 'delivered' %}<button class="btn" style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd;font-size:.74rem" onclick="return confirm('Mark #{{ b.id }} as PICKED UP?')">✅ Picked Up</button>{% endif %}
+                </form>
+                {% else %}
+                <span style="font-size:.74rem;color:#16a34a;font-weight:600;padding:.25rem .5rem;background:#f0fdf4;border:1px solid #86efac;border-radius:6px">✔ Picked Up</span>
+                {% endif %}
+                <form method="POST" id="mgmt-form-{{ b.id }}" action="" style="display:inline">
+                  <select onchange="submitMgmt({{ b.id }},this)" style="border:1px solid #d1d5db;border-radius:6px;padding:.25rem .45rem;font-size:.77rem;color:#374151;cursor:pointer;margin-left:.2rem">
+                    <option value="">⚙ More</option>
+                    {% if b.archived %}<option value="/admin/booking/{{ b.id }}/unarchive">↩ Unarchive</option>
+                    {% else %}<option value="/admin/booking/{{ b.id }}/archive">📦 Archive</option>{% endif %}
+                    <option value="/admin/booking/{{ b.id }}/delete" data-confirm="Permanently delete booking #{{ b.id }}? Cannot be undone.">🗑 Delete</option>
+                  </select>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty-state">No bookings found.</div>
+      {% endif %}
+    </div>
+
   </div>
-
 </div>
+
 <script>
-function submitMgmt(id, sel){
-  var url = sel.value;
-  if(!url){ return; }
-  var opt = sel.options[sel.selectedIndex];
-  var msg = opt.getAttribute('data-confirm') || ('Are you sure?');
-  if(!confirm(msg)){ sel.selectedIndex=0; return; }
-  var f = document.getElementById('mgmt-form-'+id);
-  f.action = url;
-  f.submit();
-}
-
-function getChecked(){
-  return Array.from(document.querySelectorAll('.row-cb:checked')).map(c=>c.value);
-}
-
-function updateBulkBar(){
-  var ids = getChecked();
-  var bar = document.getElementById('bulkBar');
-  if(ids.length > 0){
-    bar.style.display = 'flex';
-    document.getElementById('bulkCount').textContent = ids.length + ' selected';
-  } else {
-    bar.style.display = 'none';
-  }
-  var all = document.querySelectorAll('.row-cb');
-  document.getElementById('selectAll').indeterminate = ids.length > 0 && ids.length < all.length;
-  document.getElementById('selectAll').checked = ids.length === all.length && all.length > 0;
-}
-
-function toggleAll(cb){
-  document.querySelectorAll('.row-cb').forEach(c => c.checked = cb.checked);
-  updateBulkBar();
-}
-
-function clearAll(){
-  document.querySelectorAll('.row-cb').forEach(c => c.checked = false);
-  document.getElementById('selectAll').checked = false;
-  document.getElementById('bulkBar').style.display = 'none';
-}
-
-function filterDash(q){
-  const term = q.toLowerCase().trim();
-  const rows = document.querySelectorAll('tbody tr[data-search]');
-  let shown = 0;
-  rows.forEach(row => {
-    const match = !term || row.dataset.search.includes(term);
-    row.style.display = match ? '' : 'none';
-    if(match) shown++;
-  });
-  const cnt = document.getElementById('dash-count');
-  if(cnt) cnt.textContent = term ? shown + ' found' : '';
-}
-
-function bulkAction(type){
-  var ids = getChecked();
-  if(ids.length === 0) return;
-  var msg = type === 'delete'
-    ? 'Permanently delete ' + ids.length + ' booking(s)? This cannot be undone.'
-    : 'Archive ' + ids.length + ' booking(s)?';
-  if(!confirm(msg)) return;
-  var idStr = ids.join(',');
-  if(type === 'delete'){
-    document.getElementById('bulkDeleteIds').value = idStr;
-    document.getElementById('bulkDeleteForm').submit();
-  } else {
-    document.getElementById('bulkArchiveIds').value = idStr;
-    document.getElementById('bulkArchiveForm').submit();
-  }
-}
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('show');}
+function submitMgmt(id,sel){var url=sel.value;if(!url)return;var opt=sel.options[sel.selectedIndex];var msg=opt.getAttribute('data-confirm')||'Are you sure?';if(!confirm(msg)){sel.selectedIndex=0;return;}var f=document.getElementById('mgmt-form-'+id);f.action=url;f.submit();}
+function getChecked(){return Array.from(document.querySelectorAll('.row-cb:checked')).map(c=>c.value);}
+function updateBulkBar(){var ids=getChecked();var bar=document.getElementById('bulkBar');if(ids.length>0){bar.style.display='flex';document.getElementById('bulkCount').textContent=ids.length+' selected';}else{bar.style.display='none';}var all=document.querySelectorAll('.row-cb');document.getElementById('selectAll').indeterminate=ids.length>0&&ids.length<all.length;document.getElementById('selectAll').checked=ids.length===all.length&&all.length>0;}
+function toggleAll(cb){document.querySelectorAll('.row-cb').forEach(c=>c.checked=cb.checked);updateBulkBar();}
+function clearAll(){document.querySelectorAll('.row-cb').forEach(c=>c.checked=false);document.getElementById('selectAll').checked=false;document.getElementById('bulkBar').style.display='none';}
+function filterDash(q){const term=q.toLowerCase().trim();const rows=document.querySelectorAll('tbody tr[data-search]');let shown=0;rows.forEach(row=>{const match=!term||row.dataset.search.includes(term);row.style.display=match?'':'none';if(match)shown++;});const cnt=document.getElementById('dash-count');if(cnt)cnt.textContent=term?shown+' found':'';}
+function bulkAction(type){var ids=getChecked();if(ids.length===0)return;var msg=type==='delete'?'Permanently delete '+ids.length+' booking(s)?':'Archive '+ids.length+' booking(s)?';if(!confirm(msg))return;var idStr=ids.join(',');if(type==='delete'){document.getElementById('bulkDeleteIds').value=idStr;document.getElementById('bulkDeleteForm').submit();}else{document.getElementById('bulkArchiveIds').value=idStr;document.getElementById('bulkArchiveForm').submit();}}
 </script>
 </body></html>
 """
@@ -5125,6 +5079,55 @@ def admin_dashboard():
 
     inv_conflicts = get_inventory_conflicts()
 
+    # Going out today / Coming back today
+    going_out   = []
+    coming_back = []
+    try:
+        conn2 = get_db()
+        if conn2:
+            cur2 = conn2.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            today_iso = date.today().isoformat()
+            cur2.execute("""
+                SELECT id, full_name, email, event_start_time, items_json, status
+                FROM bookings
+                WHERE event_start_date = %s
+                  AND status NOT IN ('denied','cancelled')
+                  AND (archived IS NULL OR archived = FALSE)
+                ORDER BY event_start_time ASC NULLS LAST, id ASC
+            """, (today_iso,))
+            for row in cur2.fetchall():
+                b2 = dict(row)
+                name = b2.get('full_name') or '?'
+                b2['avatar_initials'] = name[0].upper()
+                b2['avatar_color'] = _avatar_colors[ord(name[0].lower()) % len(_avatar_colors)]
+                try:
+                    b2['item_count'] = sum(int(i.get('qty', 1)) for i in json.loads(b2.get('items_json') or '[]'))
+                except Exception:
+                    b2['item_count'] = 0
+                going_out.append(b2)
+            cur2.execute("""
+                SELECT id, full_name, email, event_start_time, items_json, status
+                FROM bookings
+                WHERE event_end_date = %s
+                  AND status NOT IN ('denied','cancelled')
+                  AND (archived IS NULL OR archived = FALSE)
+                ORDER BY event_start_time ASC NULLS LAST, id ASC
+            """, (today_iso,))
+            for row in cur2.fetchall():
+                b2 = dict(row)
+                name = b2.get('full_name') or '?'
+                b2['avatar_initials'] = name[0].upper()
+                b2['avatar_color'] = _avatar_colors[ord(name[0].lower()) % len(_avatar_colors)]
+                try:
+                    b2['item_count'] = sum(int(i.get('qty', 1)) for i in json.loads(b2.get('items_json') or '[]'))
+                except Exception:
+                    b2['item_count'] = 0
+                coming_back.append(b2)
+            cur2.close()
+            conn2.close()
+    except Exception as e:
+        log.error(f"going_out/coming_back error: {e}")
+
     return render_template_string(ADMIN_DASH_HTML,
         business_name=BUSINESS_NAME,
         bookings=bookings,
@@ -5139,6 +5142,9 @@ def admin_dashboard():
         past_filter=past_filter,
         sort_by=sort_by,
         inv_conflicts=inv_conflicts,
+        going_out=going_out,
+        coming_back=coming_back,
+        today_label=date.today().strftime('%A, %B %-d %Y'),
     )
 
 
