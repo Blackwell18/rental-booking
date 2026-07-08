@@ -6582,6 +6582,7 @@ ADMIN_CUSTOMERS_HTML = """
   <div class="top-row">
     <div class="page-title">Customers</div>
     <div style="display:flex;gap:.6rem;align-items:center">
+      <a href="/admin/booking/new" class="btn btn-primary" style="background:#16a34a">+ New Booking</a>
       <a href="/admin/customers/import" class="btn btn-outline">⬆ Import CSV</a>
       <button class="btn btn-primary" onclick="toggleAdd()">+ Add Customer</button>
     </div>
