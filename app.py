@@ -4037,6 +4037,14 @@ ADMIN_BOOKING_HTML = """
       </button>
     </form>
     {% endif %}
+    {% if b.status not in ('denied', 'cancelled', 'confirmed') %}
+    <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment"
+          onsubmit="return confirm('Mark booking #{{ b.id }} as paid in full with cash? This will set status to Confirmed (Paid in Full).')">
+      <button class="btn" style="background:#1a7a4a;color:white;font-weight:700">
+        💵 Mark as Cash — Paid in Full
+      </button>
+    </form>
+    {% endif %}
     {% if b.status in ('confirmed', 'accepted') %}
     <form method="POST" action="/admin/booking/{{ b.id }}/send-receipt"
           onsubmit="return confirm('Send a payment receipt to {{ b.email }}?')">
@@ -5357,6 +5365,34 @@ def confirm_booking(booking_id):
         except Exception as e:
             log.error(f"Confirm error: {e}")
     return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/booking/<int:booking_id>/cash-payment", methods=["POST"])
+@admin_required
+def cash_payment(booking_id):
+    """Mark a booking as paid in full with cash — no Stripe involved."""
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            if row:
+                b = _row(row)
+                grand_total = float(b.get("grand_total") or 0)
+                cur.execute(
+                    "UPDATE bookings SET status='confirmed', amount_paid=%s WHERE id=%s",
+                    (grand_total, booking_id)
+                )
+                conn.commit()
+                b["status"]      = "confirmed"
+                b["amount_paid"] = grand_total
+                send_receipt_email(b)
+                log.info(f"Booking #{booking_id} marked as cash payment — Paid in Full")
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Cash payment error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
 @app.route("/admin/booking/<int:booking_id>/cancel", methods=["POST"])
