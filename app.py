@@ -4161,6 +4161,24 @@ ADMIN_BOOKING_HTML = """
       </button>
     </form>
     {% endif %}
+    {% if b.status in ('confirmed', 'accepted', 'pending') %}
+    <form method="POST" action="/admin/booking/{{ b.id }}/record-payment"
+          onsubmit="return confirm('Record this payment for booking #{{ b.id }}?')"
+          style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:600;font-size:.9rem;color:#374151">💳 Record Payment:</span>
+      <input type="number" name="amount" step="0.01" min="0.01" placeholder="Amount $"
+             required style="width:110px;padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem">
+      <select name="method" style="padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem">
+        <option value="stripe">Stripe</option>
+        <option value="cash">Cash</option>
+        <option value="check">Check</option>
+        <option value="other">Other</option>
+      </select>
+      <button type="submit" class="btn" style="background:#1a7a4a;color:white;font-weight:700;padding:.35rem .9rem">
+        Record
+      </button>
+    </form>
+    {% endif %}
     {% if b.status not in ('denied', 'cancelled') %}
     <form method="POST" action="/admin/booking/{{ b.id }}/no-charge"
           onsubmit="return confirm('Mark booking #{{ b.id }} as No Charge? This will zero out all fees and confirm the booking.')">
@@ -5652,6 +5670,57 @@ def cash_payment(booking_id):
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"Cash payment error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/record-payment", methods=["POST"])
+@admin_required
+def record_payment(booking_id):
+    """Manually record any payment (Stripe missed webhook, cash, check, etc.)."""
+    try:
+        amount = round(float(request.form.get("amount") or 0), 2)
+    except Exception:
+        amount = 0
+    if amount <= 0:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+    method = request.form.get("method", "other")
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            if row:
+                b = _row(row)
+                current_paid = round(float(b.get("amount_paid") or 0), 2)
+                grand_total  = round(float(b.get("grand_total") or 0), 2)
+                new_paid     = round(current_paid + amount, 2)
+                balance      = round(grand_total - new_paid, 2)
+                new_status   = "paid" if balance <= 0.50 else "confirmed"
+                cur.execute(
+                    "UPDATE bookings SET amount_paid=%s, status=%s WHERE id=%s",
+                    (new_paid, new_status, booking_id)
+                )
+                conn.commit()
+                b["amount_paid"] = new_paid
+                b["status"]      = new_status
+                send_receipt_email(b)
+                # Notify admin
+                _send_email(
+                    OWNER_BCC,
+                    f"Payment Recorded — Booking #{booking_id}",
+                    f"<html><body style='font-family:sans-serif;padding:1rem'>"
+                    f"<p><strong>{b.get('full_name')}</strong> — ${amount:.2f} recorded via {method}.</p>"
+                    f"<p>Total paid: <strong>${new_paid:.2f}</strong> / ${grand_total:.2f} | "
+                    f"Balance: <strong>${max(balance,0):.2f}</strong> | Status: <strong>{new_status.upper()}</strong></p>"
+                    f"<p><a href='{BASE_URL}/admin/booking/{booking_id}'>View Booking</a></p>"
+                    f"</body></html>",
+                    f"Payment Recorded — Booking #{booking_id}: ${amount:.2f} via {method}",
+                )
+                log.info(f"Booking #{booking_id}: ${amount:.2f} recorded via {method}, status={new_status}")
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Record payment error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
