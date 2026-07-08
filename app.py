@@ -6895,8 +6895,11 @@ def send_final_reminder(booking_id):
     if not b:
         return "Booking not found", 404
 
-    grand_total     = float(b.get("grand_total") or 0)
-    remaining       = round(grand_total * 0.75, 2)
+    grand_total  = float(b.get("grand_total") or 0)
+    amount_paid  = float(b.get("amount_paid") or 0)
+    remaining    = round(grand_total - amount_paid, 2)
+    if remaining <= 0:
+        remaining = round(grand_total * 0.75, 2)  # fallback if amount_paid not set
     # Override with admin-specified amount if provided
     try:
         custom = float(request.form.get("custom_amount") or 0)
