@@ -7165,7 +7165,11 @@ if(STOPS.length>1) loadDistances();
 .leg-spin{display:inline-block;animation:spin 1s linear infinite}
 </style>
 </body></html>
+"""
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROUTES — INVENTORY
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/admin/inventory")
