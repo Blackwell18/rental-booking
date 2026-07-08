@@ -4045,6 +4045,14 @@ ADMIN_BOOKING_HTML = """
       </button>
     </form>
     {% endif %}
+    {% if b.status not in ('denied', 'cancelled') %}
+    <form method="POST" action="/admin/booking/{{ b.id }}/no-charge"
+          onsubmit="return confirm('Mark booking #{{ b.id }} as No Charge? This will zero out all fees and confirm the booking.')">
+      <button class="btn" style="background:#475569;color:white;font-weight:700">
+        🚫 Not Charging
+      </button>
+    </form>
+    {% endif %}
     {% if b.status in ('confirmed', 'accepted') %}
     <form method="POST" action="/admin/booking/{{ b.id }}/send-receipt"
           onsubmit="return confirm('Send a payment receipt to {{ b.email }}?')">
@@ -5392,6 +5400,31 @@ def cash_payment(booking_id):
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"Cash payment error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/no-charge", methods=["POST"])
+@admin_required
+def no_charge(booking_id):
+    """Zero out all fees and mark booking as confirmed — no payment collected."""
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE bookings
+                SET status='confirmed',
+                    grand_total=0, amount_paid=0,
+                    items_subtotal=0, delivery_fee=0,
+                    late_night_fee=0, tax_amount=0,
+                    discount_amount=0
+                WHERE id=%s
+            """, (booking_id,))
+            conn.commit()
+            cur.close(); conn.close()
+            log.info(f"Booking #{booking_id} marked No Charge — all fees zeroed")
+        except Exception as e:
+            log.error(f"No charge error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
