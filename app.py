@@ -2718,15 +2718,61 @@ ADMIN_BOOKING_EDIT_HTML = """
     .btn-cancel{background:#f0f4f8;color:#4a5568;text-decoration:none}
     a{color:#2b6cb0}
   </style>
+<style>
+/* ── Sidebar (shared) ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.pg-back{font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap}
+.pg-back:hover{color:#111827}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
 </head>
 <body>
-<header>
-  <div style="display:flex;align-items:center;gap:.75rem">
-    <img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))">
-    <h1>✏️ Edit Booking #{{ b.id }} — {{ b.full_name }}</h1>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link active">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
   </div>
-  <a href="/admin/booking/{{ b.id }}" style="color:white;text-decoration:none;font-size:.9rem">← Cancel</a>
-</header>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>✏️ Edit Booking #{{ b.id }}</h1>
+  <a href="/admin/booking/{{ b.id }}" class="pg-back">← Cancel</a>
+</div>
 <div class="container">
 <form method="POST" action="/admin/booking/{{ b.id }}/edit">
 
@@ -2889,6 +2935,11 @@ function initEditEventAutocomplete() {
 {% if google_maps_key %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initEditEventAutocomplete" async defer></script>
 {% endif %}
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+</script>
 </body></html>
 """
 
@@ -2928,15 +2979,61 @@ ADMIN_NEW_BOOKING_HTML = """
     .btn-cancel{background:#f0f4f8;color:#4a5568}
     .col-hdr{font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.3px;padding:.1rem .1rem .4rem}
   </style>
+<style>
+/* ── Sidebar (shared) ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.pg-back{font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap}
+.pg-back:hover{color:#111827}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
 </head>
 <body>
-<header>
-  <div style="display:flex;align-items:center;gap:.75rem">
-    <img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))">
-    <h1>➕ New Manual Booking</h1>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link active">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
   </div>
-  <a href="/admin/dashboard" style="color:white;text-decoration:none;font-size:.9rem">← Dashboard</a>
-</header>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>➕ New Booking</h1>
+  <a href="/admin/dashboard" class="pg-back">← Dashboard</a>
+</div>
 <div class="container">
 <form method="POST" action="/admin/booking/new" id="nbform">
 
@@ -3280,6 +3377,11 @@ function initEventAutocomplete() {
 {% if google_maps_key %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initEventAutocomplete" async defer></script>
 {% endif %}
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+</script>
 </body></html>
 """
 
@@ -3331,18 +3433,61 @@ ADMIN_BOOKING_HTML = """
     .alert{background:#fffaf0;border-left:4px solid #ed8936;padding:.85rem 1rem;border-radius:0 8px 8px 0;font-size:.9rem;margin-bottom:1rem}
     a{color:#2b6cb0}
   </style>
+<style>
+/* ── Sidebar (shared) ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.pg-back{font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap}
+.pg-back:hover{color:#111827}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
 </head>
 <body>
-<header>
-  <div style="display:flex;align-items:center;gap:.75rem">
-    <a href="/admin" title="Dashboard" style="display:flex;align-items:center;justify-content:center;width:2.1rem;height:2.1rem;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:8px;text-decoration:none;font-size:1.1rem;line-height:1">🏠</a>
-    <img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))">
-    <h1>Booking #{{ b.id }}</h1>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link active">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
   </div>
-  <div style="display:flex;gap:.75rem;align-items:center">
-    <a href="/admin/booking/{{ b.id }}/edit" style="background:rgba(255,255,255,.15);color:white;text-decoration:none;font-size:.85rem;font-weight:600;padding:.4rem .9rem;border-radius:7px;border:1px solid rgba(255,255,255,.3)">✏️ Edit Booking</a>
-  </div>
-</header>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>Booking #{{ b.id }}</h1>
+  <a href="/admin/booking/{{ b.id }}/edit" class="pg-back">✏️ Edit</a>
+</div>
 <div class="container">
 
   <span class="badge badge-{{ b.status }}">{{ b.status|upper }}</span>
@@ -4154,6 +4299,11 @@ ADMIN_BOOKING_HTML = """
 })();
 </script>
 
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+</script>
 </body></html>
 """
 
@@ -4550,18 +4700,59 @@ ADMIN_INVENTORY_HTML = """
       .main{padding:1rem}
     }
   </style>
+<style>
+/* ── Sidebar (shared) ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.pg-back{font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap}
+.pg-back:hover{color:#111827}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
 </head>
 <body>
-<div class="topbar">
-  <div class="topbar-brand"><img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
-  <div class="topbar-nav">
-    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
-    <a href="/admin/inventory" class="nav-link active">Inventory</a>
-    <a href="/admin/customers" class="nav-link">Customers</a>
-    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
-    <a href="/admin/route" class="nav-link">🗺 Route</a>
-    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link active">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
   </div>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>Inventory</h1>
 </div>
 <div class="main">
   <div class="page-title">Inventory</div>
@@ -4705,6 +4896,11 @@ function setMode(m){
   if(!isRange) document.getElementById('check_to').value='';
 }
 {% if check_to and check_to != check_from %}setMode('range');{% else %}setMode('single');{% endif %}
+</script>
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 </body></html>
 """
@@ -6607,22 +6803,62 @@ ADMIN_CUSTOMERS_HTML = """
     .search-box:focus{outline:none;border-color:#2563eb}
     @media(max-width:700px){.form-grid,.form-grid.three{grid-template-columns:1fr}.main{padding:1rem}}
   </style>
+<style>
+/* ── Sidebar (shared) ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.pg-back{font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap}
+.pg-back:hover{color:#111827}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
 </head>
 <body>
-<div class="topbar">
-  <div class="topbar-brand"><img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
-  <div class="topbar-nav">
-    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
-    <a href="/admin/inventory" class="nav-link">Inventory</a>
-    <a href="/admin/customers" class="nav-link active">Customers</a>
-    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
-    <a href="/admin/route" class="nav-link">🗺 Route</a>
-    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link active">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
   </div>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>Customers</h1>
 </div>
 <div class="main">
   <div class="top-row">
-    <div class="page-title">Customers</div>
     <div style="display:flex;gap:.6rem;align-items:center">
       <a href="/admin/booking/new" class="btn btn-primary" style="background:#16a34a">+ New Booking</a>
       <a href="/admin/customers/import" class="btn btn-outline">⬆ Import CSV</a>
@@ -6781,6 +7017,11 @@ function filterCustomers(){
   });
 }
 </script>
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+</script>
 </body></html>
 """
 
@@ -6841,18 +7082,60 @@ ADMIN_CUSTOMER_IMPORT_HTML = """
     th{padding:.5rem .75rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;border-bottom:1px solid #e5e7eb;background:#f9fafb}
     td{padding:.5rem .75rem;border-bottom:1px solid #f3f4f6;color:#374151}
   </style>
+<style>
+/* ── Sidebar (shared) ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.pg-back{font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap}
+.pg-back:hover{color:#111827}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
 </head>
 <body>
-<div class="topbar">
-  <div class="topbar-brand"><img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
-  <div class="topbar-nav">
-    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
-    <a href="/admin/inventory" class="nav-link">Inventory</a>
-    <a href="/admin/customers" class="nav-link active">Customers</a>
-    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
-    <a href="/admin/route" class="nav-link">🗺 Route</a>
-    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link active">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
   </div>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>Import Customers</h1>
+  <a href="/admin/customers" class="pg-back">← Customers</a>
 </div>
 <div class="main">
   <div class="breadcrumb"><a href="/admin/customers">Customers</a> › Import</div>
@@ -6949,6 +7232,11 @@ function handleDrop(e){
   }
 }
 </script>
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+</script>
 </body></html>
 """
 
@@ -7009,18 +7297,60 @@ ADMIN_CUSTOMER_EDIT_HTML = """
     .badge-cancelled{background:#f3f4f6;color:#6b7280}
     @media(max-width:600px){.form-grid{grid-template-columns:1fr}.main{padding:1rem}}
   </style>
+<style>
+/* ── Sidebar (shared) ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.pg-back{font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap}
+.pg-back:hover{color:#111827}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
 </head>
 <body>
-<div class="topbar">
-  <div class="topbar-brand"><img src="/logo.png" alt="Logo" style="height:2.2rem;width:auto;object-fit:contain;vertical-align:middle"> <span>{{ business_name }}</span></div>
-  <div class="topbar-nav">
-    <a href="/admin/dashboard" class="nav-link">Dashboard</a>
-    <a href="/admin/inventory" class="nav-link">Inventory</a>
-    <a href="/admin/customers" class="nav-link active">Customers</a>
-    <a href="/admin/calendar" class="nav-link">📅 Calendar</a>
-    <a href="/admin/route" class="nav-link">🗺 Route</a>
-    <a href="/admin/logout" class="logout-btn">Sign Out</a>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link active">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
   </div>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>{{ c.full_name }}</h1>
+  <a href="/admin/customers" class="pg-back">← Customers</a>
 </div>
 <div class="main">
   <div class="breadcrumb"><a href="/admin/customers">Customers</a> › Edit</div>
@@ -7140,6 +7470,11 @@ function initCustStreetAutocomplete() {
 {% if google_maps_key %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initCustStreetAutocomplete" async defer></script>
 {% endif %}
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+</script>
 </body></html>
 """
 
@@ -7324,53 +7659,4 @@ def import_customers():
                         for r in rows:
                             name = (r.get("full_name") or "").strip()
                             if not name:
-                                skipped += 1
-                                continue
-                            email = (r.get("email") or "").strip().lower()
-                            if email:
-                                cur.execute("SELECT id FROM customers WHERE LOWER(email)=%s", (email,))
-                                if cur.fetchone():
-                                    skipped += 1
-                                    continue
-                            cur.execute(
-                                "INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip, notes) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                                (name, (r.get("company_name") or "").strip(), email,
-                                 (r.get("phone") or "").strip(), (r.get("street") or "").strip(),
-                                 (r.get("city") or "").strip(), (r.get("state") or "").strip().upper(),
-                                 (r.get("zip") or "").strip(), (r.get("notes") or "").strip())
-                            )
-                            imported += 1
-                        conn.commit()
-                        cur.close()
-                        conn.close()
-                        flash_ok = f"Imported {imported} customers ({skipped} skipped/duplicate)"
-            except Exception as e:
-                log.error(f"import_customers error: {e}")
-                flash_err = f"Import failed: {e}"
-    return render_template_string(ADMIN_CUSTOMER_IMPORT_HTML,
-        business_name=BUSINESS_NAME,
-        preview=preview,
-        flash_ok=flash_ok,
-        flash_err=flash_err,
-    )
-
-
-@app.route("/admin/customers/import/template")
-@admin_required
-def customer_import_template():
-    import csv as _csv
-    import io as _io
-    output = _io.StringIO()
-    writer = _csv.writer(output)
-    writer.writerow(["full_name","company_name","email","phone","street","city","state","zip","notes"])
-    writer.writerow(["Jane Smith","Acme Corp","jane@example.com","555-1234","123 Main St","Hartford","CT","06101","Sample customer"])
-    output.seek(0)
-    return Response(
-        output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=customers_template.csv"},
-    )
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
+                      
