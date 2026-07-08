@@ -6684,6 +6684,51 @@ def booking_delivery_status(booking_id):
 #  ROUTES — STRIPE WEBHOOK
 # ══════════════════════════════════════════════════════════════════════════════
 
+@app.route("/payment/success/<int:booking_id>")
+def payment_success(booking_id):
+    """Thank-you page shown after Stripe payment completes."""
+    conn = get_db()
+    b = {}
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            if row:
+                b = _row(row)
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"payment_success error: {e}")
+    name = b.get("full_name", "")
+    grand = b.get("grand_total", 0)
+    paid  = b.get("amount_paid", 0)
+    bal   = round(float(grand or 0) - float(paid or 0), 2)
+    html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Payment Received — {BUSINESS_NAME}</title>
+<style>
+  body{{font-family:sans-serif;background:#f4f6f8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
+  .card{{background:#fff;border-radius:12px;padding:2.5rem 2rem;max-width:480px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08)}}
+  .check{{font-size:3.5rem;margin-bottom:.5rem}}
+  h1{{color:#1a7a4a;margin:.25rem 0 1rem}}
+  p{{color:#444;line-height:1.6;margin:.4rem 0}}
+  .bal{{margin-top:1.2rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:.75rem 1rem;color:#166534;font-weight:600}}
+  .btn{{display:inline-block;margin-top:1.5rem;padding:.65rem 1.5rem;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-size:.95rem}}
+</style></head><body>
+<div class="card">
+  <div class="check">✅</div>
+  <h1>Payment Received!</h1>
+  <p>Thank you{', ' + name.split()[0] if name else ''}! Your payment has been successfully processed.</p>
+  {'<p>Booking #' + str(booking_id) + '</p>' if booking_id else ''}
+  {'<div class="bal">Remaining balance: $' + f'{bal:.2f}' + '</div>' if bal > 0.50 else '<div class="bal">Paid in full — thank you!</div>'}
+  <p style="margin-top:1.2rem;font-size:.9rem;color:#666">You will receive a confirmation email shortly.</p>
+  <a href="/" class="btn">Back to Home</a>
+</div>
+</body></html>"""
+    return html
+
+
 @app.route("/stripe/webhook", methods=["POST"])
 def stripe_webhook():
     """
