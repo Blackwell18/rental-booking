@@ -6836,6 +6836,14 @@ ADMIN_CALENDAR_HTML = """
     <h2 id="cal-title"></h2>
     <button class="cal-btn" onclick="nextMonth()">&#8250;</button>
     <button class="cal-btn" onclick="goToday()" style="margin-left:auto;font-size:.82rem">Today</button>
+    <div style="position:relative;display:inline-block">
+      <button class="cal-btn" onclick="toggleExportMenu(event)" style="background:#2563eb;color:#fff;border-color:#2563eb;font-size:.82rem">&#8595; Export</button>
+      <div id="export-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:160px;z-index:200;overflow:hidden">
+        <button onclick="exportICS()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151">&#128197; Download .ics</button>
+        <button onclick="exportCSV()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151;border-top:1px solid #f3f4f6">&#128196; Download CSV</button>
+        <a href="webcal://{{ request.host }}/admin/calendar.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Subscribe (webcal)</a>
+      </div>
+    </div>
   </div>
   <div class="cal-grid" id="cal-grid"></div>
 </div>
@@ -6857,6 +6865,67 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 <script>
 const BDATA = {{ bookings_json|safe }};
 let cur = new Date(); cur.setDate(1);
+
+function toggleExportMenu(e){
+  e.stopPropagation();
+  const m=document.getElementById('export-menu');
+  m.style.display=m.style.display==='none'?'block':'none';
+}
+document.addEventListener('click',()=>{
+  const m=document.getElementById('export-menu');
+  if(m) m.style.display='none';
+});
+
+function pad(n){return String(n).padStart(2,'0');}
+function toICSDate(ds){return ds.replace(/-/g,'');}
+function toICSDateTime(ds,timeStr){
+  const base=ds.replace(/-/g,'');
+  if(!timeStr) return base;
+  const [h,m]=(timeStr+':00').split(':');
+  return base+'T'+pad(h)+pad(m)+'00';
+}
+
+function exportICS(){
+  let ics='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Rent a Party LLC//Admin//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+  BDATA.forEach(b=>{
+    const uid='booking-'+b.id+'@rental-booking';
+    const dtstart=b.time?toICSDateTime(b.start,b.time):toICSDate(b.start);
+    const dtend=toICSDate(b.end);
+    const allday=!b.time;
+    ics+='BEGIN:VEVENT\r\n';
+    ics+='UID:'+uid+'\r\n';
+    if(allday){
+      ics+='DTSTART;VALUE=DATE:'+dtstart+'\r\n';
+      ics+='DTEND;VALUE=DATE:'+dtend+'\r\n';
+    } else {
+      ics+='DTSTART:'+dtstart+'\r\n';
+      ics+='DTEND:'+dtend+'\r\n';
+    }
+    ics+='SUMMARY:Booking #'+b.id+' — '+b.name+'\r\n';
+    ics+='DESCRIPTION:Status: '+b.status+'\r\n';
+    ics+='STATUS:'+(b.status==='confirmed'?'CONFIRMED':'TENTATIVE')+'\r\n';
+    ics+='END:VEVENT\r\n';
+  });
+  ics+='END:VCALENDAR';
+  const blob=new Blob([ics],{type:'text/calendar'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='rent-a-party-bookings.ics';
+  a.click();
+  document.getElementById('export-menu').style.display='none';
+}
+
+function exportCSV(){
+  const rows=[['ID','Name','Start Date','End Date','Start Time','Status']];
+  BDATA.forEach(b=>rows.push([b.id,b.name,b.start,b.end,b.time||'',b.status]));
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='rent-a-party-bookings.csv';
+  a.click();
+  document.getElementById('export-menu').style.display='none';
+}
 
 function renderCal(){
   const y=cur.getFullYear(), m=cur.getMonth();
@@ -7374,6 +7443,59 @@ def delete_inventory(item_id):
         except Exception as e:
             log.error(f"delete_inventory error: {e}")
     return redirect(url_for("admin_inventory", flash_ok="Item removed"))
+
+
+@app.route("/admin/calendar.ics")
+@admin_required
+def admin_calendar_ics():
+    """Serve iCal feed for webcal:// subscription."""
+    conn = get_db()
+    bookings = []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("""
+                SELECT id, full_name, event_start_date, event_end_date, event_start_time, status
+                FROM bookings
+                WHERE status NOT IN ('denied','cancelled')
+                  AND (archived IS NULL OR archived = FALSE)
+                  AND event_start_date IS NOT NULL
+                ORDER BY event_start_date ASC
+            """)
+            bookings = [dict(r) for r in cur.fetchall()]
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"calendar_ics error: {e}")
+    lines = [
+        "BEGIN:VCALENDAR", "VERSION:2.0",
+        "PRODID:-//Rent a Party LLC//Admin//EN",
+        "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{BUSINESS_NAME} Bookings",
+    ]
+    for b in bookings:
+        sd = str(b["event_start_date"]).replace("-", "")
+        ed = str(b.get("event_end_date") or b["event_start_date"]).replace("-", "")
+        t  = str(b.get("event_start_time") or "")
+        if t:
+            hh, mm = (t + ":00").split(":")[:2]
+            dtstart = f"DTSTART:{sd}T{hh.zfill(2)}{mm.zfill(2)}00"
+        else:
+            dtstart = f"DTSTART;VALUE=DATE:{sd}"
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:booking-{b['id']}@rental-booking",
+            dtstart,
+            f"DTEND;VALUE=DATE:{ed}",
+            f"SUMMARY:Booking #{b['id']} — {b.get('full_name','')}",
+            f"DESCRIPTION:Status: {b.get('status','')}",
+            f"STATUS:{'CONFIRMED' if b.get('status')=='confirmed' else 'TENTATIVE'}",
+            "END:VEVENT",
+        ]
+    lines.append("END:VCALENDAR")
+    ics = "\r\n".join(lines)
+    from flask import Response
+    return Response(ics, mimetype="text/calendar",
+                    headers={"Content-Disposition": "attachment; filename=bookings.ics"})
 
 
 @app.route("/admin/calendar")
