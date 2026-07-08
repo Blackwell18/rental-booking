@@ -7485,6 +7485,67 @@ def delete_inventory(item_id):
     return redirect(url_for("admin_inventory", flash_ok="Item removed"))
 
 
+@app.route("/admin/reconcile-stripe")
+@admin_required
+def reconcile_stripe():
+    """One-time route: sync all past Stripe payments to bookings DB."""
+    if not STRIPE_SECRET_KEY:
+        return "<pre>ERROR: STRIPE_SECRET_KEY not set</pre>", 500
+    import stripe as _stripe
+    _stripe.api_key = STRIPE_SECRET_KEY
+    lines = ["<pre style='font-family:monospace;padding:1rem'>Fetching Stripe sessions...\n"]
+    try:
+        sessions, params = [], {"limit": 100}
+        while True:
+            page = _stripe.checkout.Session.list(**params)
+            sessions.extend(page.data)
+            if not page.has_more:
+                break
+            params["starting_after"] = page.data[-1].id
+        paid = []
+        for s in sessions:
+            try:
+                if s.payment_status == "paid" and s.metadata and s.metadata.get("booking_id"):
+                    paid.append(s)
+            except Exception:
+                pass
+        lines.append(f"Found {len(paid)} paid sessions with booking_id\n\n")
+        conn = get_db()
+        n = 0
+        if conn:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            for s in paid:
+                bid = int(s.metadata["booking_id"])
+                amt = round((s.amount_total or 0) / 100, 2)
+                cur.execute("SELECT id,full_name,amount_paid,grand_total,status FROM bookings WHERE id=%s", (bid,))
+                row = cur.fetchone()
+                if not row:
+                    lines.append(f"  SKIP  #{bid} not found in DB\n")
+                    continue
+                b = dict(row)
+                db_paid = round(float(b["amount_paid"] or 0), 2)
+                gt = round(float(b["grand_total"] or 0), 2)
+                st = b["status"]
+                if abs(db_paid - amt) < 0.02 and st in ("confirmed", "paid"):
+                    lines.append(f"  OK    #{bid} {b['full_name']} ${db_paid}/{st}\n")
+                    continue
+                balance = round(gt - amt, 2)
+                ns = "paid" if balance <= 0.50 else "confirmed"
+                cur.execute(
+                    "UPDATE bookings SET amount_paid=%s, status=%s, stripe_session_id=%s WHERE id=%s",
+                    (amt, ns, s.id, bid)
+                )
+                lines.append(f"  FIXED #{bid} {b['full_name']} ${db_paid}/{st} → ${amt}/{ns} (bal ${max(balance,0):.2f})\n")
+                n += 1
+            conn.commit()
+            cur.close()
+            conn.close()
+        lines.append(f"\nDone. {n} bookings updated.\n</pre>")
+    except Exception as e:
+        lines.append(f"\nERROR: {e}\n</pre>")
+    return "".join(lines)
+
+
 @app.route("/admin/calendar.ics")
 def admin_calendar_ics():
     """Serve iCal feed — accessible via token or active admin session."""
