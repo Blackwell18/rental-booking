@@ -6731,6 +6731,127 @@ def send_final_reminder(booking_id):
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROUTES — INVENTORY
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/admin/inventory")
+@admin_required
+def admin_inventory():
+    products   = get_products()
+    check_from = request.args.get("check_from", "")
+    check_to   = request.args.get("check_to", "")
+    avail_data = []
+    if check_from:
+        end = check_to or check_from
+        available = get_available(check_from, end)
+        for p in products:
+            total    = int(p.get("total", 0))
+            avail    = available.get(p["id"], total)
+            reserved = max(0, total - avail)
+            avail_data.append({
+                "name": p["name"],
+                "total": total,
+                "reserved": reserved,
+                "available": avail,
+            })
+    return render_template_string(ADMIN_INVENTORY_HTML,
+        business_name=BUSINESS_NAME,
+        products=products,
+        avail_data=avail_data,
+        check_from=check_from,
+        check_to=check_to,
+        flash_ok=request.args.get("flash_ok", ""),
+        flash_err=request.args.get("flash_err", ""),
+    )
+
+
+@app.route("/admin/inventory/save", methods=["POST"])
+@admin_required
+def save_inventory():
+    conn = get_db()
+    if conn:
+        try:
+            cur   = conn.cursor()
+            count = int(request.form.get("count", 0))
+            for idx in range(count):
+                item_id = request.form.get(f"id_{idx}")
+                name    = request.form.get(f"name_{idx}", "").strip()
+                price   = request.form.get(f"price_{idx}", "0")
+                total   = request.form.get(f"total_{idx}", "0")
+                if item_id and name:
+                    cur.execute(
+                        "UPDATE inventory SET name=%s, price=%s, total=%s WHERE id=%s",
+                        (name, float(price or 0), int(total or 0), int(item_id))
+                    )
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"save_inventory error: {e}")
+            return redirect(url_for("admin_inventory", flash_err="Error saving inventory"))
+    return redirect(url_for("admin_inventory", flash_ok="Inventory saved successfully"))
+
+
+@app.route("/admin/inventory/add", methods=["POST"])
+@admin_required
+def add_inventory():
+    name  = request.form.get("name", "").strip()
+    price = request.form.get("price", "0")
+    total = request.form.get("total", "0")
+    if name:
+        conn = get_db()
+        if conn:
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO inventory (name, price, total, sort_order) VALUES (%s, %s, %s, 999)",
+                    (name, float(price or 0), int(total or 0))
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                log.error(f"add_inventory error: {e}")
+                return redirect(url_for("admin_inventory", flash_err="Error adding item"))
+    return redirect(url_for("admin_inventory", flash_ok=f"'{name}' added to inventory"))
+
+
+@app.route("/admin/inventory/delete/<int:item_id>", methods=["POST"])
+@admin_required
+def delete_inventory(item_id):
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM inventory WHERE id=%s", (item_id,))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"delete_inventory error: {e}")
+    return redirect(url_for("admin_inventory", flash_ok="Item removed"))
+
+
+@app.route("/admin/calendar")
+@admin_required
+def admin_calendar():
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/route")
+@admin_required
+def admin_route():
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/formsite-import", methods=["GET", "POST"])
+@admin_required
+def admin_formsite_import():
+    return redirect(url_for("admin_dashboard"))
+
+
 ADMIN_CUSTOMERS_HTML = """
 <!DOCTYPE html>
 <html lang="en">
