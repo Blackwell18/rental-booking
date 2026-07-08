@@ -6732,8 +6732,7 @@ def send_final_reminder(booking_id):
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
-ADMIN_CALENDAR_HTML = """
-<!DOCTYPE html>
+ADMIN_CALENDAR_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -6742,7 +6741,6 @@ ADMIN_CALENDAR_HTML = """
   <meta name="apple-mobile-web-app-title" content="Admin">
   <title>Calendar — {{ business_name }}</title>
 <style>
-/* ── Sidebar shared ── */
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
 .sb-overlay.show{display:block}
 .sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
@@ -6751,61 +6749,48 @@ ADMIN_CALENDAR_HTML = """
 .sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
 .sb-new-btn:hover{background:#15803d}
-.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
-.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-nav{display:flex;flex-direction:column;gap:.15rem;padding:.25rem .5rem;flex:1}
+.sb-link{display:flex;align-items:center;gap:.5rem;padding:.5rem .65rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:500;color:#374151;transition:background .15s}
 .sb-link:hover{background:#f3f4f6;color:#111827}
-.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
-.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
-.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
-.page-content{margin-left:210px;min-height:100vh}
-.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
-.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
-.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
-.mobile-menu-btn:hover{background:#f3f4f6}
-@media(max-width:768px){
-  .sidebar{transform:translateX(-210px)}
-  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+.sb-link.active{background:#eff6ff;color:#2563eb;font-weight:600}
+.sb-divider{height:1px;background:#f3f4f6;margin:.3rem 0}
+.sb-bottom{padding:.5rem .5rem 1rem}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#374151;padding:.2rem .4rem}
+@media(max-width:640px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .sb-overlay.show{display:block}
   .page-content{margin-left:0!important}
   .mobile-menu-btn{display:block}
 }
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.main{padding:1.25rem}
+.cal-nav{display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap}
+.cal-nav h2{font-size:1.1rem;font-weight:700;flex:1;margin:0;min-width:140px}
+.cal-btn{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.4rem .85rem;cursor:pointer;font-size:.95rem;font-weight:600;color:#374151;text-decoration:none;display:inline-block;line-height:1.4}
+.cal-btn:hover{background:#f3f4f6}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-hdr{text-align:center;font-size:.75rem;font-weight:700;color:#6b7280;padding:.4rem 0;text-transform:uppercase;letter-spacing:.5px}
+.cal-cell{min-height:72px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.4rem .5rem;cursor:default;transition:border-color .15s;box-sizing:border-box}
+.cal-cell.has-events{cursor:pointer}
+.cal-cell.has-events:hover{border-color:#2563eb;background:#f0f9ff}
+.cal-cell.today{border-color:#2563eb;background:#eff6ff}
+.cal-cell.other-month{background:#f9fafb;opacity:.5}
+.cal-date{font-size:.8rem;font-weight:600;margin-bottom:.25rem}
+.dot-confirmed{background:#16a34a}
+.dot-paid{background:#0284c7}
+.dot-pending{background:#d97706}
+.dot-denied,.dot-cancelled{background:#6b7280}
+.cal-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px}
+.cal-count{font-size:.7rem;color:#6b7280;margin-top:.15rem}
+.popup-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:150}
+.popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.18);width:min(420px,94vw);max-height:80vh;overflow-y:auto;z-index:160;padding:1.5rem}
+.popup-hdr{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem}
+.popup-hdr h3{flex:1;margin:0;font-size:1rem;font-weight:700}
+.popup-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:#6b7280;padding:.2rem .5rem}
 </style>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,sans-serif;background:#f8fafc;color:#1a202c}
-    .main{padding:1.25rem}
-    .cal-nav{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem}
-    .cal-nav h2{font-size:1.1rem;font-weight:700;flex:1}
-    .cal-btn{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.4rem .85rem;cursor:pointer;font-size:.95rem;font-weight:600;color:#374151}
-    .cal-btn:hover{background:#f3f4f6}
-    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-    .cal-hdr{text-align:center;font-size:.75rem;font-weight:700;color:#6b7280;padding:.4rem 0;text-transform:uppercase;letter-spacing:.5px}
-    .cal-cell{min-height:72px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.4rem .5rem;cursor:default;transition:border-color .15s}
-    .cal-cell.has-events{cursor:pointer}
-    .cal-cell.has-events:hover{border-color:#2563eb;background:#f0f9ff}
-    .cal-cell.today{border-color:#2563eb;background:#eff6ff}
-    .cal-cell.other-month{background:#f9fafb;opacity:.5}
-    .cal-date{font-size:.8rem;font-weight:600;margin-bottom:.25rem}
-    .cal-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px}
-    .dot-confirmed,.dot-partial{background:#16a34a}
-    .dot-pending{background:#f59e0b}
-    .dot-accepted{background:#8b5cf6}
-    .cal-count{font-size:.7rem;color:#6b7280;margin-top:.15rem}
-    /* popup */
-    .popup-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:199}
-    .popup-overlay.show{display:block}
-    .popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:1.5rem;min-width:300px;max-width:480px;width:90vw;z-index:200;max-height:80vh;overflow-y:auto}
-    .popup.show{display:block}
-    .popup-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}
-    .popup-hdr h3{font-size:1rem;font-weight:700}
-    .popup-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1}
-    .pb{border:1px solid #e5e7eb;border-radius:8px;padding:.6rem .8rem;margin-bottom:.5rem}
-    .pb-name{font-weight:600;font-size:.88rem}
-    .pb-meta{font-size:.75rem;color:#6b7280;margin-top:.1rem}
-    .badge{display:inline-block;padding:.15rem .5rem;border-radius:12px;font-size:.7rem;font-weight:600;text-transform:uppercase}
-    .badge-confirmed,.badge-partial{background:#dcfce7;color:#15803d}
-    .badge-pending{background:#fef3c7;color:#b45309}
-    .badge-accepted{background:#ede9fe;color:#5b21b6}
-  </style>
 </head>
 <body>
 <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
@@ -6813,43 +6798,60 @@ ADMIN_CALENDAR_HTML = """
   <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
   <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
   <nav class="sb-nav">
-    <a href="/admin/dashboard" class="sb-link">🏠 Dashboard</a>
+    <a href="/admin/dashboard" class="sb-link">&#127968; Dashboard</a>
     <div class="sb-divider"></div>
-    <a href="/admin/customers" class="sb-link">👥 Clients</a>
-    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
-    <a href="/admin/calendar" class="sb-link active">📅 Calendar</a>
-    <a href="/admin/route" class="sb-link">🗺 Route</a>
-    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+    <a href="/admin/customers" class="sb-link">&#128101; Clients</a>
+    <a href="/admin/inventory" class="sb-link">&#128230; Inventory</a>
+    <a href="/admin/calendar" class="sb-link active">&#128197; Calendar</a>
+    <a href="/admin/route" class="sb-link">&#128508; Route</a>
+    <a href="/admin/formsite-import" class="sb-link">&#128442; Import</a>
   </nav>
   <div class="sb-bottom">
-    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
+    <a href="/admin/logout" class="sb-link">&#128682; Sign Out</a>
   </div>
 </aside>
 <div class="page-content">
-<div class="pg-hdr">
-  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
-  <h1>Calendar</h1>
-</div>
-<div class="main">
-  <div class="cal-nav">
-    <button class="cal-btn" onclick="prevMonth()">&#8249;</button>
-    <h2 id="cal-title"></h2>
-    <button class="cal-btn" onclick="nextMonth()">&#8250;</button>
-    <button class="cal-btn" onclick="goToday()" style="margin-left:auto;font-size:.82rem">Today</button>
-    <div style="position:relative;display:inline-block">
-      <button class="cal-btn" onclick="toggleExportMenu(event)" style="background:#2563eb;color:#fff;border-color:#2563eb;font-size:.82rem">&#8595; Export</button>
-      <div id="export-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:160px;z-index:200;overflow:hidden">
-        <button onclick="exportICS()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151">&#128197; Download .ics</button>
-        <button onclick="exportCSV()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151;border-top:1px solid #f3f4f6">&#128196; Download CSV</button>
-        <a href="webcal://{{ cal_host }}/admin/calendar.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Subscribe (webcal)</a>
+  <div class="pg-hdr">
+    <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+    <h1>Calendar</h1>
+  </div>
+  <div class="main">
+    <div class="cal-nav">
+      <a href="{{ prev_url }}" class="cal-btn">&#8249;</a>
+      <h2>{{ month_name }}</h2>
+      <a href="{{ next_url }}" class="cal-btn">&#8250;</a>
+      <a href="/admin/calendar" class="cal-btn" style="margin-left:auto;font-size:.82rem">Today</a>
+      <div style="position:relative;display:inline-block">
+        <button class="cal-btn" onclick="toggleExportMenu(event)" style="background:#2563eb;color:#fff;border-color:#2563eb;font-size:.82rem">&#8595; Export</button>
+        <div id="export-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:160px;z-index:200;overflow:hidden">
+          <button onclick="exportICS()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151">&#128197; Download .ics</button>
+          <button onclick="exportCSV()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151;border-top:1px solid #f3f4f6">&#128196; Download CSV</button>
+          <a href="webcal://{{ cal_host }}/admin/calendar.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Subscribe (webcal)</a>
+        </div>
       </div>
     </div>
+    <div class="cal-grid">
+      <div class="cal-hdr">Sun</div>
+      <div class="cal-hdr">Mon</div>
+      <div class="cal-hdr">Tue</div>
+      <div class="cal-hdr">Wed</div>
+      <div class="cal-hdr">Thu</div>
+      <div class="cal-hdr">Fri</div>
+      <div class="cal-hdr">Sat</div>
+      {% for cell in cells %}
+        {% if cell is none %}
+          <div class="cal-cell other-month"></div>
+        {% else %}
+          <div class="cal-cell{% if cell.is_today %} today{% endif %}{% if cell.bookings %} has-events{% endif %}"{% if cell.bookings %} data-date="{{ cell.date_str }}" onclick="showPopupForDate(this)"{% endif %}>
+            <div class="cal-date">{{ cell.day }}</div>
+            <div>{% for b in cell.bookings[:6] %}<span class="cal-dot dot-{{ b.status }}"></span>{% endfor %}</div>
+            {% if cell.bookings %}<div class="cal-count">{{ cell.bookings|length }} booking{{ 's' if cell.bookings|length != 1 else '' }}</div>{% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
   </div>
-  <div id="cal-error" style="display:none;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem 1rem;margin-bottom:.5rem;font-weight:600">JS error: <span id="cal-err-msg"></span></div>
-  <div class="cal-grid" id="cal-grid"></div>
 </div>
-</div>
-
 <div class="popup-overlay" id="popup-overlay" onclick="closePopup()"></div>
 <div class="popup" id="popup">
   <div class="popup-hdr">
@@ -6858,119 +6860,67 @@ ADMIN_CALENDAR_HTML = """
   </div>
   <div id="popup-body"></div>
 </div>
-
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
-<script type="application/json" id="booking-data">{{ bookings_json|safe }}</script>
+<script type="application/json" id="booking-data">{{ bookings_json | safe }}</script>
 <script>
-(function(){
-  try{
-    var BDATA=JSON.parse(document.getElementById('booking-data').textContent||'[]');
-    var cur=new Date();cur.setDate(1);
+var BDATA=[];
+try{BDATA=JSON.parse(document.getElementById('booking-data').textContent);}catch(e){}
 
-    function renderCal(){
-      var y=cur.getFullYear(),m=cur.getMonth();
-      document.getElementById('cal-title').textContent=cur.toLocaleDateString('en-US',{month:'long',year:'numeric'});
-      var grid=document.getElementById('cal-grid');
-      grid.innerHTML='';
-      ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d){
-        var h=document.createElement('div');h.className='cal-hdr';h.textContent=d;grid.appendChild(h);
-      });
-      var first=new Date(y,m,1),last=new Date(y,m+1,0);
-      var today=new Date().toISOString().slice(0,10);
-      for(var i=0;i<first.getDay();i++){
-        var el=document.createElement('div');el.className='cal-cell other-month';grid.appendChild(el);
-      }
-      for(var d=1;d<=last.getDate();d++){
-        var ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-        var bks=BDATA.filter(function(b){return b.start<=ds&&b.end>=ds;});
-        var cell=document.createElement('div');
-        cell.className='cal-cell'+(ds===today?' today':'')+(bks.length?' has-events':'');
-        var dots=bks.slice(0,6).map(function(b){return '<span class="cal-dot dot-'+b.status+'"></span>';}).join('');
-        var cnt=bks.length?('<div class="cal-count">'+bks.length+' booking'+(bks.length!==1?'s':'')+'</div>'):'';
-        cell.innerHTML='<div class="cal-date">'+d+'</div><div>'+dots+'</div>'+cnt;
-        if(bks.length){(function(ds2,bks2){cell.onclick=function(){showPopup(ds2,bks2);};})(ds,bks);}
-        grid.appendChild(cell);
-      }
-    }
-
-    function showPopup(ds,bks){
-      var d=new Date(ds+'T12:00:00');
-      document.getElementById('popup-title').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-      var body=document.getElementById('popup-body');
-      body.innerHTML=bks.map(function(b){
-        var sc={'confirmed':'#16a34a','paid':'#0284c7','pending':'#d97706','denied':'#dc2626','cancelled':'#6b7280'}[b.status]||'#6b7280';
-        var t=b.time?(' @ '+b.time):'';
-        return '<div style="padding:.6rem 0;border-bottom:1px solid #f3f4f6"><strong>#'+b.id+'</strong> '+b.name+t+'<span style="margin-left:.5rem;padding:.15rem .5rem;border-radius:9999px;font-size:.75rem;font-weight:600;color:#fff;background:'+sc+'">'+b.status+'</span><br><a href="/admin/booking/'+b.id+'" style="font-size:.8rem;color:#2563eb">View booking</a></div>';
-      }).join('');
-      document.getElementById('popup-overlay').style.display='block';
-      document.getElementById('popup').style.display='block';
-    }
-
-    function closePopup(){
-      document.getElementById('popup-overlay').style.display='none';
-      document.getElementById('popup').style.display='none';
-    }
-    function prevMonth(){cur.setMonth(cur.getMonth()-1);renderCal();}
-    function nextMonth(){cur.setMonth(cur.getMonth()+1);renderCal();}
-    function goToday(){cur=new Date();cur.setDate(1);renderCal();}
-
-    window.closePopup=closePopup;
-    window.prevMonth=prevMonth;
-    window.nextMonth=nextMonth;
-    window.goToday=goToday;
-
-    renderCal();
-
-    /* Export */
-    function toggleExportMenu(e){
-      e.stopPropagation();
-      var m=document.getElementById('export-menu');
-      m.style.display=(m.style.display==='block')?'none':'block';
-    }
-    document.addEventListener('click',function(){
-      var m=document.getElementById('export-menu');
-      if(m)m.style.display='none';
-    });
-    function exportICS(){
-      var rows=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Rent a Party LLC//Admin//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
-      BDATA.forEach(function(b){
-        var sd=b.start.replace(/-/g,''),ed=b.end.replace(/-/g,'');
-        rows.push('BEGIN:VEVENT','UID:booking-'+b.id+'@rap',
-          b.time?'DTSTART:'+sd+'T'+b.time.replace(':','')+'00':'DTSTART;VALUE=DATE:'+sd,
-          'DTEND;VALUE=DATE:'+ed,
-          'SUMMARY:Booking #'+b.id+' - '+b.name,
-          'DESCRIPTION:Status: '+b.status,
-          'STATUS:'+(b.status==='confirmed'?'CONFIRMED':'TENTATIVE'),
-          'END:VEVENT');
-      });
-      rows.push('END:VCALENDAR');
-      var blob=new Blob([rows.join('\r\n')],{type:'text/calendar'});
-      var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.ics';a.click();
-      document.getElementById('export-menu').style.display='none';
-    }
-    function exportCSV(){
-      var rows=[['ID','Name','Start','End','Time','Status']];
-      BDATA.forEach(function(b){rows.push([b.id,b.name,b.start,b.end,b.time||'',b.status]);});
-      var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-      var blob=new Blob([csv],{type:'text/csv'});
-      var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.csv';a.click();
-      document.getElementById('export-menu').style.display='none';
-    }
-    window.toggleExportMenu=toggleExportMenu;
-    window.exportICS=exportICS;
-    window.exportCSV=exportCSV;
-
-  }catch(err){
-    var e=document.getElementById('cal-error');
-    if(e){e.style.display='block';document.getElementById('cal-err-msg').textContent=err.message;}
-    var g=document.getElementById('cal-grid');
-    if(g){g.innerHTML='<div style="padding:1rem;color:#dc2626;font-weight:600">Error: '+err.message+'</div>';}
-    console.error('Calendar error:',err);
-  }
-})();
+function showPopupForDate(el){
+  var ds=el.getAttribute('data-date');
+  var bks=BDATA.filter(function(b){return b.start<=ds&&b.end>=ds;});
+  if(!bks.length)return;
+  var d=new Date(ds+'T12:00:00');
+  document.getElementById('popup-title').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  var sc={'confirmed':'#16a34a','paid':'#0284c7','pending':'#d97706','denied':'#dc2626','cancelled':'#6b7280'};
+  document.getElementById('popup-body').innerHTML=bks.map(function(b){
+    var t=b.time?' @ '+b.time:'';
+    return '<div style="padding:.6rem 0;border-bottom:1px solid #f3f4f6"><strong>#'+b.id+'</strong> '+b.name+t+' <span style="padding:.15rem .5rem;border-radius:9999px;font-size:.75rem;font-weight:600;color:#fff;background:'+(sc[b.status]||'#6b7280')+'">'+b.status+'</span><br><a href="/admin/booking/'+b.id+'" style="font-size:.8rem;color:#2563eb">View booking</a></div>';
+  }).join('');
+  document.getElementById('popup-overlay').style.display='block';
+  document.getElementById('popup').style.display='block';
+}
+function closePopup(){
+  document.getElementById('popup-overlay').style.display='none';
+  document.getElementById('popup').style.display='none';
+}
+function toggleExportMenu(e){
+  e.stopPropagation();
+  var m=document.getElementById('export-menu');
+  m.style.display=m.style.display==='block'?'none':'block';
+}
+document.addEventListener('click',function(){
+  var m=document.getElementById('export-menu');
+  if(m)m.style.display='none';
+});
+function exportICS(){
+  var rows=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Rent a Party LLC//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  BDATA.forEach(function(b){
+    var sd=b.start.replace(/-/g,''),ed=b.end.replace(/-/g,'');
+    rows.push('BEGIN:VEVENT','UID:booking-'+b.id+'@rap',
+      b.time?'DTSTART:'+sd+'T'+b.time.replace(':','')+'00':'DTSTART;VALUE=DATE:'+sd,
+      'DTEND;VALUE=DATE:'+ed,
+      'SUMMARY:Booking #'+b.id+' - '+b.name,
+      'DESCRIPTION:Status: '+b.status,
+      'STATUS:'+(b.status==='confirmed'?'CONFIRMED':'TENTATIVE'),
+      'END:VEVENT');
+  });
+  rows.push('END:VCALENDAR');
+  var blob=new Blob([rows.join('\r\n')],{type:'text/calendar'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.ics';a.click();
+  document.getElementById('export-menu').style.display='none';
+}
+function exportCSV(){
+  var rows=[['ID','Name','Start','End','Time','Status']];
+  BDATA.forEach(function(b){rows.push([b.id,b.name,b.start,b.end,b.time||'',b.status]);});
+  var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.csv';a.click();
+  document.getElementById('export-menu').style.display='none';
+}
 </script>
 </body></html>
 """
@@ -7501,7 +7451,15 @@ def admin_calendar_ics():
 @app.route("/admin/calendar")
 @admin_required
 def admin_calendar():
+    import calendar as _cal
     import json as _json
+    m_param = request.args.get("m", "")
+    try:
+        year, month = int(m_param[:4]), int(m_param[5:7])
+        if not (1 <= month <= 12): raise ValueError
+    except Exception:
+        _t = date.today()
+        year, month = _t.year, _t.month
     conn = get_db()
     bookings = []
     if conn:
@@ -7518,22 +7476,44 @@ def admin_calendar():
             for row in cur.fetchall():
                 b = dict(row)
                 bookings.append({
-                    'id': b['id'],
-                    'name': b.get('full_name') or '',
-                    'start': str(b['event_start_date']),
-                    'end': str(b.get('event_end_date') or b['event_start_date']),
-                    'time': str(b.get('event_start_time') or ''),
-                    'status': b.get('status') or 'pending',
+                    "id": b["id"],
+                    "name": b.get("full_name") or "",
+                    "start": str(b["event_start_date"]),
+                    "end": str(b.get("event_end_date") or b["event_start_date"]),
+                    "time": str(b.get("event_start_time") or ""),
+                    "status": b.get("status") or "pending",
                 })
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"admin_calendar error: {e}")
+    # Build calendar grid server-side
+    first_dow_monday, days_count = _cal.monthrange(year, month)
+    first_dow_sunday = (first_dow_monday + 1) % 7  # convert Mon-based to Sun-based
+    today_str = date.today().isoformat()
+    month_name = date(year, month, 1).strftime("%B %Y")
+    prev_y, prev_m = (year - 1, 12) if month == 1 else (year, month - 1)
+    next_y, next_m = (year + 1, 1) if month == 12 else (year, month + 1)
+    by_date = {}
+    for b in bookings:
+        by_date.setdefault(b["start"], []).append(b)
+    cells = [None] * first_dow_sunday
+    for d in range(1, days_count + 1):
+        ds = f"{year}-{month:02d}-{d:02d}"
+        cells.append({
+            "day": d,
+            "date_str": ds,
+            "bookings": by_date.get(ds, []),
+            "is_today": ds == today_str,
+        })
     return render_template_string(ADMIN_CALENDAR_HTML,
         business_name=BUSINESS_NAME,
+        month_name=month_name,
+        prev_url=f"/admin/calendar?m={prev_y}-{prev_m:02d}",
+        next_url=f"/admin/calendar?m={next_y}-{next_m:02d}",
+        cells=cells,
         bookings_json=json.dumps(bookings),
         cal_host=request.host,
     )
-
 
 @app.route("/admin/route")
 @admin_required
