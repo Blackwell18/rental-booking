@@ -6985,6 +6985,9 @@ ADMIN_ROUTE_HTML = """
     .badge-pending{background:#fef3c7;color:#b45309}
     .badge-accepted{background:#ede9fe;color:#5b21b6}
     .no-addr-note{font-size:.8rem;color:#9ca3af;font-style:italic}
+    .stop-eta{font-size:.68rem;font-weight:700;color:#fff;background:#2563eb;border-radius:6px;padding:.15rem .35rem;white-space:nowrap;text-align:center;display:none}
+    .stop-eta.show{display:block}
+    .stop-eta.late{background:#dc2626}
     @media(max-width:520px){.btn-launch{font-size:.78rem;padding:.45rem .8rem}}
   </style>
 </head>
@@ -7064,7 +7067,10 @@ ADMIN_ROUTE_HTML = """
   {% endif %}
 
   <div class="stop">
-    <div class="stop-num">{{ loop.index }}</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:.3rem;flex-shrink:0">
+      <div class="stop-num">{{ loop.index }}</div>
+      <div class="stop-eta" id="eta-{{ loop.index }}"></div>
+    </div>
     <div class="stop-body">
       <div class="stop-name">
         {{ b.full_name }}
@@ -7132,19 +7138,35 @@ async function getDrivingInfo(from,to){
   const mins=Math.round(route.duration/60);
   const hrs=Math.floor(mins/60), rem=mins%60;
   const timeStr=hrs>0?`${hrs}h ${rem}m`:`${mins} min`;
-  return {miles,timeStr};
+  return {miles,timeStr,rawSecs:route.duration};
+}
+
+function fmtTime(d){
+  let h=d.getHours(),m=d.getMinutes(),a=h>=12?'PM':'AM';
+  h=h%12||12; return `${h}:${String(m).padStart(2,'0')} ${a}`;
+}
+function setEta(idx,dt){
+  const el=document.getElementById('eta-'+idx);
+  if(!el) return;
+  el.textContent=fmtTime(dt);
+  el.classList.add('show');
 }
 
 async function loadDistances(){
   const pairs=[];
   for(let i=1;i<STOPS.length;i++) pairs.push([i,STOPS[i-1],STOPS[i]]);
-  // geocode each unique address (with 1s delay between Nominatim calls)
   const coords={};
   const addrs=[...new Set(STOPS.map(s=>s.addr).filter(Boolean))];
   for(let i=0;i<addrs.length;i++){
     if(i>0) await new Promise(r=>setTimeout(r,1100));
     try{ coords[addrs[i]]=await geocode(addrs[i]); }catch(e){}
   }
+  // Show "Depart now" on stop 1
+  const startTime=new Date();
+  setEta(1,startTime);
+  document.getElementById('eta-1').textContent='Now';
+
+  let cumSecs=0;
   for(const [idx,prev,cur] of pairs){
     const el=document.getElementById('leg-link-'+idx);
     if(!el) continue;
@@ -7152,8 +7174,14 @@ async function loadDistances(){
     if(!fromCoord||!toCoord){el.innerHTML='⇕ Open in Maps';continue;}
     try{
       const info=await getDrivingInfo(fromCoord,toCoord);
-      if(info) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-      else el.innerHTML='⇕ Open in Maps';
+      if(info){
+        el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+        cumSecs+=info.rawSecs;
+        const eta=new Date(startTime.getTime()+cumSecs*1000);
+        setEta(idx+1,eta);
+      } else {
+        el.innerHTML='⇕ Open in Maps';
+      }
     }catch(e){el.innerHTML='⇕ Open in Maps';}
   }
 }
