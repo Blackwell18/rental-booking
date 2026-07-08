@@ -6845,11 +6845,11 @@ ADMIN_CALENDAR_HTML = """
       </div>
     </div>
   </div>
+  <div id="cal-error" style="display:none;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem 1rem;margin-bottom:.5rem;font-weight:600">JS error: <span id="cal-err-msg"></span></div>
   <div class="cal-grid" id="cal-grid"></div>
 </div>
 </div>
 
-<div id="cal-error" style="color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem 1rem;margin:.5rem 0;display:none">JS error: <span></span></div>
 <div class="popup-overlay" id="popup-overlay" onclick="closePopup()"></div>
 <div class="popup" id="popup">
   <div class="popup-hdr">
@@ -6866,7 +6866,6 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 <script type="application/json" id="booking-data">{{ bookings_json|safe }}</script>
 <script>
 (function(){
-  var errDiv=document.getElementById('cal-error');
   try{
     var BDATA=JSON.parse(document.getElementById('booking-data').textContent||'[]');
     var cur=new Date();cur.setDate(1);
@@ -6965,7 +6964,10 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
     window.exportCSV=exportCSV;
 
   }catch(err){
-    if(errDiv){errDiv.style.display='block';errDiv.querySelector('span').textContent=err.message;}
+    var e=document.getElementById('cal-error');
+    if(e){e.style.display='block';document.getElementById('cal-err-msg').textContent=err.message;}
+    var g=document.getElementById('cal-grid');
+    if(g){g.innerHTML='<div style="padding:1rem;color:#dc2626;font-weight:600">Error: '+err.message+'</div>';}
     console.error('Calendar error:',err);
   }
 })();
