@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", secrets.token_hex(32))
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=90)  # stay logged in 90 days
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4900,6 +4901,7 @@ def admin_login():
     error = None
     if request.method == "POST":
         if request.form.get("password") == ADMIN_PASSWORD:
+            session.permanent = True
             session["admin_logged_in"] = True
             return redirect(url_for("admin_dashboard"))
         error = "Incorrect password."
