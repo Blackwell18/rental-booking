@@ -6949,25 +6949,42 @@ ADMIN_ROUTE_HTML = """
     .date-row{display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap}
     .date-row label{font-size:.85rem;font-weight:600;color:#374151}
     .date-row input[type=date]{border:1px solid #d1d5db;border-radius:8px;padding:.45rem .75rem;font-size:.9rem;color:#111827}
-    .date-row .btn-today{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:.45rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none}
-    .maps-all{display:inline-flex;align-items:center;gap:.4rem;background:#16a34a;color:#fff;border-radius:8px;padding:.45rem .9rem;font-size:.82rem;font-weight:600;text-decoration:none;margin-bottom:1rem}
-    .maps-all:hover{background:#15803d}
+    .btn-today{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:.45rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+    /* launch strip */
+    .launch-strip{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1.1rem;align-items:center}
+    .launch-strip .stop-count{font-size:.82rem;color:#6b7280;flex-basis:100%;margin-bottom:.25rem}
+    .btn-launch{display:inline-flex;align-items:center;gap:.45rem;padding:.5rem 1rem;border-radius:9px;font-size:.82rem;font-weight:700;text-decoration:none;border:none;cursor:pointer}
+    .btn-gmap{background:#1a73e8;color:#fff}
+    .btn-gmap:hover{background:#1557b0}
+    .btn-amap{background:#000;color:#fff}
+    .btn-amap:hover{background:#222}
+    /* stops */
     .empty{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:2rem;text-align:center;color:#6b7280;font-size:.9rem}
-    .stop{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem 1.25rem;margin-bottom:.75rem;display:flex;gap:1rem;align-items:flex-start}
+    .stop{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem 1.25rem;display:flex;gap:1rem;align-items:flex-start}
     .stop-num{width:2rem;height:2rem;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0;margin-top:.1rem}
     .stop-body{flex:1;min-width:0}
     .stop-name{font-weight:700;font-size:.95rem;color:#111827}
     .stop-addr{font-size:.85rem;color:#374151;margin:.2rem 0}
     .stop-meta{font-size:.78rem;color:#6b7280}
-    .stop-actions{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
+    .stop-actions{display:flex;gap:.5rem;margin-top:.55rem;flex-wrap:wrap}
     .btn-sm{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .7rem;border-radius:7px;font-size:.78rem;font-weight:600;text-decoration:none;border:1px solid #d1d5db;color:#374151;background:#fff}
     .btn-sm:hover{background:#f3f4f6}
-    .btn-maps{border-color:#16a34a;color:#15803d}
+    .btn-gm{border-color:#1a73e8;color:#1a73e8}
+    .btn-am{border-color:#555;color:#333}
     .btn-view{border-color:#2563eb;color:#2563eb}
+    /* leg connector */
+    .leg{display:flex;align-items:center;gap:.6rem;padding:.35rem 0 .35rem 1rem;margin:.15rem 0}
+    .leg-line{width:2px;height:28px;background:#d1d5db;margin-left:.95rem;flex-shrink:0}
+    .leg-arrow{display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;margin-left:.8rem}
+    .leg-arrow span{display:block;width:2px;background:#94a3b8}
+    .leg-link{font-size:.75rem;color:#2563eb;text-decoration:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:.2rem .55rem;white-space:nowrap}
+    .leg-link:hover{background:#dbeafe}
+    /* badge */
     .badge{display:inline-block;padding:.15rem .45rem;border-radius:10px;font-size:.7rem;font-weight:600;text-transform:uppercase;margin-left:.4rem}
     .badge-confirmed,.badge-partial{background:#dcfce7;color:#15803d}
     .badge-pending{background:#fef3c7;color:#b45309}
     .badge-accepted{background:#ede9fe;color:#5b21b6}
+    @media(max-width:520px){.btn-launch{font-size:.78rem;padding:.45rem .8rem}}
   </style>
 </head>
 <body>
@@ -7002,14 +7019,48 @@ ADMIN_ROUTE_HTML = """
 
   {% if route_bookings %}
   {% set addrs = route_bookings|selectattr('delivery_location')|map(attribute='delivery_location')|list %}
-  {% if addrs|length > 1 %}
-  <a class="maps-all" target="_blank"
-     href="https://www.google.com/maps/dir/{{ addrs|join('/') | urlencode }}">
-    🗺 Open all {{ addrs|length }} stops in Google Maps
-  </a>
-  {% endif %}
+
+  <div class="launch-strip">
+    <div class="stop-count">{{ route_bookings|length }} stop{{ 's' if route_bookings|length != 1 }} · {{ route_date }}</div>
+    {% if addrs|length >= 1 %}
+    {# Build Google Maps multi-stop URL #}
+    {% set gurl = "https://www.google.com/maps/dir/" + addrs|join("/") %}
+    <a class="btn-launch btn-gmap" href="{{ gurl | replace(' ', '+') }}" target="_blank">
+      🗺 Start Route — Google Maps
+    </a>
+    {# Apple Maps: supports saddr/daddr for 2-stop; for multi, use first + last as waypoints #}
+    {% if addrs|length == 1 %}
+    <a class="btn-launch btn-amap" href="https://maps.apple.com/?daddr={{ addrs[0] | urlencode }}&dirflg=d" target="_blank">
+      🗺 Start Route — Apple Maps
+    </a>
+    {% else %}
+    <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ addrs[0] | urlencode }}&daddr={{ addrs[-1] | urlencode }}&dirflg=d" target="_blank">
+      🗺 Start Route — Apple Maps
+    </a>
+    {% endif %}
+    {% endif %}
+  </div>
 
   {% for b in route_bookings %}
+
+  {# Leg connector: distance between previous stop and this one #}
+  {% if not loop.first %}
+  {% set prev = route_bookings[loop.index0 - 1] %}
+  {% if prev.delivery_location and b.delivery_location %}
+  <div class="leg">
+    <div style="width:2rem;flex-shrink:0;display:flex;justify-content:center">
+      <div style="width:2px;height:36px;background:#d1d5db"></div>
+    </div>
+    <a class="leg-link" target="_blank"
+       href="https://www.google.com/maps/dir/{{ prev.delivery_location | urlencode }}/{{ b.delivery_location | urlencode }}">
+      ⇕ Distance &amp; drive time →
+    </a>
+  </div>
+  {% else %}
+  <div style="height:.5rem"></div>
+  {% endif %}
+  {% endif %}
+
   <div class="stop">
     <div class="stop-num">{{ loop.index }}</div>
     <div class="stop-body">
@@ -7030,10 +7081,12 @@ ADMIN_ROUTE_HTML = """
       <div class="stop-meta" style="margin-top:.25rem">📦 {{ b.items_summary }}</div>
       {% endif %}
       <div class="stop-actions">
-        <a href="/admin/booking/{{ b.id }}" class="btn-sm btn-view">👁 View #{{ b.id }}</a>
+        <a href="/admin/booking/{{ b.id }}" class="btn-sm btn-view">👁 #{{ b.id }}</a>
         {% if b.delivery_location %}
-        <a href="https://www.google.com/maps/search/{{ b.delivery_location | urlencode }}"
-           target="_blank" class="btn-sm btn-maps">🗺 Directions</a>
+        <a href="https://www.google.com/maps/dir/?api=1&destination={{ b.delivery_location | urlencode }}&travelmode=driving"
+           target="_blank" class="btn-sm btn-gm">🗺 Google Maps</a>
+        <a href="https://maps.apple.com/?daddr={{ b.delivery_location | urlencode }}&dirflg=d"
+           target="_blank" class="btn-sm btn-am">🗺 Apple Maps</a>
         {% endif %}
         {% if b.phone %}
         <a href="tel:{{ b.phone }}" class="btn-sm">📞 Call</a>
