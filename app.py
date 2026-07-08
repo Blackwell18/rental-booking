@@ -6708,11 +6708,42 @@ def stripe_webhook():
         except Exception:
             return jsonify({"error": "Invalid JSON"}), 400
 
-    if event.get("type") == "checkout.session.completed":
-        sess = event["data"]["object"]
-        if sess.get("payment_status") == "paid":
-            booking_id = sess.get("metadata", {}).get("booking_id")
-            amount_paid_cents = sess.get("amount_total") or 0
+    # Support both StripeObject (attribute access) and plain dict (from json.loads)
+    def _ev(obj, key, default=None):
+        try:
+            v = obj[key]
+            return v if v is not None else default
+        except Exception:
+            return default
+
+    event_type = _ev(event, "type", "")
+    if event_type == "checkout.session.completed":
+        sess = _ev(event, "data", {})
+        if hasattr(sess, "__getitem__"):
+            sess = _ev(sess, "object", sess)
+        # payment_status
+        try:
+            pmt_status = sess.payment_status
+        except Exception:
+            pmt_status = _ev(sess, "payment_status", "")
+        if pmt_status == "paid":
+            # metadata
+            try:
+                meta = sess.metadata
+                booking_id = meta["booking_id"] if meta and "booking_id" in meta else None
+            except Exception:
+                meta = _ev(sess, "metadata", {}) or {}
+                booking_id = meta.get("booking_id")
+            # amount
+            try:
+                amount_paid_cents = sess.amount_total or 0
+            except Exception:
+                amount_paid_cents = _ev(sess, "amount_total", 0) or 0
+            # session id
+            try:
+                sess_id = sess.id
+            except Exception:
+                sess_id = _ev(sess, "id", "")
             amount_paid_dollars = round(amount_paid_cents / 100, 2)
             if booking_id:
                 conn = get_db()
@@ -6732,7 +6763,7 @@ def stripe_webhook():
                                 # ── Deposit payment: confirm the booking ──
                                 cur.execute(
                                     "UPDATE bookings SET status='confirmed', amount_paid=%s, stripe_session_id=%s WHERE id=%s",
-                                    (new_paid, sess.get("id"), int(booking_id))
+                                    (new_paid, sess_id, int(booking_id))
                                 )
                                 conn.commit()
                                 b["amount_paid"] = new_paid
@@ -6751,9 +6782,7 @@ def stripe_webhook():
                                 conn.commit()
                                 b["amount_paid"] = new_paid
                                 b["status"] = new_status
-                                # Send receipt to customer
                                 send_receipt_email(b)
-                                # Notify admin
                                 _notify_subject = f"{'PAID IN FULL' if new_status == 'paid' else 'Payment Received'} — Booking #{booking_id}"
                                 _notify_body = (
                                     f"<p><strong>{b.get('full_name')}</strong> just paid "
@@ -7493,8 +7522,10 @@ def reconcile_stripe():
         return "<pre>ERROR: STRIPE_SECRET_KEY not set</pre>", 500
     import stripe as _stripe
     _stripe.api_key = STRIPE_SECRET_KEY
-    lines = ["<pre style='font-family:monospace;padding:1rem'>Fetching Stripe sessions...\n"]
+    lines = ["<pre style='font-family:monospace;padding:1rem'>Searching Stripe for payments...\n"]
     try:
+        # Collect paid checkout sessions that have a booking_id in metadata
+        # These come from Payment Links (which your app creates)
         sessions, params = [], {"limit": 100}
         while True:
             page = _stripe.checkout.Session.list(**params)
@@ -7502,21 +7533,25 @@ def reconcile_stripe():
             if not page.has_more:
                 break
             params["starting_after"] = page.data[-1].id
+
         paid = []
         for s in sessions:
             try:
-                if s.payment_status == "paid" and s.metadata and s.metadata.get("booking_id"):
-                    paid.append(s)
+                ps = s.payment_status
+                meta = s.metadata
+                bid = meta["booking_id"] if meta else None
+                if ps == "paid" and bid:
+                    paid.append((bid, round((s.amount_total or 0) / 100, 2), s.id))
             except Exception:
                 pass
+
         lines.append(f"Found {len(paid)} paid sessions with booking_id\n\n")
         conn = get_db()
         n = 0
         if conn:
             cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            for s in paid:
-                bid = int(s.metadata["booking_id"])
-                amt = round((s.amount_total or 0) / 100, 2)
+            for bid_str, amt, sess_id in paid:
+                bid = int(bid_str)
                 cur.execute("SELECT id,full_name,amount_paid,grand_total,status FROM bookings WHERE id=%s", (bid,))
                 row = cur.fetchone()
                 if not row:
@@ -7533,7 +7568,7 @@ def reconcile_stripe():
                 ns = "paid" if balance <= 0.50 else "confirmed"
                 cur.execute(
                     "UPDATE bookings SET amount_paid=%s, status=%s, stripe_session_id=%s WHERE id=%s",
-                    (amt, ns, s.id, bid)
+                    (amt, ns, sess_id, bid)
                 )
                 lines.append(f"  FIXED #{bid} {b['full_name']} ${db_paid}/{st} → ${amt}/{ns} (bal ${max(balance,0):.2f})\n")
                 n += 1
