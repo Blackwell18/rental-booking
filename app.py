@@ -6824,8 +6824,8 @@ ADMIN_CALENDAR_HTML = """<!DOCTYPE html>
       <details style="position:relative;display:inline-block">
         <summary style="list-style:none;background:#2563eb;color:#fff;border:1px solid #2563eb;border-radius:8px;padding:.4rem .85rem;cursor:pointer;font-size:.82rem;font-weight:600;display:inline-block">&#8595; Export</summary>
         <div style="position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:165px;z-index:200;overflow:hidden">
-          <button onclick="exportICS()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151">&#128197; Download .ics</button>
-          <button onclick="exportCSV()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151;border-top:1px solid #f3f4f6">&#128196; Download CSV</button>
+          <a href="/admin/calendar.ics" download="bookings.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151">&#128197; Download .ics</a>
+          <a href="/admin/calendar.csv" download="bookings.csv" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128196; Download CSV</a>
           <a href="webcal://{{ cal_host }}/admin/calendar.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Subscribe (webcal)</a>
         </div>
       </details>
@@ -6888,31 +6888,7 @@ function closePopup(){
   document.getElementById('popup').style.display='none';
 }
 
-function exportICS(){
-  var rows=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Rent a Party LLC//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
-  BDATA.forEach(function(b){
-    var sd=b.start.replace(/-/g,''),ed=b.end.replace(/-/g,'');
-    rows.push('BEGIN:VEVENT','UID:booking-'+b.id+'@rap',
-      b.time?'DTSTART:'+sd+'T'+b.time.replace(':','')+'00':'DTSTART;VALUE=DATE:'+sd,
-      'DTEND;VALUE=DATE:'+ed,
-      'SUMMARY:Booking #'+b.id+' - '+b.name,
-      'DESCRIPTION:Status: '+b.status,
-      'STATUS:'+(b.status==='confirmed'?'CONFIRMED':'TENTATIVE'),
-      'END:VEVENT');
-  });
-  rows.push('END:VCALENDAR');
-  var blob=new Blob([rows.join('\r\n')],{type:'text/calendar'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.ics';a.click();
-  document.getElementById('export-menu').style.display='none';
-}
-function exportCSV(){
-  var rows=[['ID','Name','Start','End','Time','Status']];
-  BDATA.forEach(function(b){rows.push([b.id,b.name,b.start,b.end,b.time||'',b.status]);});
-  var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-  var blob=new Blob([csv],{type:'text/csv'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.csv';a.click();
-  document.getElementById('export-menu').style.display='none';
-}
+
 </script>
 </body></html>
 """
@@ -7438,6 +7414,42 @@ def admin_calendar_ics():
     from flask import Response
     return Response(ics, mimetype="text/calendar",
                     headers={"Content-Disposition": "attachment; filename=bookings.ics"})
+
+
+@app.route("/admin/calendar.csv")
+@admin_required
+def admin_calendar_csv():
+    """Serve CSV download of all bookings."""
+    conn = get_db()
+    bookings = []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("""
+                SELECT id, full_name, event_start_date, event_end_date, event_start_time, status
+                FROM bookings
+                WHERE status NOT IN ('denied','cancelled')
+                  AND (archived IS NULL OR archived = FALSE)
+                  AND event_start_date IS NOT NULL
+                ORDER BY event_start_date ASC
+            """)
+            bookings = [dict(r) for r in cur.fetchall()]
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"calendar_csv error: {e}")
+    def q(v):
+        return '"' + str(v or '').replace('"','""')+'"'
+    rows = ['ID,Name,Start,End,Time,Status']
+    for b in bookings:
+        rows.append(','.join([
+            q(b['id']), q(b.get('full_name','')),
+            q(b['event_start_date']), q(b.get('event_end_date','')),
+            q(b.get('event_start_time','')), q(b.get('status','')),
+        ]))
+    csv = '\n'.join(rows)
+    from flask import Response
+    return Response(csv, mimetype='text/csv',
+                    headers={'Content-Disposition': 'attachment; filename=bookings.csv'})
 
 
 @app.route("/admin/calendar")
