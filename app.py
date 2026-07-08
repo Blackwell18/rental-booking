@@ -89,6 +89,7 @@ def _fmt_date(d):
     return s
 
 BUSINESS_NAME    = os.getenv("BUSINESS_NAME",    "Rent a Party, LLC")
+DEPOT_ADDRESS    = os.getenv("DEPOT_ADDRESS",    "799 New Haven Rd, Naugatuck, CT 06770")
 BUSINESS_PHONE   = os.getenv("BUSINESS_PHONE",   "")
 BUSINESS_EMAIL   = os.getenv("BUSINESS_EMAIL",   "")
 BUSINESS_ADDRESS = os.getenv("BUSINESS_ADDRESS", "")
@@ -7027,24 +7028,29 @@ ADMIN_ROUTE_HTML = """
   <div class="launch-strip">
     <div class="stop-count">{{ route_bookings|length }} stop{{ 's' if route_bookings|length != 1 }} · {{ route_date }}</div>
     {% if addrs|length >= 1 %}
-    {# Google Maps multi-stop: /dir/ADDR1/ADDR2/.../ADDRn #}
-    {% set gurl = "https://www.google.com/maps/dir/" + (addrs|join("/"))|replace(" ", "+") %}
+    {# Google Maps: depot → stop1 → ... → stopN #}
+    {% set gurl = "https://www.google.com/maps/dir/" + depot_address|replace(" ","+") + "/" + (addrs|join("/"))|replace(" ", "+") %}
     <a class="btn-launch btn-gmap" href="{{ gurl }}" target="_blank">
       🗺 Start Route — Google Maps
     </a>
-    {% if addrs|length == 1 %}
-    <a class="btn-launch btn-amap" href="https://maps.apple.com/?daddr={{ addrs[0]|urlencode }}&dirflg=d" target="_blank">
+    <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ depot_address|urlencode }}&daddr={{ addrs[-1]|urlencode }}&dirflg=d" target="_blank">
       🗺 Start Route — Apple Maps
     </a>
-    {% else %}
-    <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ addrs[0]|urlencode }}&daddr={{ addrs[-1]|urlencode }}&dirflg=d" target="_blank">
-      🗺 Start Route — Apple Maps
-    </a>
-    {% endif %}
     {% else %}
     <span class="no-addr-note">📍 Add delivery addresses to enable route navigation</span>
     {% endif %}
   </div>
+
+  {# Depot origin card #}
+  <div style="display:flex;gap:1rem;align-items:center;padding:.5rem .25rem .1rem">
+    <div style="width:2rem;display:flex;justify-content:center">
+      <div style="width:2rem;height:2rem;border-radius:50%;background:#6b7280;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#127968;</div>
+    </div>
+    <div style="font-size:.82rem;color:#6b7280;font-weight:500">
+      <strong style="color:#374151">Start:</strong> {{ depot_address }}
+    </div>
+  </div>
+  <div style="display:flex;margin-left:.95rem"><div style="width:2px;height:24px;background:#d1d5db"></div></div>
 
   {% for b in route_bookings %}
 
@@ -7119,6 +7125,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 
 /* ── Distance/time between stops via Nominatim + OSRM ── */
 const STOPS = {{ stops_json|safe }};
+const DEPOT = {{ depot_address|tojson }};
 
 async function geocode(addr){
   const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(addr)+'&format=json&limit=1&countrycodes=us';
@@ -7153,40 +7160,49 @@ function setEta(idx,dt){
 }
 
 async function loadDistances(){
-  const pairs=[];
-  for(let i=1;i<STOPS.length;i++) pairs.push([i,STOPS[i-1],STOPS[i]]);
-  const coords={};
-  const addrs=[...new Set(STOPS.map(s=>s.addr).filter(Boolean))];
-  for(let i=0;i<addrs.length;i++){
-    if(i>0) await new Promise(r=>setTimeout(r,1100));
-    try{ coords[addrs[i]]=await geocode(addrs[i]); }catch(e){}
-  }
-  // Show "Depart now" on stop 1
   const startTime=new Date();
-  setEta(1,startTime);
-  document.getElementById('eta-1').textContent='Now';
-
+  // Geocode depot + all stop addresses
+  const allAddrs=[DEPOT,...STOPS.map(s=>s.addr).filter(Boolean)];
+  const unique=[...new Set(allAddrs)];
+  const coords={};
+  for(let i=0;i<unique.length;i++){
+    if(i>0) await new Promise(r=>setTimeout(r,1100));
+    try{ coords[unique[i]]=await geocode(unique[i]); }catch(e){}
+  }
+  // Leg 0: depot → stop 1
   let cumSecs=0;
-  for(const [idx,prev,cur] of pairs){
-    const el=document.getElementById('leg-link-'+idx);
-    if(!el) continue;
-    const fromCoord=coords[prev.addr], toCoord=coords[cur.addr];
-    if(!fromCoord||!toCoord){el.innerHTML='⇕ Open in Maps';continue;}
+  const depotCoord=coords[DEPOT];
+  const stop1Coord=STOPS[0]&&coords[STOPS[0].addr];
+  if(depotCoord&&stop1Coord){
+    try{
+      const info=await getDrivingInfo(depotCoord,stop1Coord);
+      if(info){
+        cumSecs+=info.rawSecs;
+        const eta1=new Date(startTime.getTime()+cumSecs*1000);
+        setEta(1,eta1);
+      }
+    }catch(e){}
+  }
+  // Legs between stops
+  for(let i=1;i<STOPS.length;i++){
+    const el=document.getElementById('leg-link-'+i);
+    const fromCoord=coords[STOPS[i-1].addr], toCoord=coords[STOPS[i].addr];
+    if(!fromCoord||!toCoord){if(el)el.innerHTML='⇕ Open in Maps';continue;}
     try{
       const info=await getDrivingInfo(fromCoord,toCoord);
       if(info){
-        el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+        if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
         cumSecs+=info.rawSecs;
         const eta=new Date(startTime.getTime()+cumSecs*1000);
-        setEta(idx+1,eta);
+        setEta(i+1,eta);
       } else {
-        el.innerHTML='⇕ Open in Maps';
+        if(el) el.innerHTML='⇕ Open in Maps';
       }
-    }catch(e){el.innerHTML='⇕ Open in Maps';}
+    }catch(e){if(el)el.innerHTML='⇕ Open in Maps';}
   }
 }
 
-if(STOPS.length>1) loadDistances();
+if(STOPS.length>0) loadDistances();
 </script>
 <style>
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -7378,6 +7394,7 @@ def admin_route():
     ])
     return render_template_string(ADMIN_ROUTE_HTML,
         business_name=BUSINESS_NAME,
+        depot_address=DEPOT_ADDRESS,
         route_date=route_date,
         route_bookings=route_bookings,
         stops_json=stops_json,
