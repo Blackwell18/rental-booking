@@ -6821,14 +6821,14 @@ ADMIN_CALENDAR_HTML = """<!DOCTYPE html>
       <h2>{{ month_name }}</h2>
       <a href="{{ next_url }}" class="cal-btn">&#8250;</a>
       <a href="/admin/calendar" class="cal-btn" style="margin-left:auto;font-size:.82rem">Today</a>
-      <div style="position:relative;display:inline-block">
-        <button class="cal-btn" onclick="toggleExportMenu(event)" style="background:#2563eb;color:#fff;border-color:#2563eb;font-size:.82rem">&#8595; Export</button>
-        <div id="export-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:160px;z-index:200;overflow:hidden">
+      <details style="position:relative;display:inline-block">
+        <summary style="list-style:none;background:#2563eb;color:#fff;border:1px solid #2563eb;border-radius:8px;padding:.4rem .85rem;cursor:pointer;font-size:.82rem;font-weight:600;display:inline-block">&#8595; Export</summary>
+        <div style="position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:165px;z-index:200;overflow:hidden">
           <button onclick="exportICS()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151">&#128197; Download .ics</button>
           <button onclick="exportCSV()" style="display:block;width:100%;text-align:left;padding:.65rem 1rem;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;color:#374151;border-top:1px solid #f3f4f6">&#128196; Download CSV</button>
           <a href="webcal://{{ cal_host }}/admin/calendar.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Subscribe (webcal)</a>
         </div>
-      </div>
+      </details>
     </div>
     <div class="cal-grid">
       <div class="cal-hdr">Sun</div>
@@ -6887,15 +6887,7 @@ function closePopup(){
   document.getElementById('popup-overlay').style.display='none';
   document.getElementById('popup').style.display='none';
 }
-function toggleExportMenu(e){
-  e.stopPropagation();
-  var m=document.getElementById('export-menu');
-  m.style.display=m.style.display==='block'?'none':'block';
-}
-document.addEventListener('click',function(){
-  var m=document.getElementById('export-menu');
-  if(m)m.style.display='none';
-});
+
 function exportICS(){
   var rows=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Rent a Party LLC//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
   BDATA.forEach(function(b){
