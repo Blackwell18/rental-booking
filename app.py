@@ -6731,6 +6731,329 @@ def send_final_reminder(booking_id):
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
+ADMIN_CALENDAR_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/admin-manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Admin">
+  <title>Calendar — {{ business_name }}</title>
+<style>
+/* ── Sidebar shared ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,sans-serif;background:#f8fafc;color:#1a202c}
+    .main{padding:1.25rem}
+    .cal-nav{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem}
+    .cal-nav h2{font-size:1.1rem;font-weight:700;flex:1}
+    .cal-btn{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.4rem .85rem;cursor:pointer;font-size:.95rem;font-weight:600;color:#374151}
+    .cal-btn:hover{background:#f3f4f6}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+    .cal-hdr{text-align:center;font-size:.75rem;font-weight:700;color:#6b7280;padding:.4rem 0;text-transform:uppercase;letter-spacing:.5px}
+    .cal-cell{min-height:72px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:.4rem .5rem;cursor:default;transition:border-color .15s}
+    .cal-cell.has-events{cursor:pointer}
+    .cal-cell.has-events:hover{border-color:#2563eb;background:#f0f9ff}
+    .cal-cell.today{border-color:#2563eb;background:#eff6ff}
+    .cal-cell.other-month{background:#f9fafb;opacity:.5}
+    .cal-date{font-size:.8rem;font-weight:600;margin-bottom:.25rem}
+    .cal-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin:1px}
+    .dot-confirmed,.dot-partial{background:#16a34a}
+    .dot-pending{background:#f59e0b}
+    .dot-accepted{background:#8b5cf6}
+    .cal-count{font-size:.7rem;color:#6b7280;margin-top:.15rem}
+    /* popup */
+    .popup-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:199}
+    .popup-overlay.show{display:block}
+    .popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:1.5rem;min-width:300px;max-width:480px;width:90vw;z-index:200;max-height:80vh;overflow-y:auto}
+    .popup.show{display:block}
+    .popup-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}
+    .popup-hdr h3{font-size:1rem;font-weight:700}
+    .popup-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1}
+    .pb{border:1px solid #e5e7eb;border-radius:8px;padding:.6rem .8rem;margin-bottom:.5rem}
+    .pb-name{font-weight:600;font-size:.88rem}
+    .pb-meta{font-size:.75rem;color:#6b7280;margin-top:.1rem}
+    .badge{display:inline-block;padding:.15rem .5rem;border-radius:12px;font-size:.7rem;font-weight:600;text-transform:uppercase}
+    .badge-confirmed,.badge-partial{background:#dcfce7;color:#15803d}
+    .badge-pending{background:#fef3c7;color:#b45309}
+    .badge-accepted{background:#ede9fe;color:#5b21b6}
+  </style>
+</head>
+<body>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link active">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
+  </div>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>Calendar</h1>
+</div>
+<div class="main">
+  <div class="cal-nav">
+    <button class="cal-btn" onclick="prevMonth()">&#8249;</button>
+    <h2 id="cal-title"></h2>
+    <button class="cal-btn" onclick="nextMonth()">&#8250;</button>
+    <button class="cal-btn" onclick="goToday()" style="margin-left:auto;font-size:.82rem">Today</button>
+  </div>
+  <div class="cal-grid" id="cal-grid"></div>
+</div>
+</div>
+
+<div class="popup-overlay" id="popup-overlay" onclick="closePopup()"></div>
+<div class="popup" id="popup">
+  <div class="popup-hdr">
+    <h3 id="popup-title"></h3>
+    <button class="popup-close" onclick="closePopup()">&#10005;</button>
+  </div>
+  <div id="popup-body"></div>
+</div>
+
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+</script>
+<script>
+const BDATA = {{ bookings_json|safe }};
+let cur = new Date(); cur.setDate(1);
+
+function renderCal(){
+  const y=cur.getFullYear(), m=cur.getMonth();
+  document.getElementById('cal-title').textContent=cur.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const grid=document.getElementById('cal-grid');
+  grid.innerHTML='';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d=>{
+    const h=document.createElement('div');h.className='cal-hdr';h.textContent=d;grid.appendChild(h);
+  });
+  const first=new Date(y,m,1), last=new Date(y,m+1,0);
+  const today=new Date().toISOString().slice(0,10);
+  for(let i=0;i<first.getDay();i++){
+    const el=document.createElement('div');el.className='cal-cell other-month';grid.appendChild(el);
+  }
+  for(let d=1;d<=last.getDate();d++){
+    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const bks=BDATA.filter(b=>b.start<=ds&&b.end>=ds);
+    const cell=document.createElement('div');
+    cell.className='cal-cell'+(ds===today?' today':'')+(bks.length?' has-events':'');
+    const dots=bks.slice(0,6).map(b=>`<span class="cal-dot dot-${b.status}"></span>`).join('');
+    cell.innerHTML=`<div class="cal-date">${d}</div><div>${dots}</div>${bks.length?`<div class="cal-count">${bks.length} booking${bks.length!==1?'s':''}</div>`:''}`;
+    if(bks.length) cell.onclick=()=>showPopup(ds,bks);
+    grid.appendChild(cell);
+  }
+}
+
+function showPopup(ds,bks){
+  const d=new Date(ds+'T12:00:00');
+  document.getElementById('popup-title').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  document.getElementById('popup-body').innerHTML=bks.map(b=>`
+    <div class="pb">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
+        <a href="/admin/booking/${b.id}" class="pb-name" style="color:#2563eb;text-decoration:none">#${b.id} ${b.name}</a>
+        <span class="badge badge-${b.status}">${b.status}</span>
+      </div>
+      <div class="pb-meta">${b.start===b.end?b.start:b.start+' → '+b.end}${b.time?' · '+b.time:''}</div>
+    </div>`).join('');
+  document.getElementById('popup').classList.add('show');
+  document.getElementById('popup-overlay').classList.add('show');
+}
+function closePopup(){document.getElementById('popup').classList.remove('show');document.getElementById('popup-overlay').classList.remove('show');}
+function prevMonth(){cur.setMonth(cur.getMonth()-1);renderCal();}
+function nextMonth(){cur.setMonth(cur.getMonth()+1);renderCal();}
+function goToday(){cur=new Date();cur.setDate(1);renderCal();}
+renderCal();
+</script>
+</body></html>
+"""
+
+ADMIN_ROUTE_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/admin-manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Admin">
+  <title>Route — {{ business_name }}</title>
+<style>
+/* ── Sidebar shared ── */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.sb-overlay.show{display:block}
+.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+.sb-new-btn:hover{background:#15803d}
+.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+.sb-link:hover{background:#f3f4f6;color:#111827}
+.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+.page-content{margin-left:210px;min-height:100vh}
+.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+.mobile-menu-btn:hover{background:#f3f4f6}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-210px)}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .page-content{margin-left:0!important}
+  .mobile-menu-btn{display:block}
+}
+</style>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,sans-serif;background:#f8fafc;color:#1a202c}
+    .main{padding:1.25rem;max-width:760px}
+    .date-row{display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap}
+    .date-row label{font-size:.85rem;font-weight:600;color:#374151}
+    .date-row input[type=date]{border:1px solid #d1d5db;border-radius:8px;padding:.45rem .75rem;font-size:.9rem;color:#111827}
+    .date-row .btn-today{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:.45rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none}
+    .maps-all{display:inline-flex;align-items:center;gap:.4rem;background:#16a34a;color:#fff;border-radius:8px;padding:.45rem .9rem;font-size:.82rem;font-weight:600;text-decoration:none;margin-bottom:1rem}
+    .maps-all:hover{background:#15803d}
+    .empty{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:2rem;text-align:center;color:#6b7280;font-size:.9rem}
+    .stop{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem 1.25rem;margin-bottom:.75rem;display:flex;gap:1rem;align-items:flex-start}
+    .stop-num{width:2rem;height:2rem;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0;margin-top:.1rem}
+    .stop-body{flex:1;min-width:0}
+    .stop-name{font-weight:700;font-size:.95rem;color:#111827}
+    .stop-addr{font-size:.85rem;color:#374151;margin:.2rem 0}
+    .stop-meta{font-size:.78rem;color:#6b7280}
+    .stop-actions{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
+    .btn-sm{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .7rem;border-radius:7px;font-size:.78rem;font-weight:600;text-decoration:none;border:1px solid #d1d5db;color:#374151;background:#fff}
+    .btn-sm:hover{background:#f3f4f6}
+    .btn-maps{border-color:#16a34a;color:#15803d}
+    .btn-view{border-color:#2563eb;color:#2563eb}
+    .badge{display:inline-block;padding:.15rem .45rem;border-radius:10px;font-size:.7rem;font-weight:600;text-transform:uppercase;margin-left:.4rem}
+    .badge-confirmed,.badge-partial{background:#dcfce7;color:#15803d}
+    .badge-pending{background:#fef3c7;color:#b45309}
+    .badge-accepted{background:#ede9fe;color:#5b21b6}
+  </style>
+</head>
+<body>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/route" class="sb-link active">🗺 Route</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
+  </div>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>Delivery Route</h1>
+</div>
+<div class="main">
+  <form method="GET" action="/admin/route" class="date-row">
+    <label for="rdate">Date:</label>
+    <input type="date" id="rdate" name="date" value="{{ route_date }}" onchange="this.form.submit()">
+    <a href="/admin/route" class="btn-today">Today</a>
+  </form>
+
+  {% if route_bookings %}
+  {% set addrs = route_bookings|selectattr('delivery_location')|map(attribute='delivery_location')|list %}
+  {% if addrs|length > 1 %}
+  <a class="maps-all" target="_blank"
+     href="https://www.google.com/maps/dir/{{ addrs|join('/') | urlencode }}">
+    🗺 Open all {{ addrs|length }} stops in Google Maps
+  </a>
+  {% endif %}
+
+  {% for b in route_bookings %}
+  <div class="stop">
+    <div class="stop-num">{{ loop.index }}</div>
+    <div class="stop-body">
+      <div class="stop-name">
+        {{ b.full_name }}
+        <span class="badge badge-{{ b.status }}">{{ b.status }}</span>
+      </div>
+      {% if b.delivery_location %}
+      <div class="stop-addr">📍 {{ b.delivery_location }}</div>
+      {% else %}
+      <div class="stop-addr" style="color:#9ca3af">No delivery address</div>
+      {% endif %}
+      <div class="stop-meta">
+        {% if b.event_start_time %}🕐 {{ b.event_start_time }}{% endif %}
+        {% if b.phone %} &nbsp;📞 <a href="tel:{{ b.phone }}" style="color:#374151">{{ b.phone }}</a>{% endif %}
+      </div>
+      {% if b.items_summary %}
+      <div class="stop-meta" style="margin-top:.25rem">📦 {{ b.items_summary }}</div>
+      {% endif %}
+      <div class="stop-actions">
+        <a href="/admin/booking/{{ b.id }}" class="btn-sm btn-view">👁 View #{{ b.id }}</a>
+        {% if b.delivery_location %}
+        <a href="https://www.google.com/maps/search/{{ b.delivery_location | urlencode }}"
+           target="_blank" class="btn-sm btn-maps">🗺 Directions</a>
+        {% endif %}
+        {% if b.phone %}
+        <a href="tel:{{ b.phone }}" class="btn-sm">📞 Call</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="empty">No deliveries scheduled for {{ route_date }}.</div>
+  {% endif %}
+</div>
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+</script>
+</body></html>
+"""
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  ROUTES — INVENTORY
@@ -6837,13 +7160,73 @@ def delete_inventory(item_id):
 @app.route("/admin/calendar")
 @admin_required
 def admin_calendar():
-    return redirect(url_for("admin_dashboard"))
+    import json as _json
+    conn = get_db()
+    bookings = []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("""
+                SELECT id, full_name, event_start_date, event_end_date, event_start_time, status
+                FROM bookings
+                WHERE status NOT IN ('denied','cancelled')
+                  AND (archived IS NULL OR archived = FALSE)
+                  AND event_start_date IS NOT NULL
+                ORDER BY event_start_date ASC
+            """)
+            for row in cur.fetchall():
+                b = dict(row)
+                bookings.append({
+                    'id': b['id'],
+                    'name': b.get('full_name') or '',
+                    'start': str(b['event_start_date']),
+                    'end': str(b.get('event_end_date') or b['event_start_date']),
+                    'time': str(b.get('event_start_time') or ''),
+                    'status': b.get('status') or 'pending',
+                })
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"admin_calendar error: {e}")
+    return render_template_string(ADMIN_CALENDAR_HTML,
+        business_name=BUSINESS_NAME,
+        bookings_json=json.dumps(bookings),
+    )
 
 
 @app.route("/admin/route")
 @admin_required
 def admin_route():
-    return redirect(url_for("admin_dashboard"))
+    route_date = request.args.get("date", date.today().isoformat())
+    conn = get_db()
+    route_bookings = []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("""
+                SELECT id, full_name, phone, email, delivery_location,
+                       event_start_time, items_json, status, grand_total
+                FROM bookings
+                WHERE event_start_date = %s
+                  AND status NOT IN ('denied','cancelled')
+                  AND (archived IS NULL OR archived = FALSE)
+                ORDER BY event_start_time ASC NULLS LAST
+            """, (route_date,))
+            for row in cur.fetchall():
+                b = dict(row)
+                try:
+                    items = json.loads(b.get('items_json') or '[]')
+                    b['items_summary'] = ', '.join(f"{i.get('qty',1)}x {i.get('name','')}" for i in items)
+                except Exception:
+                    b['items_summary'] = ''
+                route_bookings.append(b)
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"admin_route error: {e}")
+    return render_template_string(ADMIN_ROUTE_HTML,
+        business_name=BUSINESS_NAME,
+        route_date=route_date,
+        route_bookings=route_bookings,
+    )
 
 
 @app.route("/admin/formsite-import", methods=["GET", "POST"])
