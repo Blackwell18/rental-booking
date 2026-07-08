@@ -6984,6 +6984,7 @@ ADMIN_ROUTE_HTML = """
     .badge-confirmed,.badge-partial{background:#dcfce7;color:#15803d}
     .badge-pending{background:#fef3c7;color:#b45309}
     .badge-accepted{background:#ede9fe;color:#5b21b6}
+    .no-addr-note{font-size:.8rem;color:#9ca3af;font-style:italic}
     @media(max-width:520px){.btn-launch{font-size:.78rem;padding:.45rem .8rem}}
   </style>
 </head>
@@ -7018,47 +7019,48 @@ ADMIN_ROUTE_HTML = """
   </form>
 
   {% if route_bookings %}
-  {% set addrs = route_bookings|selectattr('delivery_location')|map(attribute='delivery_location')|list %}
+  {% set addrs = route_bookings|selectattr('nav_address')|map(attribute='nav_address')|list %}
 
   <div class="launch-strip">
     <div class="stop-count">{{ route_bookings|length }} stop{{ 's' if route_bookings|length != 1 }} · {{ route_date }}</div>
     {% if addrs|length >= 1 %}
-    {# Build Google Maps multi-stop URL #}
-    {% set gurl = "https://www.google.com/maps/dir/" + addrs|join("/") %}
-    <a class="btn-launch btn-gmap" href="{{ gurl | replace(' ', '+') }}" target="_blank">
+    {# Google Maps multi-stop: /dir/ADDR1/ADDR2/.../ADDRn #}
+    {% set gurl = "https://www.google.com/maps/dir/" + (addrs|join("/"))|replace(" ", "+") %}
+    <a class="btn-launch btn-gmap" href="{{ gurl }}" target="_blank">
       🗺 Start Route — Google Maps
     </a>
-    {# Apple Maps: supports saddr/daddr for 2-stop; for multi, use first + last as waypoints #}
     {% if addrs|length == 1 %}
-    <a class="btn-launch btn-amap" href="https://maps.apple.com/?daddr={{ addrs[0] | urlencode }}&dirflg=d" target="_blank">
+    <a class="btn-launch btn-amap" href="https://maps.apple.com/?daddr={{ addrs[0]|urlencode }}&dirflg=d" target="_blank">
       🗺 Start Route — Apple Maps
     </a>
     {% else %}
-    <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ addrs[0] | urlencode }}&daddr={{ addrs[-1] | urlencode }}&dirflg=d" target="_blank">
+    <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ addrs[0]|urlencode }}&daddr={{ addrs[-1]|urlencode }}&dirflg=d" target="_blank">
       🗺 Start Route — Apple Maps
     </a>
     {% endif %}
+    {% else %}
+    <span class="no-addr-note">📍 Add delivery addresses to enable route navigation</span>
     {% endif %}
   </div>
 
   {% for b in route_bookings %}
 
-  {# Leg connector: distance between previous stop and this one #}
+  {# Leg connector between consecutive stops #}
   {% if not loop.first %}
   {% set prev = route_bookings[loop.index0 - 1] %}
-  {% if prev.delivery_location and b.delivery_location %}
   <div class="leg">
     <div style="width:2rem;flex-shrink:0;display:flex;justify-content:center">
       <div style="width:2px;height:36px;background:#d1d5db"></div>
     </div>
+    {% if prev.nav_address and b.nav_address %}
     <a class="leg-link" target="_blank"
-       href="https://www.google.com/maps/dir/{{ prev.delivery_location | urlencode }}/{{ b.delivery_location | urlencode }}">
+       href="https://www.google.com/maps/dir/{{ prev.nav_address|urlencode }}/{{ b.nav_address|urlencode }}">
       ⇕ Distance &amp; drive time →
     </a>
+    {% else %}
+    <span style="font-size:.72rem;color:#9ca3af">— add addresses for distance —</span>
+    {% endif %}
   </div>
-  {% else %}
-  <div style="height:.5rem"></div>
-  {% endif %}
   {% endif %}
 
   <div class="stop">
@@ -7068,10 +7070,13 @@ ADMIN_ROUTE_HTML = """
         {{ b.full_name }}
         <span class="badge badge-{{ b.status }}">{{ b.status }}</span>
       </div>
-      {% if b.delivery_location %}
-      <div class="stop-addr">📍 {{ b.delivery_location }}</div>
+      {% if b.nav_address %}
+      <div class="stop-addr">📍 {{ b.nav_address }}</div>
       {% else %}
-      <div class="stop-addr" style="color:#9ca3af">No delivery address</div>
+      <div class="stop-addr" style="color:#9ca3af">No address on file</div>
+      {% endif %}
+      {% if b.delivery_location %}
+      <div class="stop-addr" style="font-size:.78rem;color:#6b7280">📋 {{ b.delivery_location }}</div>
       {% endif %}
       <div class="stop-meta">
         {% if b.event_start_time %}🕐 {{ b.event_start_time }}{% endif %}
@@ -7082,11 +7087,13 @@ ADMIN_ROUTE_HTML = """
       {% endif %}
       <div class="stop-actions">
         <a href="/admin/booking/{{ b.id }}" class="btn-sm btn-view">👁 #{{ b.id }}</a>
-        {% if b.delivery_location %}
-        <a href="https://www.google.com/maps/dir/?api=1&destination={{ b.delivery_location | urlencode }}&travelmode=driving"
+        {% if b.nav_address %}
+        <a href="https://www.google.com/maps/dir/?api=1&destination={{ b.nav_address|urlencode }}&travelmode=driving"
            target="_blank" class="btn-sm btn-gm">🗺 Google Maps</a>
-        <a href="https://maps.apple.com/?daddr={{ b.delivery_location | urlencode }}&dirflg=d"
+        <a href="https://maps.apple.com/?daddr={{ b.nav_address|urlencode }}&dirflg=d"
            target="_blank" class="btn-sm btn-am">🗺 Apple Maps</a>
+        {% else %}
+        <span class="btn-sm" style="opacity:.45;cursor:default" title="No address on file">🗺 No address</span>
         {% endif %}
         {% if b.phone %}
         <a href="tel:{{ b.phone }}" class="btn-sm">📞 Call</a>
@@ -7257,6 +7264,7 @@ def admin_route():
             cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur.execute("""
                 SELECT id, full_name, phone, email, delivery_location,
+                       renter_street, renter_city, renter_state, renter_zip,
                        event_start_time, items_json, status, grand_total
                 FROM bookings
                 WHERE event_start_date = %s
@@ -7266,6 +7274,14 @@ def admin_route():
             """, (route_date,))
             for row in cur.fetchall():
                 b = dict(row)
+                # Build navigable address from renter fields
+                parts = [
+                    (b.get('renter_street') or '').strip(),
+                    (b.get('renter_city')   or '').strip(),
+                    (b.get('renter_state')  or '').strip(),
+                    (b.get('renter_zip')    or '').strip(),
+                ]
+                b['nav_address'] = ', '.join(p for p in parts if p) or ''
                 try:
                     items = json.loads(b.get('items_json') or '[]')
                     b['items_summary'] = ', '.join(f"{i.get('qty',1)}x {i.get('name','')}" for i in items)
