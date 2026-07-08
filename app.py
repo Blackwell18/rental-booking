@@ -1187,6 +1187,8 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
   </div>
 </div></body></html>"""
 
+    _plain_items = "".join("  " + str(i['qty']) + "x " + i['name'] + " @ $" + f"{i['unit_price']:.2f}" + " = $" + f"{i['total']:.2f}" + "\n" for i in items)
+    _plain_exact = "  Exact Time Delivery: $175.00\n" if exact else ""
     plain = f"""Hi {first},
 
 GREAT NEWS — Your rental request (Booking #{b.get('id')}) has been ACCEPTED!
@@ -1197,7 +1199,7 @@ EVENT DETAILS
   Deliver to: {b.get('delivery_location','')}
 
 INVOICE
-{"".join(f"  {i['qty']}x {i['name']} @ ${i['unit_price']:.2f} = ${i['total']:.2f}\n" for i in items)}{"  Exact Time Delivery: $175.00\n" if exact else ""}  Delivery Fee: ${b.get('delivery_fee',0):.2f}
+{_plain_items}{_plain_exact}  Delivery Fee: ${b.get('delivery_fee',0):.2f}
 {disc_row_plain}{tax_row_plain}  ─────────────────────────────
   TOTAL: ${grand_total:.2f}
 
@@ -8570,4 +8572,14 @@ def customer_import_template():
     writer = _csv.writer(output)
     writer.writerow(["full_name", "company_name", "email", "phone", "street", "city", "state", "zip", "notes"])
     writer.writerow(["Jane Smith", "ABC Corp", "jane@example.com", "555-1234", "123 Main St", "Hartford", "CT", "06101", ""])
-    csv_bytes = output.getvalue().encode("utf-8"
+    csv_bytes = output.getvalue().encode("utf-8")
+    from flask import Response
+    return Response(
+        csv_bytes,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=customers_template.csv"},
+    )
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
