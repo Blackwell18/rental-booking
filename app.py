@@ -3872,6 +3872,12 @@ ADMIN_BOOKING_HTML = """
           <td style="padding:.4rem .4rem 0;text-align:right;font-weight:800;font-size:1rem;color:#166534">${{ "%.2f"|format(grand_total) }}</td>
         </tr>
       </table>
+      <form method="POST" action="/admin/booking/{{ b.id }}/recalc-total" style="margin-top:.6rem">
+        <button type="submit" style="background:#1e40af;color:white;border:none;border-radius:7px;padding:.4rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">
+          🔄 Recalculate Total from Items
+        </button>
+        <span style="font-size:.78rem;color:#6b7280;margin-left:.5rem">Updates grand total based on current items + delivery fee + tax</span>
+      </form>
     </div>
     <form method="POST" action="/admin/booking/{{ b.id }}/apply-discount">
       <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end">
@@ -5990,6 +5996,52 @@ def recalc_delivery(booking_id):
         cur.close(); cur2.close(); conn.close()
     except Exception as e:
         log.error(f"recalc_delivery: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/recalc-total", methods=["POST"])
+@admin_required
+def recalc_total(booking_id):
+    """Recalculate grand total from current items_json + delivery fee + tax."""
+    try:
+        conn = get_db()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+        b = dict(cur.fetchone())
+
+        items        = json.loads(b.get("items_json") or "[]")
+        items_sub    = round(sum(float(i.get("total") or 0) for i in items), 2)
+        delivery_fee = float(b.get("delivery_fee") or 0)
+        exact_fee    = 175.0 if b.get("exact_time_delivery") else 0.0
+        disc_type    = b.get("discount_type")
+        disc_value   = float(b.get("discount_value") or 0)
+        tax_rate     = float(b.get("tax_rate") or 0.0635)
+        tax_exempt   = bool(b.get("tax_exempt"))
+
+        pre_tax = round(items_sub + delivery_fee + exact_fee, 2)
+
+        # Reapply existing discount
+        disc_amount = 0.0
+        if disc_type == "percent" and disc_value > 0:
+            disc_amount = round(pre_tax * disc_value / 100.0, 2)
+        elif disc_type == "amount" and disc_value > 0:
+            disc_amount = round(min(disc_value, pre_tax), 2)
+
+        taxable    = round(pre_tax - disc_amount, 2)
+        tax_amount = 0.0 if tax_exempt else round(taxable * tax_rate, 2)
+        grand      = round(taxable + tax_amount, 2)
+
+        cur2 = conn.cursor()
+        cur2.execute("""
+            UPDATE bookings
+            SET items_subtotal=%s, discount_amount=%s, tax_amount=%s, grand_total=%s
+            WHERE id=%s
+        """, (items_sub, disc_amount, tax_amount, grand, booking_id))
+        conn.commit()
+        cur.close(); cur2.close(); conn.close()
+        log.info(f"Booking #{booking_id} grand total recalculated → ${grand}")
+    except Exception as e:
+        log.error(f"recalc_total error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
