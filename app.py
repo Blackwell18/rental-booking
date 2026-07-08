@@ -6827,7 +6827,12 @@ ADMIN_CALENDAR_HTML = """<!DOCTYPE html>
         <div style="position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:165px;z-index:200;overflow:hidden">
           <a href="/admin/calendar.ics" download="bookings.ics" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151">&#128197; Download .ics</a>
           <a href="/admin/calendar.csv" download="bookings.csv" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128196; Download CSV</a>
-          <a href="webcal://{{ cal_host }}/admin/calendar.ics?token={{ cal_token }}" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Subscribe (webcal)</a>
+          <a href="{{ gcal_url }}" target="_blank" style="display:block;padding:.65rem 1rem;font-size:.82rem;font-weight:600;text-decoration:none;color:#374151;border-top:1px solid #f3f4f6">&#128279; Add to Google Calendar</a>
+          <div style="padding:.65rem 1rem;border-top:1px solid #f3f4f6">
+            <div style="font-size:.78rem;font-weight:600;color:#6b7280;margin-bottom:.3rem">Other apps (Outlook, Apple):</div>
+            <input id="ics-url-copy" value="{{ ics_url }}" readonly style="width:100%;font-size:.72rem;border:1px solid #e5e7eb;border-radius:6px;padding:.3rem .5rem;color:#374151;box-sizing:border-box">
+            <button onclick="var i=document.getElementById('ics-url-copy');i.select();document.execCommand('copy');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy URL',1500)" style="margin-top:.3rem;width:100%;font-size:.75rem;font-weight:600;border:1px solid #e5e7eb;border-radius:6px;padding:.3rem;cursor:pointer;background:#f9fafb;color:#374151">Copy URL</button>
+          </div>
         </div>
       </details>
     </div>
@@ -7515,6 +7520,9 @@ def admin_calendar():
             "bookings": by_date.get(ds, []),
             "is_today": ds == today_str,
         })
+    _ics_url = f"https://{request.host}/admin/calendar.ics?token={CALENDAR_TOKEN}"
+    from urllib.parse import quote as _quote
+    _gcal_url = "https://calendar.google.com/calendar/r/settings/addbyurl?url=" + _quote(_ics_url, safe="")
     return render_template_string(ADMIN_CALENDAR_HTML,
         business_name=BUSINESS_NAME,
         month_name=month_name,
@@ -7522,8 +7530,8 @@ def admin_calendar():
         next_url=f"/admin/calendar?m={next_y}-{next_m:02d}",
         cells=cells,
         bookings_json=json.dumps(bookings),
-        cal_host=request.host,
-        cal_token=CALENDAR_TOKEN,
+        gcal_url=_gcal_url,
+        ics_url=_ics_url,
     )
 
 @app.route("/admin/route")
