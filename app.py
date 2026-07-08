@@ -6849,6 +6849,7 @@ ADMIN_CALENDAR_HTML = """
 </div>
 </div>
 
+<div id="cal-error" style="color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem 1rem;margin:.5rem 0;display:none">JS error: <span></span></div>
 <div class="popup-overlay" id="popup-overlay" onclick="closePopup()"></div>
 <div class="popup" id="popup">
   <div class="popup-hdr">
@@ -6862,90 +6863,112 @@ ADMIN_CALENDAR_HTML = """
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
+<script type="application/json" id="booking-data">{{ bookings_json|safe }}</script>
 <script>
-const BDATA = {{ bookings_json|safe }};
-let cur = new Date(); cur.setDate(1);
+(function(){
+  var errDiv=document.getElementById('cal-error');
+  try{
+    var BDATA=JSON.parse(document.getElementById('booking-data').textContent||'[]');
+    var cur=new Date();cur.setDate(1);
 
-/* ─── Export helpers ─── */
-function toggleExportMenu(e){
-  e.stopPropagation();
-  const m=document.getElementById('export-menu');
-  m.style.display=(m.style.display==='block')?'none':'block';
-}
-document.addEventListener('click',function(){
-  const m=document.getElementById('export-menu');
-  if(m) m.style.display='none';
-});
-function exportICS(){
-  const rows=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Rent a Party LLC//Admin//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
-  BDATA.forEach(b=>{
-    const sd=b.start.replace(/-/g,''), ed=b.end.replace(/-/g,'');
-    rows.push('BEGIN:VEVENT','UID:booking-'+b.id+'@rap',
-      b.time?'DTSTART:'+sd+'T'+b.time.replace(':','')+'00':'DTSTART;VALUE=DATE:'+sd,
-      'DTEND;VALUE=DATE:'+ed,
-      'SUMMARY:Booking #'+b.id+' - '+b.name,
-      'DESCRIPTION:Status: '+b.status,
-      'STATUS:'+(b.status==='confirmed'?'CONFIRMED':'TENTATIVE'),
-      'END:VEVENT');
-  });
-  rows.push('END:VCALENDAR');
-  const blob=new Blob([rows.join('\r\n')],{type:'text/calendar'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.ics';a.click();
-  document.getElementById('export-menu').style.display='none';
-}
-function exportCSV(){
-  const rows=[['ID','Name','Start','End','Time','Status']];
-  BDATA.forEach(b=>rows.push([b.id,b.name,b.start,b.end,b.time||'',b.status]));
-  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.csv';a.click();
-  document.getElementById('export-menu').style.display='none';
-}
+    function renderCal(){
+      var y=cur.getFullYear(),m=cur.getMonth();
+      document.getElementById('cal-title').textContent=cur.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      var grid=document.getElementById('cal-grid');
+      grid.innerHTML='';
+      ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d){
+        var h=document.createElement('div');h.className='cal-hdr';h.textContent=d;grid.appendChild(h);
+      });
+      var first=new Date(y,m,1),last=new Date(y,m+1,0);
+      var today=new Date().toISOString().slice(0,10);
+      for(var i=0;i<first.getDay();i++){
+        var el=document.createElement('div');el.className='cal-cell other-month';grid.appendChild(el);
+      }
+      for(var d=1;d<=last.getDate();d++){
+        var ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+        var bks=BDATA.filter(function(b){return b.start<=ds&&b.end>=ds;});
+        var cell=document.createElement('div');
+        cell.className='cal-cell'+(ds===today?' today':'')+(bks.length?' has-events':'');
+        var dots=bks.slice(0,6).map(function(b){return '<span class="cal-dot dot-'+b.status+'"></span>';}).join('');
+        var cnt=bks.length?('<div class="cal-count">'+bks.length+' booking'+(bks.length!==1?'s':'')+'</div>'):'';
+        cell.innerHTML='<div class="cal-date">'+d+'</div><div>'+dots+'</div>'+cnt;
+        if(bks.length){(function(ds2,bks2){cell.onclick=function(){showPopup(ds2,bks2);};})(ds,bks);}
+        grid.appendChild(cell);
+      }
+    }
 
-/* ─── Calendar rendering (original working code) ─── */
-function renderCal(){
-  const y=cur.getFullYear(), m=cur.getMonth();
-  document.getElementById('cal-title').textContent=cur.toLocaleDateString('en-US',{month:'long',year:'numeric'});
-  const grid=document.getElementById('cal-grid');
-  grid.innerHTML='';
-  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d=>{
-    const h=document.createElement('div');h.className='cal-hdr';h.textContent=d;grid.appendChild(h);
-  });
-  const first=new Date(y,m,1), last=new Date(y,m+1,0);
-  const today=new Date().toISOString().slice(0,10);
-  for(let i=0;i<first.getDay();i++){
-    const el=document.createElement('div');el.className='cal-cell other-month';grid.appendChild(el);
+    function showPopup(ds,bks){
+      var d=new Date(ds+'T12:00:00');
+      document.getElementById('popup-title').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+      var body=document.getElementById('popup-body');
+      body.innerHTML=bks.map(function(b){
+        var sc={'confirmed':'#16a34a','paid':'#0284c7','pending':'#d97706','denied':'#dc2626','cancelled':'#6b7280'}[b.status]||'#6b7280';
+        var t=b.time?(' @ '+b.time):'';
+        return '<div style="padding:.6rem 0;border-bottom:1px solid #f3f4f6"><strong>#'+b.id+'</strong> '+b.name+t+'<span style="margin-left:.5rem;padding:.15rem .5rem;border-radius:9999px;font-size:.75rem;font-weight:600;color:#fff;background:'+sc+'">'+b.status+'</span><br><a href="/admin/booking/'+b.id+'" style="font-size:.8rem;color:#2563eb">View booking</a></div>';
+      }).join('');
+      document.getElementById('popup-overlay').style.display='block';
+      document.getElementById('popup').style.display='block';
+    }
+
+    function closePopup(){
+      document.getElementById('popup-overlay').style.display='none';
+      document.getElementById('popup').style.display='none';
+    }
+    function prevMonth(){cur.setMonth(cur.getMonth()-1);renderCal();}
+    function nextMonth(){cur.setMonth(cur.getMonth()+1);renderCal();}
+    function goToday(){cur=new Date();cur.setDate(1);renderCal();}
+
+    window.closePopup=closePopup;
+    window.prevMonth=prevMonth;
+    window.nextMonth=nextMonth;
+    window.goToday=goToday;
+
+    renderCal();
+
+    /* Export */
+    function toggleExportMenu(e){
+      e.stopPropagation();
+      var m=document.getElementById('export-menu');
+      m.style.display=(m.style.display==='block')?'none':'block';
+    }
+    document.addEventListener('click',function(){
+      var m=document.getElementById('export-menu');
+      if(m)m.style.display='none';
+    });
+    function exportICS(){
+      var rows=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Rent a Party LLC//Admin//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+      BDATA.forEach(function(b){
+        var sd=b.start.replace(/-/g,''),ed=b.end.replace(/-/g,'');
+        rows.push('BEGIN:VEVENT','UID:booking-'+b.id+'@rap',
+          b.time?'DTSTART:'+sd+'T'+b.time.replace(':','')+'00':'DTSTART;VALUE=DATE:'+sd,
+          'DTEND;VALUE=DATE:'+ed,
+          'SUMMARY:Booking #'+b.id+' - '+b.name,
+          'DESCRIPTION:Status: '+b.status,
+          'STATUS:'+(b.status==='confirmed'?'CONFIRMED':'TENTATIVE'),
+          'END:VEVENT');
+      });
+      rows.push('END:VCALENDAR');
+      var blob=new Blob([rows.join('\r\n')],{type:'text/calendar'});
+      var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.ics';a.click();
+      document.getElementById('export-menu').style.display='none';
+    }
+    function exportCSV(){
+      var rows=[['ID','Name','Start','End','Time','Status']];
+      BDATA.forEach(function(b){rows.push([b.id,b.name,b.start,b.end,b.time||'',b.status]);});
+      var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+      var blob=new Blob([csv],{type:'text/csv'});
+      var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bookings.csv';a.click();
+      document.getElementById('export-menu').style.display='none';
+    }
+    window.toggleExportMenu=toggleExportMenu;
+    window.exportICS=exportICS;
+    window.exportCSV=exportCSV;
+
+  }catch(err){
+    if(errDiv){errDiv.style.display='block';errDiv.querySelector('span').textContent=err.message;}
+    console.error('Calendar error:',err);
   }
-  for(let d=1;d<=last.getDate();d++){
-    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const bks=BDATA.filter(b=>b.start<=ds&&b.end>=ds);
-    const cell=document.createElement('div');
-    cell.className='cal-cell'+(ds===today?' today':'')+(bks.length?' has-events':'');
-    const dots=bks.slice(0,6).map(b=>`<span class="cal-dot dot-${b.status}"></span>`).join('');
-    cell.innerHTML=`<div class="cal-date">${d}</div><div>${dots}</div>${bks.length?`<div class="cal-count">${bks.length} booking${bks.length!==1?'s':''}</div>`:''}`;
-    if(bks.length) cell.onclick=()=>showPopup(ds,bks);
-    grid.appendChild(cell);
-  }
-}
-function showPopup(ds,bks){
-  const d=new Date(ds+'T12:00:00');
-  document.getElementById('popup-title').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  document.getElementById('popup-body').innerHTML=bks.map(b=>`
-    <div class="pb">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
-        <a href="/admin/booking/${b.id}" class="pb-name" style="color:#2563eb;text-decoration:none">#${b.id} ${b.name}</a>
-        <span class="badge badge-${b.status}">${b.status}</span>
-      </div>
-      <div class="pb-meta">${b.start===b.end?b.start:b.start+' → '+b.end}${b.time?' · '+b.time:''}</div>
-    </div>`).join('');
-  document.getElementById('popup').classList.add('show');
-  document.getElementById('popup-overlay').classList.add('show');
-}
-function closePopup(){document.getElementById('popup').classList.remove('show');document.getElementById('popup-overlay').classList.remove('show');}
-function prevMonth(){cur.setMonth(cur.getMonth()-1);renderCal();}
-function nextMonth(){cur.setMonth(cur.getMonth()+1);renderCal();}
-function goToday(){cur=new Date();cur.setDate(1);renderCal();}
-renderCal();
+})();
 </script>
 </body></html>
 """
