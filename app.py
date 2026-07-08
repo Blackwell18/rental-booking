@@ -7048,17 +7048,17 @@ ADMIN_ROUTE_HTML = """
   {# Leg connector between consecutive stops #}
   {% if not loop.first %}
   {% set prev = route_bookings[loop.index0 - 1] %}
-  <div class="leg">
+  <div class="leg" id="leg-{{ loop.index0 }}">
     <div style="width:2rem;flex-shrink:0;display:flex;justify-content:center">
       <div style="width:2px;height:36px;background:#d1d5db"></div>
     </div>
     {% if prev.nav_address and b.nav_address %}
-    <a class="leg-link" target="_blank"
+    <a class="leg-link" id="leg-link-{{ loop.index0 }}" target="_blank"
        href="https://www.google.com/maps/dir/{{ prev.nav_address|urlencode }}/{{ b.nav_address|urlencode }}">
-      ⇕ Distance &amp; drive time →
+      <span class="leg-spin">&#9696;</span> Calculating…
     </a>
     {% else %}
-    <span style="font-size:.72rem;color:#9ca3af">— add addresses for distance —</span>
+    <span style="font-size:.72rem;color:#9ca3af">— add event addresses for distance —</span>
     {% endif %}
   </div>
   {% endif %}
@@ -7110,13 +7110,62 @@ ADMIN_ROUTE_HTML = """
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+
+/* ── Distance/time between stops via Nominatim + OSRM ── */
+const STOPS = {{ stops_json|safe }};
+
+async function geocode(addr){
+  const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(addr)+'&format=json&limit=1&countrycodes=us';
+  const r=await fetch(url,{headers:{'Accept-Language':'en','User-Agent':'RentAParty-Admin/1.0'}});
+  const d=await r.json();
+  if(!d.length) return null;
+  return {lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon)};
+}
+
+async function getDrivingInfo(from,to){
+  const url=`https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`;
+  const r=await fetch(url);
+  const d=await r.json();
+  if(d.code!=='Ok'||!d.routes.length) return null;
+  const route=d.routes[0];
+  const miles=(route.distance*0.000621371).toFixed(1);
+  const mins=Math.round(route.duration/60);
+  const hrs=Math.floor(mins/60), rem=mins%60;
+  const timeStr=hrs>0?`${hrs}h ${rem}m`:`${mins} min`;
+  return {miles,timeStr};
+}
+
+async function loadDistances(){
+  const pairs=[];
+  for(let i=1;i<STOPS.length;i++) pairs.push([i,STOPS[i-1],STOPS[i]]);
+  // geocode each unique address (with 1s delay between Nominatim calls)
+  const coords={};
+  const addrs=[...new Set(STOPS.map(s=>s.addr).filter(Boolean))];
+  for(let i=0;i<addrs.length;i++){
+    if(i>0) await new Promise(r=>setTimeout(r,1100));
+    try{ coords[addrs[i]]=await geocode(addrs[i]); }catch(e){}
+  }
+  for(const [idx,prev,cur] of pairs){
+    const el=document.getElementById('leg-link-'+idx);
+    if(!el) continue;
+    const fromCoord=coords[prev.addr], toCoord=coords[cur.addr];
+    if(!fromCoord||!toCoord){el.innerHTML='⇕ Open in Maps';continue;}
+    try{
+      const info=await getDrivingInfo(fromCoord,toCoord);
+      if(info) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+      else el.innerHTML='⇕ Open in Maps';
+    }catch(e){el.innerHTML='⇕ Open in Maps';}
+  }
+}
+
+if(STOPS.length>1) loadDistances();
 </script>
+<style>
+@keyframes spin{to{transform:rotate(360deg)}}
+.leg-spin{display:inline-block;animation:spin 1s linear infinite}
+</style>
 </body></html>
-"""
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  ROUTES — INVENTORY
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/admin/inventory")
@@ -7264,7 +7313,7 @@ def admin_route():
             cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur.execute("""
                 SELECT id, full_name, phone, email, delivery_location,
-                       renter_street, renter_city, renter_state, renter_zip,
+                       event_street, event_city, event_state, event_zip,
                        event_start_time, items_json, status, grand_total
                 FROM bookings
                 WHERE event_start_date = %s
@@ -7274,12 +7323,12 @@ def admin_route():
             """, (route_date,))
             for row in cur.fetchall():
                 b = dict(row)
-                # Build navigable address from renter fields
+                # Build navigable address from event address fields
                 parts = [
-                    (b.get('renter_street') or '').strip(),
-                    (b.get('renter_city')   or '').strip(),
-                    (b.get('renter_state')  or '').strip(),
-                    (b.get('renter_zip')    or '').strip(),
+                    (b.get('event_street') or '').strip(),
+                    (b.get('event_city')   or '').strip(),
+                    (b.get('event_state')  or '').strip(),
+                    (b.get('event_zip')    or '').strip(),
                 ]
                 b['nav_address'] = ', '.join(p for p in parts if p) or ''
                 try:
@@ -7291,10 +7340,15 @@ def admin_route():
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"admin_route error: {e}")
+    stops_json = json.dumps([
+        {"addr": b["nav_address"], "name": b.get("full_name", "")}
+        for b in route_bookings
+    ])
     return render_template_string(ADMIN_ROUTE_HTML,
         business_name=BUSINESS_NAME,
         route_date=route_date,
         route_bookings=route_bookings,
+        stops_json=stops_json,
     )
 
 
