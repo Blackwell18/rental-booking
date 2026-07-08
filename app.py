@@ -6863,7 +6863,7 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 <script>
-var BDATA = {{ bookings_json|tojson }};
+var BDATA = {{ bookings_json|safe }};
 var cur = new Date(); cur.setDate(1);
 
 document.addEventListener('click', function(e){
