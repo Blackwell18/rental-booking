@@ -1768,11 +1768,75 @@ FORM_HTML = r"""
   <div class="card">
     <h2>Delivery Options</h2>
     <label class="exact-toggle">
-      <input type="checkbox" id="exact_time_cb" name="exact_time_delivery" value="yes" onchange="updateTotals()">
+      <input type="checkbox" id="exact_time_cb" name="exact_time_delivery" value="yes" onchange="updateTotals();toggleExactTimes(this.checked)">
       <div class="exact-label"><strong>Exact Time Delivery</strong><span>Guaranteed delivery at your specified setup time</span></div>
       <span class="exact-badge">+$175</span>
     </label>
-    <div class="field"><label>Where on the premises will items be delivered? <span class="required">*</span></label><textarea name="delivery_location" required placeholder="e.g. Through the main entrance, set up in the ballroom on the left side...">{{ form.delivery_location or '' }}</textarea></div>
+
+    <div id="exact_time_fields" style="display:none;margin-top:1rem;background:#fff8f0;border:1px solid #f6ad55;border-radius:10px;padding:1rem 1.1rem">
+      <p style="margin:0 0 .75rem;font-size:.88rem;color:#92400e;font-weight:600">⏰ Exact Time Details</p>
+      <div class="row">
+        <div class="field">
+          <label>Exact Delivery Time <span class="required">*</span></label>
+          <select name="exact_delivery_time" id="exact_delivery_time" style="width:100%;border:1px solid #f6ad55;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+            <option value="">-- Select delivery time --</option>
+            <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+            <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+            <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+            <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+            <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+            <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+            <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+            <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+            <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+            <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+            <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+            <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+            <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+            <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+            <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+            <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+            <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+            <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Exact Pickup Time <span class="required">*</span></label>
+          <select name="exact_pickup_time" id="exact_pickup_time" style="width:100%;border:1px solid #f6ad55;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+            <option value="">-- Select pickup time --</option>
+            <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+            <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+            <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+            <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+            <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+            <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+            <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+            <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+            <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+            <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+            <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+            <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+            <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+            <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+            <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+            <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+            <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+            <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    function toggleExactTimes(checked) {
+      var el = document.getElementById('exact_time_fields');
+      el.style.display = checked ? 'block' : 'none';
+      document.getElementById('exact_delivery_time').required = checked;
+      document.getElementById('exact_pickup_time').required = checked;
+    }
+    </script>
+
+    <div class="field" style="margin-top:1rem"><label>Where on the premises will items be delivered? <span class="required">*</span></label><textarea name="delivery_location" required placeholder="e.g. Through the main entrance, set up in the ballroom on the left side...">{{ form.delivery_location or '' }}</textarea></div>
   </div>
 
   <!-- Hidden qty inputs — submitted with form -->
