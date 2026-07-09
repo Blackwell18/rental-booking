@@ -3731,6 +3731,8 @@ ADMIN_BOOKING_HTML = """
           <input type="time" name="setup_time" value="{{ b.setup_time or '' }}"
             style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
           <span style="color:#6b7280;font-size:.85rem">Est. Pickup:</span>
+          <input type="date" name="event_end_date" value="{{ b.event_end_date.strftime('%Y-%m-%d') if b.event_end_date else '' }}"
+            style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
           <input type="time" name="event_end_time" value="{{ b.event_end_time or '' }}"
             style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
           <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .75rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
@@ -6482,15 +6484,16 @@ def recalc_total(booking_id):
 @app.route("/admin/booking/<int:booking_id>/update-times", methods=["POST"])
 @admin_required
 def update_booking_times(booking_id):
-    setup_date     = request.form.get("setup_date", "").strip()
-    setup_time     = request.form.get("setup_time", "").strip()
-    event_end_time = request.form.get("event_end_time", "").strip()
+    setup_date      = request.form.get("setup_date", "").strip()
+    setup_time      = request.form.get("setup_time", "").strip()
+    event_end_date  = request.form.get("event_end_date", "").strip()
+    event_end_time  = request.form.get("event_end_time", "").strip()
     try:
         conn = get_db()
         cur  = conn.cursor()
         cur.execute(
-            "UPDATE bookings SET setup_date=%s, setup_time=%s, event_end_time=%s WHERE id=%s",
-            (setup_date or None, setup_time or None, event_end_time or None, booking_id)
+            "UPDATE bookings SET setup_date=%s, setup_time=%s, event_end_date=%s, event_end_time=%s WHERE id=%s",
+            (setup_date or None, setup_time or None, event_end_date or None, event_end_time or None, booking_id)
         )
         conn.commit()
         cur.close(); conn.close()
