@@ -3616,9 +3616,13 @@ ADMIN_BOOKING_HTML = """
     </div>
     {% endif %}
     <div class="row">
-      <span class="k">Dates</span><span class="v">{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }} - {{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '' }}</span>
-      <span class="k">Event Start Time</span><span class="v">{{ b.event_start_time }}</span>
-      <span class="k">Delivery</span>
+      <span class="k">Event Start Date</span><span class="v">{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '—' }}</span>
+      <span class="k">Event Start Time</span><span class="v">{{ b.event_start_time or '—' }}</span>
+      <span class="k">Event End Date</span><span class="v">{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }}</span>
+      <span class="k">Event End Time</span><span class="v">{{ b.event_end_time or '—' }}</span>
+      <span class="k">Setup Date</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }}</span>
+      <span class="k">Setup Time</span><span class="v">{{ b.setup_time or '—' }}</span>
+      <span class="k">Edit Times</span>
       <span class="v">
         <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:0" id="timeForm">
           <input type="date" name="setup_date" value="{{ b.setup_date.strftime('%Y-%m-%d') if b.setup_date else '' }}"
