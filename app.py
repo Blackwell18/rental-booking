@@ -3725,11 +3725,12 @@ ADMIN_BOOKING_HTML = """
       <span class="k">Edit Times</span>
       <span class="v">
         <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:0" id="timeForm">
+          <span style="color:#6b7280;font-size:.85rem">Est. Delivery:</span>
           <input type="date" name="setup_date" value="{{ b.setup_date.strftime('%Y-%m-%d') if b.setup_date else '' }}"
             style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
           <input type="time" name="setup_time" value="{{ b.setup_time or '' }}"
             style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
-          <span style="color:#6b7280;font-size:.85rem">Pickup:</span>
+          <span style="color:#6b7280;font-size:.85rem">Est. Pickup:</span>
           <input type="time" name="event_end_time" value="{{ b.event_end_time or '' }}"
             style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
           <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .75rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
