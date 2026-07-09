@@ -3724,18 +3724,28 @@ ADMIN_BOOKING_HTML = """
       <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
       <span class="k">Edit Times</span>
       <span class="v">
-        <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:0" id="timeForm">
-          <span style="color:#6b7280;font-size:.85rem">Est. Delivery:</span>
-          <input type="date" name="setup_date" value="{{ b.setup_date.strftime('%Y-%m-%d') if b.setup_date else '' }}"
-            style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
-          <input type="time" name="setup_time" value="{{ b.setup_time or '' }}"
-            style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
-          <span style="color:#6b7280;font-size:.85rem">Est. Pickup:</span>
-          <input type="date" name="event_end_date" value="{{ b.event_end_date.strftime('%Y-%m-%d') if b.event_end_date else '' }}"
-            style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
-          <input type="time" name="event_end_time" value="{{ b.event_end_time or '' }}"
-            style="border:1px solid #d1d5db;border-radius:5px;padding:.2rem .4rem;font-size:.9rem;color:#111827">
-          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .75rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
+        <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="margin:0">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem .75rem;margin-bottom:.6rem">
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Est. Delivery</div>
+              <div style="display:flex;gap:.35rem">
+                <input type="date" name="setup_date" value="{{ b.setup_date.strftime('%Y-%m-%d') if b.setup_date else '' }}"
+                  style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;min-width:0">
+                <input type="time" name="setup_time" value="{{ b.setup_time or '' }}"
+                  style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;width:90px">
+              </div>
+            </div>
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Est. Pickup</div>
+              <div style="display:flex;gap:.35rem">
+                <input type="date" name="event_end_date" value="{{ b.event_end_date.strftime('%Y-%m-%d') if b.event_end_date else '' }}"
+                  style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;min-width:0">
+                <input type="time" name="event_end_time" value="{{ b.event_end_time or '' }}"
+                  style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;width:90px">
+              </div>
+            </div>
+          </div>
+          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
         </form>
       </span>
       <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type }}</span>
