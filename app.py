@@ -1692,17 +1692,52 @@ FORM_HTML = r"""
 
   <div class="card">
     <h2>Event Details</h2>
+
+    {%- set time_opts -%}
+    <option value="">-- Select --</option>
+    <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+    <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+    <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+    <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+    <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+    <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+    <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+    <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+    <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+    <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+    <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+    <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+    <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+    <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+    <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+    <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+    <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+    <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+    {%- endset -%}
+
     <div class="row">
       <div class="field"><label>Event Start Date <span class="required">*</span></label><input id="event_start_date" name="event_start_date" type="date" required onchange="onDateChange()" value="{{ form.event_start_date or '' }}"></div>
-      <div class="field"><label>Event Start Time <span class="required">*</span></label><input name="event_start_time" type="time" required value="{{ form.event_start_time or '' }}"></div>
+      <div class="field"><label>Event Start Time <span class="required">*</span></label>
+        <select name="event_start_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+          {{ time_opts }}
+        </select>
+      </div>
     </div>
     <div class="row">
       <div class="field"><label>Event End Date <span class="required">*</span></label><input id="event_end_date" name="event_end_date" type="date" required onchange="onDateChange()" value="{{ form.event_end_date or '' }}"></div>
-      <div class="field"><label>Event End Time <span class="required">*</span></label><input name="event_end_time" type="time" required value="{{ form.event_end_time or '' }}"></div>
+      <div class="field"><label>Event End Time <span class="required">*</span></label>
+        <select name="event_end_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+          {{ time_opts }}
+        </select>
+      </div>
     </div>
     <div class="row">
       <div class="field"><label>Setup / Delivery Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl"></div>
-      <div class="field"><label>Setup / Delivery Time <span class="required">*</span></label><input name="setup_time" type="time" required value="{{ form.setup_time or '' }}"></div>
+      <div class="field"><label>Setup / Delivery Time <span class="required">*</span></label>
+        <select name="setup_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+          {{ time_opts }}
+        </select>
+      </div>
     </div>
     <div class="field">
       <label>Venue Type <span class="required">*</span></label>
@@ -1712,7 +1747,11 @@ FORM_HTML = r"""
       </div>
       <input type="hidden" name="venue_type" id="venue_type_input" value="venue">
     </div>
-    <div id="venue_pickup_row" class="field"><label>Latest Pickup Time at Venue <span class="required">*</span></label><input id="venue_latest_pickup" name="venue_latest_pickup" type="time" value="{{ form.venue_latest_pickup or '' }}"></div>
+    <div id="venue_pickup_row" class="field"><label>Latest Pickup Time at Venue <span class="required">*</span></label>
+      <select id="venue_latest_pickup" name="venue_latest_pickup" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+        {{ time_opts }}
+      </select>
+    </div>
   </div>
 
   <div class="card">
