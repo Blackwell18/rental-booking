@@ -230,6 +230,7 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) DEFAULT 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMPTZ DEFAULT NULL",
+            "ALTER TABLE customers ADD COLUMN IF NOT EXISTS street2 VARCHAR(255) DEFAULT NULL",
         ]
         for m in migrations:
             try:
@@ -8694,7 +8695,11 @@ ADMIN_CUSTOMER_EDIT_HTML = """
         </div>
         <div class="form-group span2">
           <label>Street Address</label>
-          <input type="text" name="street" id="cust_street" value="{{ c.street or '' }}" autocomplete="off">
+          <input type="text" name="street" id="cust_street" value="{{ c.street or '' }}" autocomplete="off" placeholder="123 Main St">
+        </div>
+        <div class="form-group span2">
+          <label>Address Line 2 <span style="color:#9ca3af;font-weight:400;font-size:.8rem">(Apt, Suite, Unit, etc.)</span></label>
+          <input type="text" name="street2" value="{{ c.street2 or '' }}" placeholder="Apt 4B">
         </div>
         <div class="form-group">
           <label>City</label>
@@ -8907,13 +8912,14 @@ def save_customer(cid):
         try:
             cur = conn.cursor()
             cur.execute(
-                "UPDATE customers SET full_name=%s, company_name=%s, email=%s, phone=%s, street=%s, city=%s, state=%s, zip=%s, notes=%s, tax_exempt=%s WHERE id=%s",
+                "UPDATE customers SET full_name=%s, company_name=%s, email=%s, phone=%s, street=%s, street2=%s, city=%s, state=%s, zip=%s, notes=%s, tax_exempt=%s WHERE id=%s",
                 (
                     request.form.get("full_name", "").strip(),
                     request.form.get("company_name", "").strip(),
                     request.form.get("email", "").strip().lower(),
                     request.form.get("phone", "").strip(),
                     request.form.get("street", "").strip(),
+                    request.form.get("street2", "").strip(),
                     request.form.get("city", "").strip(),
                     request.form.get("state", "").strip().upper(),
                     request.form.get("zip", "").strip(),
