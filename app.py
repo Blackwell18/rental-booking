@@ -3921,36 +3921,96 @@ ADMIN_BOOKING_HTML = """
   {% endif %}
 
   <div class="card">
-    <h2>Customer</h2>
-    <div class="row">
+    <h2 style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+      Customer
+      <button id="cust-edit-btn" onclick="custEditToggle(true)"
+              style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
+        ✏️ Edit
+      </button>
+    </h2>
+
+    <!-- READ-ONLY VIEW -->
+    <div id="cust-view" class="row">
       <span class="k">Name</span><span class="v">{{ b.full_name or '—' }}</span>
       {% if b.company_name and b.company_name != 'None' %}<span class="k">Company</span><span class="v">{{ b.company_name }}</span>{% endif %}
       <span class="k">Address</span>
       <span class="v">
-        <form method="POST" action="/admin/booking/{{ b.id }}/update-address" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:0">
-          <input id="bk_renter_street" name="renter_street" value="{{ b.renter_street if (b.renter_street and b.renter_street != 'None') else '' }}" placeholder="Street"
-                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:180px">
-          <input id="bk_renter_city" name="renter_city" value="{{ b.renter_city if (b.renter_city and b.renter_city != 'None') else '' }}" placeholder="City"
-                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:120px">
-          <input id="bk_renter_state" name="renter_state" value="{{ b.renter_state if (b.renter_state and b.renter_state != 'None') else '' }}" placeholder="ST"
-                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:50px">
-          <input id="bk_renter_zip" name="renter_zip" value="{{ b.renter_zip if (b.renter_zip and b.renter_zip != 'None') else '' }}" placeholder="ZIP"
-                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:75px">
-          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .6rem;font-size:.8rem;font-weight:600;cursor:pointer">Save</button>
-        </form>
+        {% set _addr_parts = [] %}
+        {% if b.renter_street and b.renter_street != 'None' %}{% set _ = _addr_parts.append(b.renter_street) %}{% endif %}
+        {% if b.renter_city and b.renter_city != 'None' %}{% set _ = _addr_parts.append(b.renter_city) %}{% endif %}
+        {% if b.renter_state and b.renter_state != 'None' %}{% set _ = _addr_parts.append(b.renter_state) %}{% endif %}
+        {% if b.renter_zip and b.renter_zip != 'None' %}{% set _ = _addr_parts.append(b.renter_zip) %}{% endif %}
+        {{ _addr_parts | join(', ') or '—' }}
       </span>
       {% set _phone = b.phone if (b.phone and b.phone != 'None') else '' %}
       <span class="k">Phone</span>
-      <span class="v">
-        <form method="POST" action="/admin/booking/{{ b.id }}/update-phone" style="display:inline-flex;align-items:center;gap:.4rem;margin:0">
-          <input type="tel" name="phone" value="{{ _phone }}" placeholder="(555) 000-0000"
-                 style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:160px">
-          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .6rem;font-size:.8rem;font-weight:600;cursor:pointer">Save</button>
-        </form>
-      </span>
-      <span class="k">Email</span><span class="v">{% if b.email %}<a href="mailto:{{ b.email }}">{{ b.email }}</a>{% else %}—{% endif %}</span>
+      <span class="v">{% if _phone %}<a href="tel:{{ _phone }}">{{ _phone }}</a>{% else %}—{% endif %}</span>
+      <span class="k">Email</span>
+      <span class="v">{% if b.email %}<a href="mailto:{{ b.email }}">{{ b.email }}</a>{% else %}—{% endif %}</span>
+    </div>
+
+    <!-- EDIT VIEW (hidden by default) -->
+    <div id="cust-edit-view" style="display:none">
+      <form method="POST" action="/admin/booking/{{ b.id }}/update-address" id="cust-addr-form" style="margin:0">
+        <div class="row" style="margin-bottom:.5rem">
+          <span class="k">Name</span><span class="v" style="font-weight:600">{{ b.full_name or '—' }}</span>
+          <span class="k">Address</span>
+          <span class="v" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center">
+            <input id="bk_renter_street" name="renter_street" value="{{ b.renter_street if (b.renter_street and b.renter_street != 'None') else '' }}" placeholder="Street"
+                   style="border:1px solid #d1d5db;border-radius:5px;padding:.3rem .5rem;font-size:.88rem;width:180px">
+            <input id="bk_renter_city" name="renter_city" value="{{ b.renter_city if (b.renter_city and b.renter_city != 'None') else '' }}" placeholder="City"
+                   style="border:1px solid #d1d5db;border-radius:5px;padding:.3rem .5rem;font-size:.88rem;width:120px">
+            <input id="bk_renter_state" name="renter_state" value="{{ b.renter_state if (b.renter_state and b.renter_state != 'None') else '' }}" placeholder="ST"
+                   style="border:1px solid #d1d5db;border-radius:5px;padding:.3rem .5rem;font-size:.88rem;width:50px">
+            <input id="bk_renter_zip" name="renter_zip" value="{{ b.renter_zip if (b.renter_zip and b.renter_zip != 'None') else '' }}" placeholder="ZIP"
+                   style="border:1px solid #d1d5db;border-radius:5px;padding:.3rem .5rem;font-size:.88rem;width:75px">
+          </span>
+        </div>
+      </form>
+      <form method="POST" action="/admin/booking/{{ b.id }}/update-phone" id="cust-phone-form" style="margin:0">
+        <div class="row" style="margin-bottom:.5rem">
+          <span class="k">Phone</span>
+          <span class="v">
+            <input type="tel" name="phone" id="cust-phone-input" value="{{ b.phone if (b.phone and b.phone != 'None') else '' }}" placeholder="(555) 000-0000"
+                   style="border:1px solid #d1d5db;border-radius:5px;padding:.3rem .5rem;font-size:.88rem;width:175px">
+          </span>
+          <span class="k">Email</span>
+          <span class="v" style="font-size:.88rem;color:#374151">{{ b.email or '—' }}</span>
+        </div>
+      </form>
+      <div style="display:flex;gap:.5rem;margin-top:.75rem">
+        <button onclick="custSaveAll()" style="background:#16a34a;color:white;border:none;border-radius:6px;padding:.4rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer">
+          💾 Save Changes
+        </button>
+        <button onclick="custEditToggle(false)" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer">
+          Cancel
+        </button>
+      </div>
     </div>
   </div>
+  <script>
+  function custEditToggle(on) {
+    document.getElementById('cust-view').style.display = on ? 'none' : '';
+    document.getElementById('cust-edit-view').style.display = on ? '' : 'none';
+    document.getElementById('cust-edit-btn').style.display = on ? 'none' : '';
+  }
+  function custSaveAll() {
+    // Submit address form first, phone form will chain via hidden iframe trick
+    // Simpler: submit address, then immediately submit phone in background
+    var addrForm = document.getElementById('cust-addr-form');
+    var phoneForm = document.getElementById('cust-phone-form');
+    // Put phone value into address form as hidden field so we only need one POST
+    var ph = document.getElementById('cust-phone-input').value;
+    var hidden = document.createElement('input');
+    hidden.type = 'hidden'; hidden.name = '_phone_val'; hidden.value = ph;
+    addrForm.appendChild(hidden);
+    // Submit phone form silently via fetch, then submit address form normally
+    var fd = new FormData(phoneForm);
+    fetch(phoneForm.action, {method:'POST', body:fd, credentials:'same-origin'})
+      .then(function(){ addrForm.submit(); })
+      .catch(function(){ addrForm.submit(); });
+  }
+  </script>
 
   <div class="card">
     <h2>Event</h2>
