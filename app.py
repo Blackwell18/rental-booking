@@ -597,7 +597,7 @@ def _deactivate_booking_links(booking_id):
     if not STRIPE_SECRET_KEY:
         log.warning("STRIPE_SECRET_KEY not set — cannot create payment link")
         return None, None, "Stripe not configured"
-      _deactivate_booking_links(booking_id)
+    _deactivate_booking_links(booking_id)
     try:
         name = product_name or f"25% Deposit — Booking #{booking_id}"
         product = stripe.Product.create(
