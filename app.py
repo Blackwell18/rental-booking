@@ -2905,6 +2905,8 @@ function clearAll(){document.querySelectorAll('.row-cb').forEach(c=>c.checked=fa
 function filterDash(q){const term=q.toLowerCase().trim();const rows=document.querySelectorAll('tbody tr[data-search]');let shown=0;rows.forEach(row=>{const match=!term||row.dataset.search.includes(term);row.style.display=match?'':'none';if(match)shown++;});const cnt=document.getElementById('dash-count');if(cnt)cnt.textContent=term?shown+' found':'';}
 function bulkAction(type){var ids=getChecked();if(ids.length===0)return;var msg=type==='delete'?'Permanently delete '+ids.length+' booking(s)?':'Archive '+ids.length+' booking(s)?';if(!confirm(msg))return;var idStr=ids.join(',');if(type==='delete'){document.getElementById('bulkDeleteIds').value=idStr;document.getElementById('bulkDeleteForm').submit();}else{document.getElementById('bulkArchiveIds').value=idStr;document.getElementById('bulkArchiveForm').submit();}}
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -3158,10 +3160,9 @@ function initEditEventAutocomplete() {
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
-
-<!-- Floating back button -->
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -3701,10 +3702,9 @@ function initEventAutocomplete() {
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
-
-<!-- Floating back button -->
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -4782,10 +4782,9 @@ Commit and push when done.
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
-
-<!-- Floating back button -->
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -5385,10 +5384,9 @@ function setMode(m){
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
-
-<!-- Floating back button -->
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -7667,6 +7665,8 @@ function closePopup(){
 
 
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -8034,6 +8034,8 @@ if(STOPS.length>0) loadDistances();
 @keyframes spin{to{transform:rotate(360deg)}}
 .leg-spin{display:inline-block;animation:spin 1s linear infinite}
 </style>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -8731,10 +8733,9 @@ function filterCustomers(){
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
-
-<!-- Floating back button -->
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -8949,10 +8950,9 @@ function handleDrop(e){
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
-
-<!-- Floating back button -->
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
@@ -9194,10 +9194,9 @@ function initCustStreetAutocomplete() {
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
-
-<!-- Floating back button -->
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
+
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </body></html>
 """
 
