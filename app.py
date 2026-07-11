@@ -9037,10 +9037,10 @@ ADMIN_CUSTOMER_EDIT_HTML = """
       <div class="form-actions">
         <a href="/admin/customers" class="btn btn-outline">Cancel</a>
         <button type="submit" class="btn btn-primary">Save Changes</button>
-        <form method="POST" action="/admin/customers/{{ c.id }}/delete" style="display:inline;margin:0">
-          <button class="btn btn-danger" onclick="return confirm('Permanently remove {{ c.full_name }}?')">Remove Customer</button>
-        </form>
       </div>
+    </form>
+    <form method="POST" action="/admin/customers/{{ c.id }}/delete" style="display:inline;margin:0">
+      <button class="btn btn-danger" onclick="return confirm('Permanently remove {{ c.full_name }}?')">Remove Customer</button>
     </form>
   </div>
 
