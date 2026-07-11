@@ -494,7 +494,7 @@ def get_booking_inventory_check(booking_id):
 
         # All other confirmed/accepted bookings overlapping these dates
         cur.execute("""
-            SELECT id, items_json, event_start_date, event_end_date
+            SELECT id, full_name, items_json, event_start_date, event_end_date
             FROM bookings
             WHERE status IN ('confirmed','partial','accepted')
               AND id != %s
