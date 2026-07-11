@@ -565,33 +565,33 @@ def calc_delivery_fee(miles):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _deactivate_booking_links(booking_id):
-    """Deactivate all active Stripe Payment Links for a booking to prevent double-charging."""
-    conn = get_db()
-    if not conn:
-        return
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT stripe_link_id FROM payment_links WHERE booking_id=%s AND status='active' AND stripe_link_id IS NOT NULL",
-            (booking_id,)
-        )
-        rows = cur.fetchall()
-        for row in rows:
-            link_id = row[0]
-            try:
-                stripe.PaymentLink.modify(link_id, active=False)
-                log.info(f"Deactivated Stripe link {link_id} for booking #{booking_id}")
-            except Exception as e:
-                log.warning(f"Could not deactivate Stripe link {link_id}: {e}")
-        cur.execute(
-            "UPDATE payment_links SET status='inactive' WHERE booking_id=%s AND status='active'",
-            (booking_id,)
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception as e:
-        log.error(f"_deactivate_booking_links error: {e}")
+  """Deactivate all active Stripe Payment Links for a booking to prevent double-charging."""
+  conn = get_db()
+  if not conn:
+    return
+  try:
+    cur = conn.cursor()
+    cur.execute(
+      "SELECT stripe_link_id FROM payment_links WHERE booking_id=%s AND status='active' AND stripe_link_id IS NOT NULL",
+      (booking_id,)
+    )
+    rows = cur.fetchall()
+    for row in rows:
+      link_id = row[0]
+      try:
+        stripe.PaymentLink.modify(link_id, active=False)
+        log.info(f"Deactivated Stripe link {link_id} for booking #{booking_id}")
+      except Exception as e:
+        log.warning(f"Could not deactivate Stripe link {link_id}: {e}")
+    cur.execute(
+      "UPDATE payment_links SET status='inactive' WHERE booking_id=%s AND status='active'",
+      (booking_id,)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+  except Exception as e:
+    log.error(f"_deactivate_booking_links error: {e}")
   def create_stripe_payment_link(booking_id, deposit_amount, customer_email, items_desc, product_name=None):
     """Create a Stripe Payment Link. Returns (url, stripe_link_id, error)."""
     if not STRIPE_SECRET_KEY:
