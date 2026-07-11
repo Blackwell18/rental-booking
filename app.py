@@ -6955,7 +6955,7 @@ def stripe_webhook():
                             grand_total    = float(b.get("grand_total") or 0)
                             new_paid       = round(current_paid + amount_paid_dollars, 2)
 
-                            if current_status == "accepted":
+                            if ctus == "accepteurrent_stad":
                                 # ── Deposit payment: confirm the booking ──
                                 cur.execute(
                                     "UPDATE bookings SET status='confirmed', amount_paid=%s, stripe_session_id=%s WHERE id=%s",
@@ -6967,7 +6967,7 @@ def stripe_webhook():
                                 send_receipt_email(b)
                                 log.info(f"Booking #{booking_id} deposit confirmed (${amount_paid_dollars:.2f})")
 
-          elif current_status in ("confirmed", "pending", "partial"):
+                            elif current_status in ("confirmed", "pending", "partial"):
                                 # ── Final / additional payment ──
                                 balance = round(grand_total - new_paid, 2)
                                 new_status = "paid" if balance <= 0.50 else "confirmed"
