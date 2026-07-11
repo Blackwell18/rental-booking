@@ -6939,13 +6939,14 @@ def stripe_webhook():
                 if conn:
                     try:
                         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-           # Deduplication: skip if this Stripe session was already recorded
+# Deduplication: skip if this Stripe session was already recorded
                         if sess_id:
                             cur.execute("SELECT id FROM bookings WHERE stripe_session_id=%s", (sess_id,))
                             if cur.fetchone():
                                 log.info(f"Webhook duplicate: session {sess_id} already processed. Skipping.")
                                 cur.close(); conn.close()
-                                return jsonify({"status": "already_processed"}), 200             cur.execute("SELECT * FROM bookings WHERE id=%s", (int(booking_id),))
+                                return jsonify({"status": "already_processed"}), 200
+                                cur.execute("SELECT * FROM bookings WHERE id=%s", (int(booking_id),))
                         row = cur.fetchone()
                         if row:
                             b = _row(row)
