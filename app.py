@@ -3859,13 +3859,33 @@ ADMIN_BOOKING_HTML = """
           ↑ Update Profile with Booking Info
         </button>
       </form>
-      <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
+      <form id="fill-from-profile-form" method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
         <input type="hidden" name="action" value="update_booking">
-        <button style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer"
-                title="Pull phone, email and address from the customer profile into this booking">
-          ↓ Fill Booking from Profile
+        <button type="button"
+                style="background:#16a34a;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer"
+                onclick="fillBookingFromProfile()"
+                title="Copy address, phone and email from the customer profile into this booking">
+          ↓ Copy Profile Info to Booking
         </button>
       </form>
+      <script>
+      var _mc_street = {{ mc.street | tojson if mc.street else '""'}};
+      var _mc_city   = {{ mc.city   | tojson if mc.city   else '""'}};
+      var _mc_state  = {{ mc.state  | tojson if mc.state  else '""'}};
+      var _mc_zip    = {{ mc.zip    | tojson if mc.zip    else '""'}};
+      function fillBookingFromProfile() {
+        var s = document.getElementById("bk_renter_street");
+        var c = document.getElementById("bk_renter_city");
+        var st= document.getElementById("bk_renter_state");
+        var z = document.getElementById("bk_renter_zip");
+        if (s && _mc_street) s.value = _mc_street;
+        if (c && _mc_city)   c.value = _mc_city;
+        if (st&& _mc_state)  st.value= _mc_state;
+        if (z && _mc_zip)    z.value = _mc_zip;
+        // Also save to DB
+        document.getElementById("fill-from-profile-form").submit();
+      }
+      </script>
       <a href="/admin/customers/{{ mc.id }}" style="background:white;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;text-decoration:none">
         View Profile →
       </a>
@@ -3881,13 +3901,13 @@ ADMIN_BOOKING_HTML = """
       <span class="k">Address</span>
       <span class="v">
         <form method="POST" action="/admin/booking/{{ b.id }}/update-address" style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:0">
-          <input name="renter_street" value="{{ b.renter_street if (b.renter_street and b.renter_street != 'None') else '' }}" placeholder="Street"
+          <input id="bk_renter_street" name="renter_street" value="{{ b.renter_street if (b.renter_street and b.renter_street != 'None') else '' }}" placeholder="Street"
                  style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:180px">
-          <input name="renter_city" value="{{ b.renter_city if (b.renter_city and b.renter_city != 'None') else '' }}" placeholder="City"
+          <input id="bk_renter_city" name="renter_city" value="{{ b.renter_city if (b.renter_city and b.renter_city != 'None') else '' }}" placeholder="City"
                  style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:120px">
-          <input name="renter_state" value="{{ b.renter_state if (b.renter_state and b.renter_state != 'None') else '' }}" placeholder="ST"
+          <input id="bk_renter_state" name="renter_state" value="{{ b.renter_state if (b.renter_state and b.renter_state != 'None') else '' }}" placeholder="ST"
                  style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:50px">
-          <input name="renter_zip" value="{{ b.renter_zip if (b.renter_zip and b.renter_zip != 'None') else '' }}" placeholder="ZIP"
+          <input id="bk_renter_zip" name="renter_zip" value="{{ b.renter_zip if (b.renter_zip and b.renter_zip != 'None') else '' }}" placeholder="ZIP"
                  style="border:1px solid #d1d5db;border-radius:5px;padding:.25rem .5rem;font-size:.88rem;width:75px">
           <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:5px;padding:.25rem .6rem;font-size:.8rem;font-weight:600;cursor:pointer">Save</button>
         </form>
