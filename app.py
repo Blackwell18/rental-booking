@@ -3838,7 +3838,12 @@ ADMIN_BOOKING_HTML = """
       Profile email: {{ mc.email or '—' }} &nbsp;|&nbsp; Profile phone: {{ mc.phone or '—' }}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:.5rem">
-      {% if mc.email != b.email or mc.phone != b.phone %}
+      {%- set _profile_differs = (mc.email != b.email or mc.phone != b.phone
+            or (mc.street and mc.street != b.renter_street)
+            or (mc.city and mc.city != b.renter_city)
+            or (mc.state and mc.state != b.renter_state)
+            or (mc.zip and mc.zip != b.renter_zip)) -%}
+      {% if _profile_differs %}
       <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
         <input type="hidden" name="action" value="update_profile">
         <button style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer">
@@ -6566,25 +6571,39 @@ def sync_customer_profile(booking_id):
         if crow:
             mc = _row(crow)
             if action == "update_profile":
-                # Push booking phone/email → customer profile
+                # Push booking phone/email/address → customer profile
                 cur2 = conn.cursor()
                 cur2.execute("""
                     UPDATE customers SET
-                      email = COALESCE(NULLIF(%s,''), email),
-                      phone = COALESCE(NULLIF(%s,''), phone)
+                      email   = COALESCE(NULLIF(%s,''), email),
+                      phone   = COALESCE(NULLIF(%s,''), phone),
+                      street  = COALESCE(NULLIF(%s,''), street),
+                      city    = COALESCE(NULLIF(%s,''), city),
+                      state   = COALESCE(NULLIF(%s,''), state),
+                      zip     = COALESCE(NULLIF(%s,''), zip)
                     WHERE id=%s
-                """, (b.get("email") or "", b.get("phone") or "", mc["id"]))
+                """, (b.get("email") or "", b.get("phone") or "",
+                      b.get("renter_street") or "", b.get("renter_city") or "",
+                      b.get("renter_state") or "", b.get("renter_zip") or "",
+                      mc["id"]))
                 conn.commit(); cur2.close()
                 log.info(f"Customer profile {mc['id']} updated from booking #{booking_id}")
             elif action == "update_booking":
-                # Pull customer profile phone/email → booking
+                # Pull customer profile phone/email/address → booking
                 cur2 = conn.cursor()
                 cur2.execute("""
                     UPDATE bookings SET
-                      email = COALESCE(NULLIF(%s,''), email),
-                      phone = COALESCE(NULLIF(%s,''), phone)
+                      email         = COALESCE(NULLIF(%s,''), email),
+                      phone         = COALESCE(NULLIF(%s,''), phone),
+                      renter_street = COALESCE(NULLIF(%s,''), renter_street),
+                      renter_city   = COALESCE(NULLIF(%s,''), renter_city),
+                      renter_state  = COALESCE(NULLIF(%s,''), renter_state),
+                      renter_zip    = COALESCE(NULLIF(%s,''), renter_zip)
                     WHERE id=%s
-                """, (mc.get("email") or "", mc.get("phone") or "", booking_id))
+                """, (mc.get("email") or "", mc.get("phone") or "",
+                      mc.get("street") or "", mc.get("city") or "",
+                      mc.get("state") or "", mc.get("zip") or "",
+                      booking_id))
                 conn.commit(); cur2.close()
                 log.info(f"Booking #{booking_id} updated from customer profile {mc['id']}")
         cur.close(); conn.close()
