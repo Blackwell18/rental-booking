@@ -9175,6 +9175,12 @@ def add_customer():
     return redirect(url_for("admin_customers", flash_ok=f"{full_name} added successfully"))
 
 
+@app.route("/admin/customers/<int:cid>")
+@admin_required
+def admin_customer_view(cid):
+    return redirect(url_for("admin_customer_edit", cid=cid))
+
+
 @app.route("/admin/customers/<int:cid>/edit")
 @admin_required
 def admin_customer_edit(cid):
