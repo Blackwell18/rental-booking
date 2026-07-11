@@ -3751,7 +3751,7 @@ ADMIN_BOOKING_HTML = """
       <span class="k">Event Start</span><span class="v">{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '—' }} &nbsp;{{ b.event_start_time or '' }}</span>
       <span class="k">Event End</span><span class="v">{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }} &nbsp;{{ b.event_end_time or '' }}</span>
       <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
-      <span class="k">Edit Times</span>
+      <span class="k">Delivery</span>
       <span class="v">
         <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="margin:0">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem .75rem;margin-bottom:.6rem">
