@@ -715,7 +715,7 @@ def build_contract_html(b, deposit_amount):
     """Build formatted HTML contract with booking details filled in."""
     customer_name = b.get('full_name', '')
     items = json.loads(b.get('items_json') or '[]')
-    items_list = ', '.join(f"{i['qty']}x {i['name']}" for i in items)
+    items_list = ', '.join(f"{i.get('qty','')}x {i.get('name','')}" for i in items)
     deposit_str = f"${deposit_amount:.2f}"
     event_date = str(b.get('event_start_date', ''))
     today_str = date.today().strftime("%B %d, %Y")
@@ -856,12 +856,14 @@ def send_owner_email(b):
     renter_addr = f"{b.get('renter_street','')}, {b.get('renter_city','')}, {b.get('renter_state','')} {b.get('renter_zip','')}"
     item_rows = ""
     for it in items:
+        _it_up  = float(it.get("unit_price") or 0)
+        _it_tot = float(it.get("total") or round(_it_up * int(it.get("qty") or 1), 2))
         item_rows += f"""
         <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">{it['name']}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center">{it['qty']}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${it['unit_price']:.2f}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${it['total']:.2f}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">{it.get('name','')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center">{it.get('qty','')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${_it_up:.2f}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${_it_tot:.2f}</td>
         </tr>"""
     subject = f"New Booking #{b.get('id')} — {b.get('full_name')} | {_fmt_date(b.get('event_start_date'))}"
     html = f"""
@@ -1133,12 +1135,14 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
 
     item_rows = ""
     for it in items:
+        _it_up  = float(it.get("unit_price") or 0)
+        _it_tot = float(it.get("total") or round(_it_up * int(it.get("qty") or 1), 2))
         item_rows += f"""
         <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">{it['name']}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center">{it['qty']}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${it['unit_price']:.2f}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${it['total']:.2f}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">{it.get('name','')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center">{it.get('qty','')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${_it_up:.2f}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${_it_tot:.2f}</td>
         </tr>"""
 
     if disc_amount > 0:
@@ -1261,7 +1265,7 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
   </div>
 </div></body></html>"""
 
-    _plain_items = "".join("  " + str(i['qty']) + "x " + i['name'] + " @ $" + f"{i['unit_price']:.2f}" + " = $" + f"{i['total']:.2f}" + "\n" for i in items)
+    _plain_items = "".join("  " + str(i.get('qty','')) + "x " + i.get('name','') + " @ $" + f"{float(i.get('unit_price') or 0):.2f}" + " = $" + f"{float(i.get('total') or 0):.2f}" + "\n" for i in items)
     _plain_exact = "  Exact Time Delivery: $175.00\n" if exact else ""
     plain = f"""Hi {first},
 
@@ -6107,7 +6111,10 @@ def accept_booking(booking_id):
 
     # Send acceptance email with invoice + contract + payment link
     b["stripe_payment_link"] = payment_link
-    send_accepted_email(b, charge_amount, payment_type)
+    try:
+        send_accepted_email(b, charge_amount, payment_type)
+    except Exception as e:
+        log.error(f"send_accepted_email error for #{booking_id}: {e}")
 
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
@@ -8074,17 +8081,29 @@ def save_inventory():
 @app.route("/admin/inventory/add", methods=["POST"])
 @admin_required
 def add_inventory():
+    import re as _re
     name  = request.form.get("name", "").strip()
     price = request.form.get("price", "0")
     total = request.form.get("total", "0")
     if name:
+        # Generate a slug-based id from the name (e.g. "Round Tables" -> "round_tables")
+        base_id = _re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_') or "item"
         conn = get_db()
         if conn:
             try:
                 cur = conn.cursor()
+                # Ensure uniqueness — append _2, _3, etc. if needed
+                new_id = base_id
+                suffix = 2
+                while True:
+                    cur.execute("SELECT 1 FROM inventory WHERE id=%s", (new_id,))
+                    if not cur.fetchone():
+                        break
+                    new_id = f"{base_id}_{suffix}"
+                    suffix += 1
                 cur.execute(
-                    "INSERT INTO inventory (name, price, total, sort_order) VALUES (%s, %s, %s, 999)",
-                    (name, float(price or 0), int(total or 0))
+                    "INSERT INTO inventory (id, name, price, total, sort_order) VALUES (%s, %s, %s, %s, 999)",
+                    (new_id, name, float(price or 0), int(total or 0))
                 )
                 conn.commit()
                 cur.close()
@@ -8095,7 +8114,7 @@ def add_inventory():
     return redirect(url_for("admin_inventory", flash_ok=f"'{name}' added to inventory"))
 
 
-@app.route("/admin/inventory/delete/<int:item_id>", methods=["POST"])
+@app.route("/admin/inventory/delete/<item_id>", methods=["POST"])
 @admin_required
 def delete_inventory(item_id):
     conn = get_db()
