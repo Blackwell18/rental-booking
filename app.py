@@ -4013,7 +4013,13 @@ ADMIN_BOOKING_HTML = """
   </script>
 
   <div class="card">
-    <h2>Event</h2>
+    <h2 style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+      Event
+      <button id="evt-edit-btn" onclick="evtEditToggle(true)"
+              style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
+        ✏️ Edit
+      </button>
+    </h2>
     {% if weekend_residential %}
     <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:.85rem 1rem;margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.75rem">
       <div style="flex:1;min-width:200px">
@@ -4030,9 +4036,33 @@ ADMIN_BOOKING_HTML = """
       </form>
     </div>
     {% endif %}
-    <div class="row">
-      <span class="k">Event Dates</span>
+
+    <!-- READ-ONLY VIEW -->
+    <div id="evt-view" class="row">
+      <span class="k">Event Start</span>
       <span class="v">
+        {% if b.event_start_date %}{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '—' }}{% if b.event_start_time %} &nbsp;{{ b.event_start_time }}{% endif %}{% else %}—{% endif %}
+      </span>
+      <span class="k">Event End</span>
+      <span class="v">
+        {% if b.event_end_date %}{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }}{% if b.event_end_time %} &nbsp;{{ b.event_end_time }}{% endif %}{% else %}—{% endif %}
+      </span>
+      <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
+      <span class="k">Est. Delivery</span>
+      <span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }}{% if b.setup_time %} &nbsp;{{ b.setup_time }}{% endif %}</span>
+      <span class="k">Est. Pickup</span>
+      <span class="v">{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }}{% if b.event_end_time %} &nbsp;{{ b.event_end_time }}{% endif %}</span>
+      <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
+      {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
+      <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
+      <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
+    </div>
+
+    <!-- EDIT VIEW (hidden by default) -->
+    <div id="evt-edit-view" style="display:none">
+      <div class="row">
+        <span class="k">Event Dates</span>
+        <span class="v">
         <form method="POST" action="/admin/booking/{{ b.id }}/update-event-dates" style="margin:0">
           {%- set tsel -%}
           <option value="">-- Select --</option>
@@ -4100,10 +4130,9 @@ ADMIN_BOOKING_HTML = """
           </div>
           <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
         </form>
-      </span>
-      <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
-      <span class="k">Delivery</span>
-      <span class="v">
+        </span>
+        <span class="k">Delivery</span>
+        <span class="v">
         <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="margin:0">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem .75rem;margin-bottom:.6rem">
             <div>
@@ -4127,16 +4156,28 @@ ADMIN_BOOKING_HTML = """
           </div>
           <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
         </form>
-      </span>
-      <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type }}</span>
-      {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
-      <span class="k">Event Address</span><span class="v">{{ b.event_street }}, {{ b.event_city }}, {{ b.event_state }} {{ b.event_zip }}</span>
-      <span class="k">Deliver To</span><span class="v">{{ b.delivery_location }}</span>
+        </span>
+        <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
+        {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
+        <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
+        <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
+      </div>
+      <div style="margin-top:.75rem">
+        <button onclick="evtEditToggle(false)" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer">
+          Cancel
+        </button>
+      </div>
     </div>
+    <script>
+    function evtEditToggle(on) {
+      document.getElementById('evt-view').style.display = on ? 'none' : '';
+      document.getElementById('evt-edit-view').style.display = on ? '' : 'none';
+      document.getElementById('evt-edit-btn').style.display = on ? 'none' : '';
+    }
+    </script>
     <div style="background:#f0f9ff;border-left:3px solid #38bdf8;padding:.6rem .9rem;margin-top:.9rem;border-radius:0 6px 6px 0;font-size:.82rem;color:#0c4a6e">
       ℹ️ <strong>Delivery times are approximate</strong> unless the customer has opted for exact-time delivery/pickup.
     </div>
-
     <!-- Booking Calendar -->
     <div style="margin-top:1.25rem">
       <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#6b7280;margin-bottom:.75rem">📅 Confirmed Bookings Calendar</div>
