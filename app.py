@@ -2827,12 +2827,12 @@ ADMIN_DASH_HTML = """
           {% for b in bookings %}
           <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '')|lower }} {{ (b.email or '')|lower }} {{ (b.phone or '')|lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '')|lower }}">
             <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
-            <td style="font-weight:700;color:#2563eb;font-size:.83rem">#{{ b.id }}</td>
+            <td style="font-weight:700;color:#2563eb;font-size:.83rem"><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;text-decoration:none">#{{ b.id }}</a></td>
             <td>
               <div class="client-cell">
                 <div class="avatar" style="background:{{ b.avatar_color }}">{{ b.avatar_initials }}</div>
                 <div>
-                  <div class="client-name">{{ b.full_name }}</div>
+                  <div class="client-name"><a href="/admin/booking/{{ b.id }}" style="color:#111827;text-decoration:none;font-weight:600" title="View booking">{{ b.full_name }}</a></div>
                   <div class="client-email">{{ b.email }}</div>
                   {% if b.phone %}<div style="font-size:.74rem;color:#6b7280;margin-top:.05rem"><a href="tel:{{ b.phone }}" style="color:#6b7280;text-decoration:none">📞 {{ b.phone }}</a></div>{% endif %}
                 </div>
