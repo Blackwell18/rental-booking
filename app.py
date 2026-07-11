@@ -506,29 +506,35 @@ def get_booking_inventory_check(booking_id):
         others = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
-        others_reserved   = {}   # pid -> total qty reserved by others
-        name_to_bookings  = {}   # item_name_lower -> list of booking dicts
+        others_reserved  = {}   # pid -> total qty reserved by others
+        pid_to_bookings  = {}   # pid -> list of booking dicts (primary, most reliable)
+        name_to_bookings = {}   # name_lower -> list of booking dicts (fallback)
 
         for o in others:
+            o_entry = {
+                "id":    o["id"],
+                "name":  o.get("full_name", "Unknown"),
+                "start": str(o.get("event_start_date", ""))[:10],
+                "end":   str(o.get("event_end_date",   ""))[:10],
+            }
             for item in json.loads(o.get("items_json") or "[]"):
-                iname = (item.get("name") or "").strip()
+                iname       = (item.get("name") or "").strip()
                 iname_lower = iname.lower()
-                pid   = item.get("id") or name_to_pid.get(iname_lower)
-                qty   = int(item.get("qty") or 0)
-                if qty > 0:
-                    if pid:
-                        others_reserved[pid] = others_reserved.get(pid, 0) + qty
-                    # Always track by name so we can find conflicts even without pid
+                pid         = item.get("id") or name_to_pid.get(iname_lower)
+                qty         = int(item.get("qty") or 0)
+                if qty <= 0:
+                    continue
+                entry = dict(o_entry, qty=qty)
+                if pid:
+                    others_reserved[pid] = others_reserved.get(pid, 0) + qty
+                    if pid not in pid_to_bookings:
+                        pid_to_bookings[pid] = []
+                    if not any(e["id"] == o["id"] for e in pid_to_bookings[pid]):
+                        pid_to_bookings[pid].append(entry)
+                # Also track by name as fallback
+                if iname_lower:
                     if iname_lower not in name_to_bookings:
                         name_to_bookings[iname_lower] = []
-                    # Avoid duplicate booking entries for the same booking+item
-                    entry = {
-                        "id":    o["id"],
-                        "name":  o.get("full_name", "Unknown"),
-                        "start": str(o.get("event_start_date", ""))[:10],
-                        "end":   str(o.get("event_end_date",   ""))[:10],
-                        "qty":   qty,
-                    }
                     if not any(e["id"] == o["id"] for e in name_to_bookings[iname_lower]):
                         name_to_bookings[iname_lower].append(entry)
 
@@ -540,12 +546,23 @@ def get_booking_inventory_check(booking_id):
             if pid and qty > 0 and pid in prod_totals:
                 avail = max(0, prod_totals[pid] - others_reserved.get(pid, 0))
                 if qty > avail:
+                    # Use pid lookup first; fall back to name lookup
+                    conflicting = pid_to_bookings.get(pid) or name_to_bookings.get(iname_lower, [])
+                    # Last resort: all overlapping bookings (so user always sees something)
+                    if not conflicting:
+                        conflicting = [{
+                            "id":    o["id"],
+                            "name":  o.get("full_name", "Unknown"),
+                            "start": str(o.get("event_start_date", ""))[:10],
+                            "end":   str(o.get("event_end_date",   ""))[:10],
+                            "qty":   "?",
+                        } for o in others]
                     issues.append({
                         "item":                 iname,
                         "needed":               qty,
                         "available":            avail,
                         "shortfall":            qty - avail,
-                        "conflicting_bookings": name_to_bookings.get(iname_lower, []),
+                        "conflicting_bookings": conflicting,
                     })
     except Exception as e:
         log.error(f"Booking inventory check error: {e}")
