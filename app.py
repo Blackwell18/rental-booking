@@ -3845,6 +3845,11 @@ ADMIN_BOOKING_HTML = """
     <div style="font-size:.88rem;color:#1e3a8a;margin-bottom:.75rem">
       A customer profile matches this booking's name: <strong>{{ mc.full_name }}</strong><br>
       Profile email: {{ mc.email or '—' }} &nbsp;|&nbsp; Profile phone: {{ mc.phone or '—' }}
+      {% if mc.street or mc.city %}
+      <br>Profile address: {{ mc.street or '' }}{% if mc.street2 %} {{ mc.street2 }}{% endif %}{% if mc.city %}, {{ mc.city }}{% endif %}{% if mc.state %} {{ mc.state }}{% endif %}{% if mc.zip %} {{ mc.zip }}{% endif %}
+      {% else %}
+      <br><span style="color:#ef4444;font-size:.82rem">⚠ No address saved in profile yet — go to View Profile to add one.</span>
+      {% endif %}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:.5rem">
       <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
@@ -6591,21 +6596,25 @@ def sync_customer_profile(booking_id):
                 conn.commit(); cur2.close()
                 log.info(f"Customer profile {mc['id']} updated from booking #{booking_id}")
             elif action == "update_booking":
-                # Pull customer profile phone/email/address → booking
+                # Pull customer profile phone/email/address → booking (force overwrite non-null values)
                 cur2 = conn.cursor()
                 cur2.execute("""
                     UPDATE bookings SET
-                      email         = COALESCE(NULLIF(%s,''), email),
-                      phone         = COALESCE(NULLIF(%s,''), phone),
-                      renter_street = COALESCE(NULLIF(%s,''), renter_street),
-                      renter_city   = COALESCE(NULLIF(%s,''), renter_city),
-                      renter_state  = COALESCE(NULLIF(%s,''), renter_state),
-                      renter_zip    = COALESCE(NULLIF(%s,''), renter_zip)
+                      email         = CASE WHEN %s != '' THEN %s ELSE email END,
+                      phone         = CASE WHEN %s != '' THEN %s ELSE phone END,
+                      renter_street = CASE WHEN %s != '' THEN %s ELSE renter_street END,
+                      renter_city   = CASE WHEN %s != '' THEN %s ELSE renter_city END,
+                      renter_state  = CASE WHEN %s != '' THEN %s ELSE renter_state END,
+                      renter_zip    = CASE WHEN %s != '' THEN %s ELSE renter_zip END
                     WHERE id=%s
-                """, (mc.get("email") or "", mc.get("phone") or "",
-                      mc.get("street") or "", mc.get("city") or "",
-                      mc.get("state") or "", mc.get("zip") or "",
-                      booking_id))
+                """, (
+                    mc.get("email") or "", mc.get("email") or "",
+                    mc.get("phone") or "", mc.get("phone") or "",
+                    mc.get("street") or "", mc.get("street") or "",
+                    mc.get("city") or "", mc.get("city") or "",
+                    mc.get("state") or "", mc.get("state") or "",
+                    mc.get("zip") or "", mc.get("zip") or "",
+                    booking_id))
                 conn.commit(); cur2.close()
                 log.info(f"Booking #{booking_id} updated from customer profile {mc['id']}")
         cur.close(); conn.close()
