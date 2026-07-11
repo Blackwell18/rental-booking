@@ -5501,6 +5501,35 @@ def admin_dashboard():
         except Exception as e:
             log.error(f"Admin dashboard error: {e}")
 
+    # ── Auto-archive: older than 2 weeks + picked-up past 48 hours ──────────
+    try:
+        conn_aa = get_db()
+        if conn_aa:
+            cur_aa = conn_aa.cursor()
+            two_weeks_ago = (date.today() - timedelta(days=14)).isoformat()
+            # Archive bookings whose event ended more than 2 weeks ago
+            cur_aa.execute("""
+                UPDATE bookings
+                SET archived = TRUE
+                WHERE (archived IS NULL OR archived = FALSE)
+                  AND event_start_date < %s
+                  AND status NOT IN ('denied','cancelled')
+            """, (two_weeks_ago,))
+            # Archive picked-up orders older than 48 hours
+            cur_aa.execute("""
+                UPDATE bookings
+                SET archived = TRUE
+                WHERE (archived IS NULL OR archived = FALSE)
+                  AND delivery_status = 'picked_up'
+                  AND picked_up_at IS NOT NULL
+                  AND picked_up_at < NOW() - INTERVAL '48 hours'
+            """)
+            conn_aa.commit()
+            cur_aa.close()
+            conn_aa.close()
+    except Exception as e:
+        log.error(f"Auto-archive error: {e}")
+
     inv_conflicts = get_inventory_conflicts()
 
     # Going out today / Coming back today
