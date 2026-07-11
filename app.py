@@ -3785,8 +3785,76 @@ ADMIN_BOOKING_HTML = """
     </div>
     {% endif %}
     <div class="row">
-      <span class="k">Event Start</span><span class="v">{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '—' }} &nbsp;{{ b.event_start_time or '' }}</span>
-      <span class="k">Event End</span><span class="v">{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }} &nbsp;{{ b.event_end_time or '' }}</span>
+      <span class="k">Event Dates</span>
+      <span class="v">
+        <form method="POST" action="/admin/booking/{{ b.id }}/update-event-dates" style="margin:0">
+          {%- set tsel -%}
+          <option value="">-- Select --</option>
+          <option value="06:00" {% if b.event_start_time=="06:00" %}selected{% endif %}>6:00 AM</option><option value="06:30" {% if b.event_start_time=="06:30" %}selected{% endif %}>6:30 AM</option>
+          <option value="07:00" {% if b.event_start_time=="07:00" %}selected{% endif %}>7:00 AM</option><option value="07:30" {% if b.event_start_time=="07:30" %}selected{% endif %}>7:30 AM</option>
+          <option value="08:00" {% if b.event_start_time=="08:00" %}selected{% endif %}>8:00 AM</option><option value="08:30" {% if b.event_start_time=="08:30" %}selected{% endif %}>8:30 AM</option>
+          <option value="09:00" {% if b.event_start_time=="09:00" %}selected{% endif %}>9:00 AM</option><option value="09:30" {% if b.event_start_time=="09:30" %}selected{% endif %}>9:30 AM</option>
+          <option value="10:00" {% if b.event_start_time=="10:00" %}selected{% endif %}>10:00 AM</option><option value="10:30" {% if b.event_start_time=="10:30" %}selected{% endif %}>10:30 AM</option>
+          <option value="11:00" {% if b.event_start_time=="11:00" %}selected{% endif %}>11:00 AM</option><option value="11:30" {% if b.event_start_time=="11:30" %}selected{% endif %}>11:30 AM</option>
+          <option value="12:00" {% if b.event_start_time=="12:00" %}selected{% endif %}>12:00 PM</option><option value="12:30" {% if b.event_start_time=="12:30" %}selected{% endif %}>12:30 PM</option>
+          <option value="13:00" {% if b.event_start_time=="13:00" %}selected{% endif %}>1:00 PM</option><option value="13:30" {% if b.event_start_time=="13:30" %}selected{% endif %}>1:30 PM</option>
+          <option value="14:00" {% if b.event_start_time=="14:00" %}selected{% endif %}>2:00 PM</option><option value="14:30" {% if b.event_start_time=="14:30" %}selected{% endif %}>2:30 PM</option>
+          <option value="15:00" {% if b.event_start_time=="15:00" %}selected{% endif %}>3:00 PM</option><option value="15:30" {% if b.event_start_time=="15:30" %}selected{% endif %}>3:30 PM</option>
+          <option value="16:00" {% if b.event_start_time=="16:00" %}selected{% endif %}>4:00 PM</option><option value="16:30" {% if b.event_start_time=="16:30" %}selected{% endif %}>4:30 PM</option>
+          <option value="17:00" {% if b.event_start_time=="17:00" %}selected{% endif %}>5:00 PM</option><option value="17:30" {% if b.event_start_time=="17:30" %}selected{% endif %}>5:30 PM</option>
+          <option value="18:00" {% if b.event_start_time=="18:00" %}selected{% endif %}>6:00 PM</option><option value="18:30" {% if b.event_start_time=="18:30" %}selected{% endif %}>6:30 PM</option>
+          <option value="19:00" {% if b.event_start_time=="19:00" %}selected{% endif %}>7:00 PM</option><option value="19:30" {% if b.event_start_time=="19:30" %}selected{% endif %}>7:30 PM</option>
+          <option value="20:00" {% if b.event_start_time=="20:00" %}selected{% endif %}>8:00 PM</option><option value="20:30" {% if b.event_start_time=="20:30" %}selected{% endif %}>8:30 PM</option>
+          <option value="21:00" {% if b.event_start_time=="21:00" %}selected{% endif %}>9:00 PM</option><option value="21:30" {% if b.event_start_time=="21:30" %}selected{% endif %}>9:30 PM</option>
+          <option value="22:00" {% if b.event_start_time=="22:00" %}selected{% endif %}>10:00 PM</option><option value="22:30" {% if b.event_start_time=="22:30" %}selected{% endif %}>10:30 PM</option>
+          <option value="23:00" {% if b.event_start_time=="23:00" %}selected{% endif %}>11:00 PM</option><option value="23:30" {% if b.event_start_time=="23:30" %}selected{% endif %}>11:30 PM</option>
+          {%- endset -%}
+          {%- set tsel2 -%}
+          <option value="">-- Select --</option>
+          <option value="06:00" {% if b.event_end_time=="06:00" %}selected{% endif %}>6:00 AM</option><option value="06:30" {% if b.event_end_time=="06:30" %}selected{% endif %}>6:30 AM</option>
+          <option value="07:00" {% if b.event_end_time=="07:00" %}selected{% endif %}>7:00 AM</option><option value="07:30" {% if b.event_end_time=="07:30" %}selected{% endif %}>7:30 AM</option>
+          <option value="08:00" {% if b.event_end_time=="08:00" %}selected{% endif %}>8:00 AM</option><option value="08:30" {% if b.event_end_time=="08:30" %}selected{% endif %}>8:30 AM</option>
+          <option value="09:00" {% if b.event_end_time=="09:00" %}selected{% endif %}>9:00 AM</option><option value="09:30" {% if b.event_end_time=="09:30" %}selected{% endif %}>9:30 AM</option>
+          <option value="10:00" {% if b.event_end_time=="10:00" %}selected{% endif %}>10:00 AM</option><option value="10:30" {% if b.event_end_time=="10:30" %}selected{% endif %}>10:30 AM</option>
+          <option value="11:00" {% if b.event_end_time=="11:00" %}selected{% endif %}>11:00 AM</option><option value="11:30" {% if b.event_end_time=="11:30" %}selected{% endif %}>11:30 AM</option>
+          <option value="12:00" {% if b.event_end_time=="12:00" %}selected{% endif %}>12:00 PM</option><option value="12:30" {% if b.event_end_time=="12:30" %}selected{% endif %}>12:30 PM</option>
+          <option value="13:00" {% if b.event_end_time=="13:00" %}selected{% endif %}>1:00 PM</option><option value="13:30" {% if b.event_end_time=="13:30" %}selected{% endif %}>1:30 PM</option>
+          <option value="14:00" {% if b.event_end_time=="14:00" %}selected{% endif %}>2:00 PM</option><option value="14:30" {% if b.event_end_time=="14:30" %}selected{% endif %}>2:30 PM</option>
+          <option value="15:00" {% if b.event_end_time=="15:00" %}selected{% endif %}>3:00 PM</option><option value="15:30" {% if b.event_end_time=="15:30" %}selected{% endif %}>3:30 PM</option>
+          <option value="16:00" {% if b.event_end_time=="16:00" %}selected{% endif %}>4:00 PM</option><option value="16:30" {% if b.event_end_time=="16:30" %}selected{% endif %}>4:30 PM</option>
+          <option value="17:00" {% if b.event_end_time=="17:00" %}selected{% endif %}>5:00 PM</option><option value="17:30" {% if b.event_end_time=="17:30" %}selected{% endif %}>5:30 PM</option>
+          <option value="18:00" {% if b.event_end_time=="18:00" %}selected{% endif %}>6:00 PM</option><option value="18:30" {% if b.event_end_time=="18:30" %}selected{% endif %}>6:30 PM</option>
+          <option value="19:00" {% if b.event_end_time=="19:00" %}selected{% endif %}>7:00 PM</option><option value="19:30" {% if b.event_end_time=="19:30" %}selected{% endif %}>7:30 PM</option>
+          <option value="20:00" {% if b.event_end_time=="20:00" %}selected{% endif %}>8:00 PM</option><option value="20:30" {% if b.event_end_time=="20:30" %}selected{% endif %}>8:30 PM</option>
+          <option value="21:00" {% if b.event_end_time=="21:00" %}selected{% endif %}>9:00 PM</option><option value="21:30" {% if b.event_end_time=="21:30" %}selected{% endif %}>9:30 PM</option>
+          <option value="22:00" {% if b.event_end_time=="22:00" %}selected{% endif %}>10:00 PM</option><option value="22:30" {% if b.event_end_time=="22:30" %}selected{% endif %}>10:30 PM</option>
+          <option value="23:00" {% if b.event_end_time=="23:00" %}selected{% endif %}>11:00 PM</option><option value="23:30" {% if b.event_end_time=="23:30" %}selected{% endif %}>11:30 PM</option>
+          {%- endset -%}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem .75rem;margin-bottom:.6rem">
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Event Start</div>
+              <div style="display:flex;gap:.35rem">
+                <input type="date" name="event_start_date" value="{{ b.event_start_date.strftime('%Y-%m-%d') if b.event_start_date else '' }}"
+                  style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;min-width:0">
+                <select name="event_start_time" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .35rem;font-size:.82rem;color:#111827;width:105px;background:#fff">
+                  {{ tsel }}
+                </select>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Event End</div>
+              <div style="display:flex;gap:.35rem">
+                <input type="date" name="event_end_date" value="{{ b.event_end_date.strftime('%Y-%m-%d') if b.event_end_date else '' }}"
+                  style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;min-width:0">
+                <select name="event_end_time" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .35rem;font-size:.82rem;color:#111827;width:105px;background:#fff">
+                  {{ tsel2 }}
+                </select>
+              </div>
+            </div>
+          </div>
+          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
+        </form>
+      </span>
       <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
       <span class="k">Delivery</span>
       <span class="v">
@@ -6629,6 +6697,27 @@ def recalc_total(booking_id):
         log.info(f"Booking #{booking_id} grand total recalculated → ${grand}")
     except Exception as e:
         log.error(f"recalc_total error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/update-event-dates", methods=["POST"])
+@admin_required
+def update_event_dates(booking_id):
+    event_start_date = request.form.get("event_start_date", "").strip()
+    event_start_time = request.form.get("event_start_time", "").strip()
+    event_end_date   = request.form.get("event_end_date", "").strip()
+    event_end_time   = request.form.get("event_end_time", "").strip()
+    try:
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute(
+            "UPDATE bookings SET event_start_date=%s, event_start_time=%s, event_end_date=%s, event_end_time=%s WHERE id=%s",
+            (event_start_date or None, event_start_time or None, event_end_date or None, event_end_time or None, booking_id)
+        )
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"update_event_dates: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
