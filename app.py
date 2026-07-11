@@ -3235,10 +3235,108 @@ ADMIN_NEW_BOOKING_HTML = """
   <div class="card">
     <h2>Event</h2>
     <div class="fg">
-      <div><label>Delivery Date *</label><input name="event_start_date" type="date" required></div>
-      <div><label>Pickup Date *</label><input name="event_end_date" type="date" required></div>
-      <div><label>Delivery Time</label><input name="event_start_time" type="time" value="16:00"></div>
-      <div><label>Pickup Time</label><input name="event_end_time" type="time" value="10:00"></div>
+      <div><label>Event Start Date *</label><input name="event_start_date" type="date" required></div>
+      <div><label>Event Start Time *</label>
+        <select name="event_start_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .65rem;font-size:.95rem;background:#fff;color:#1a202c">
+          <option value="">-- Select --</option>
+          <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+          <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+          <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+          <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+          <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+          <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+          <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+          <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+          <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+          <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+          <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+          <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+          <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+          <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+          <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+          <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+          <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+          <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+        </select>
+      </div>
+      <div><label>Event End Date *</label><input name="event_end_date" type="date" required></div>
+      <div><label>Event End Time *</label>
+        <select name="event_end_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .65rem;font-size:.95rem;background:#fff;color:#1a202c">
+          <option value="">-- Select --</option>
+          <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+          <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+          <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+          <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+          <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+          <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+          <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+          <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+          <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+          <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+          <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+          <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+          <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+          <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+          <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+          <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+          <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+          <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Delivery</h2>
+    <div class="fg">
+      <div><label>Delivery Date *</label><input name="setup_date" type="date" required></div>
+      <div><label>Delivery Time</label>
+        <select name="setup_time" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .65rem;font-size:.95rem;background:#fff;color:#1a202c">
+          <option value="">-- Select --</option>
+          <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+          <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+          <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+          <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+          <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+          <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+          <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+          <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+          <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+          <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+          <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+          <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+          <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+          <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+          <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+          <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+          <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+          <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+        </select>
+      </div>
+      <div><label>Pickup Date *</label><input name="pickup_date_display" type="date" required></div>
+      <div><label>Pickup Time</label>
+        <select name="pickup_time_display" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .65rem;font-size:.95rem;background:#fff;color:#1a202c">
+          <option value="">-- Select --</option>
+          <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+          <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+          <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+          <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+          <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+          <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+          <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+          <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+          <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+          <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+          <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+          <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+          <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+          <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+          <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+          <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+          <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+          <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+        </select>
+      </div>
       <div><label>Venue Type</label>
         <select name="venue_type">
           <option value="venue">Venue</option>
