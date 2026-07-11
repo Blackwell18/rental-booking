@@ -2345,6 +2345,44 @@ document.getElementById('bookingForm').addEventListener('submit', function(e) {
   btn.textContent = 'Submitting...';
 });
 </script>
+<script>
+function initPublicEventAutocomplete() {
+  var streetEl = document.getElementById('event_street');
+  if (!streetEl || !window.google) return;
+  var ac = new google.maps.places.Autocomplete(streetEl, {
+    types: ['address'],
+    componentRestrictions: { country: 'us' },
+    fields: ['address_components']
+  });
+  streetEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') e.preventDefault();
+  });
+  ac.addListener('place_changed', function() {
+    var place = ac.getPlace();
+    if (!place.address_components) return;
+    var streetNum = '', route = '', city = '', state = '', zip = '';
+    place.address_components.forEach(function(comp) {
+      var t = comp.types;
+      if (t.includes('street_number'))                    streetNum = comp.long_name;
+      else if (t.includes('route'))                       route     = comp.long_name;
+      else if (t.includes('locality'))                    city      = comp.long_name;
+      else if (t.includes('administrative_area_level_1')) state     = comp.short_name;
+      else if (t.includes('postal_code'))                 zip       = comp.long_name;
+    });
+    streetEl.value = [streetNum, route].filter(Boolean).join(' ');
+    var cityEl  = document.getElementById('event_city');
+    var stateEl = document.getElementById('event_state');
+    var zipEl   = document.getElementById('event_zip');
+    if (cityEl)  cityEl.value  = city;
+    if (stateEl) stateEl.value = state;
+    if (zipEl)   zipEl.value   = zip;
+    scheduleDistanceCalc();
+  });
+}
+</script>
+{% if google_maps_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initPublicEventAutocomplete" async defer></script>
+{% endif %}
 </body></html>
 """
 
@@ -4555,6 +4593,7 @@ def index():
         business_name=BUSINESS_NAME,
         products=get_products(),
         exact_time_fee=EXACT_TIME_FEE,
+        google_maps_key=GOOGLE_MAPS_KEY,
         error=None,
         form={},
     )
@@ -4609,6 +4648,7 @@ def submit():
     _products = get_products()
     if not email or not full_name:
         return render_template_string(FORM_HTML, business_name=BUSINESS_NAME,
+            google_maps_key=GOOGLE_MAPS_KEY,
             products=_products, exact_time_fee=EXACT_TIME_FEE,
             error="Name and email are required.", form=f), 400
 
