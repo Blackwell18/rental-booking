@@ -9399,21 +9399,22 @@ def import_customers():
 
 @app.route("/admin/customers/import/template")
 @admin_required
-def customer_import_template():
-    import csv as _csv
-    import io as _io
+def customers_import_template():
+    """Download a blank CSV template for customer import."""
+    import io as _io, csv as _csv
     output = _io.StringIO()
     writer = _csv.writer(output)
     writer.writerow(["full_name", "company_name", "email", "phone", "street", "city", "state", "zip", "notes"])
-    writer.writerow(["Jane Smith", "ABC Corp", "jane@example.com", "555-1234", "123 Main St", "Hartford", "CT", "06101", ""])
-    csv_bytes = output.getvalue().encode("utf-8")
+    writer.writerow(["Jane Smith", "", "jane@example.com", "860-555-0100", "123 Main St", "Hartford", "CT", "06101", ""])
+    output.seek(0)
     from flask import Response
     return Response(
-        csv_bytes,
+        output.getvalue().encode("utf-8"),
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=customers_template.csv"},
+        headers={"Content-Disposition": "attachment; filename=customers_template.csv"}
     )
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)
