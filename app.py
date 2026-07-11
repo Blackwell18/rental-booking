@@ -6967,7 +6967,7 @@ def stripe_webhook():
                                 send_receipt_email(b)
                                 log.info(f"Booking #{booking_id} deposit confirmed (${amount_paid_dollars:.2f})")
 
-                            elif current_status in ("confirmed", "pending"):
+          elif current_status in ("confirmed", "pending", "partial"):
                                 # ── Final / additional payment ──
                                 balance = round(grand_total - new_paid, 2)
                                 new_status = "paid" if balance <= 0.50 else "confirmed"
