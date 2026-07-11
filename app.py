@@ -8060,7 +8060,7 @@ def save_inventory():
                 if item_id and name:
                     cur.execute(
                         "UPDATE inventory SET name=%s, price=%s, total=%s WHERE id=%s",
-                        (name, float(price or 0), int(total or 0), int(item_id))
+                        (name, float(price or 0), int(total or 0), item_id)
                     )
             conn.commit()
             cur.close()
