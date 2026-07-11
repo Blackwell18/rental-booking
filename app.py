@@ -4321,7 +4321,9 @@ ADMIN_BOOKING_HTML = """
       </button>
     </form>
     {% endif %}
-    {% if b.status in ('confirmed', 'accepted', 'pending') %}
+    {% if b.status in ('confirmed', 'accepted', 'pending', 'partial') %}
+
+Commit and push when done.
     <form method="POST" action="/admin/booking/{{ b.id }}/record-payment"
           onsubmit="return confirm('Record this payment for booking #{{ b.id }}?')"
           style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
