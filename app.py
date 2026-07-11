@@ -228,6 +228,8 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_type VARCHAR(10) DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_value DECIMAL(10,2) DEFAULT 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) DEFAULT 0",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMPTZ DEFAULT NULL",
         ]
         for m in migrations:
             try:
@@ -2683,15 +2685,11 @@ ADMIN_DASH_HTML = """
     {% set pf = ('&pay_filter=' ~ pay_filter) if pay_filter else '' %}
     {% set sf = ('&sort=' ~ sort_by) if (sort_by and sort_by != 'date') else '' %}
     <div class="tabs">
-      <a href="/admin/dashboard?status=pending&sort=created_asc" class="tab {% if status_filter=='pending' and not past_filter %}active{% endif %}" style="{% if status_filter=='pending' and not past_filter %}color:#d97706;border-bottom-color:#d97706;{% endif %}">🆕 New{% if stats.pending > 0 %} <span style="background:#d97706;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.pending }}</span>{% endif %}</a>
-      <a href="/admin/dashboard?upcoming=1" class="tab {% if upcoming_filter %}active{% endif %}" style="{% if upcoming_filter %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔 Upcoming{% if stats.upcoming > 0 %} <span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
-      <a href="/admin/dashboard?status=accepted{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='accepted'  and not past_filter %}active{% endif %}">Accepted ({{ stats.accepted }})</a>
-      <a href="/admin/dashboard?status=confirmed{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='confirmed' and not past_filter %}active{% endif %}">Paid in Full ({{ stats.confirmed }})</a>
-      <a href="/admin/dashboard?status=partial{{ df }}{{ dt }}{{ pf }}{{ sf }}"  class="tab {% if status_filter=='partial' and not past_filter %}active{% endif %}" style="{% if status_filter=='partial' and not past_filter %}color:#7c3aed;border-bottom-color:#7c3aed;{% endif %}">💳 Partial{% if stats.partial > 0 %} <span style="background:#7c3aed;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.partial }}</span>{% endif %}</a>
-      <a href="/admin/dashboard?status=denied{{ df }}{{ dt }}{{ pf }}{{ sf }}"    class="tab {% if status_filter=='denied'    and not past_filter %}active{% endif %}">Denied</a>
-      <a href="/admin/dashboard?status=cancelled{{ df }}{{ dt }}{{ pf }}{{ sf }}" class="tab {% if status_filter=='cancelled' and not past_filter %}active{% endif %}">Cancelled</a>
-      <a href="/admin/dashboard?past=1" class="tab {% if past_filter %}active{% endif %}" style="{% if past_filter %}color:#6366f1;border-bottom-color:#6366f1;{% endif %}">🕓 Past ({{ stats.past }})</a>
-      <a href="/admin/dashboard" class="tab {% if not status_filter and not upcoming_filter and not archived_filter and not past_filter %}active{% endif %}">All ({{ stats.total }})</a>
+      <a href="/admin/dashboard?tab=all" class="tab {% if tab=='all' %}active{% endif %}">All ({{ stats.total }})</a>
+      <a href="/admin/dashboard?tab=going_out" class="tab {% if tab=='going_out' %}active{% endif %}" style="{% if tab=='going_out' %}color:#dc2626;border-bottom-color:#dc2626;{% endif %}">🚚 Going Out{% if stats.going_out > 0 %} <span style="background:#dc2626;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.going_out }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?tab=upcoming" class="tab {% if tab=='upcoming' %}active{% endif %}" style="{% if tab=='upcoming' %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔 Upcoming{% if stats.upcoming > 0 %} <span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?tab=delivered" class="tab {% if tab=='delivered' %}active{% endif %}" style="{% if tab=='delivered' %}color:#16a34a;border-bottom-color:#16a34a;{% endif %}">📦 Delivered{% if stats.delivered > 0 %} <span style="background:#16a34a;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.delivered }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?tab=picked_up" class="tab {% if tab=='picked_up' %}active{% endif %}" style="{% if tab=='picked_up' %}color:#2563eb;border-bottom-color:#2563eb;{% endif %}">✅ Picked Up{% if stats.picked_up > 0 %} <span style="background:#2563eb;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.picked_up }}</span>{% endif %}</a>
       <a href="/admin/dashboard?archived=1" class="tab {% if archived_filter %}active{% endif %}" style="{% if archived_filter %}color:#9ca3af;border-bottom-color:#9ca3af;{% endif %}">📦 Archived</a>
     </div>
 
@@ -5297,10 +5295,11 @@ def admin_dashboard():
     upcoming_filter = bool(request.args.get("upcoming", ""))
     archived_filter = bool(request.args.get("archived", ""))
     past_filter     = bool(request.args.get("past", ""))
-    sort_by         = request.args.get("sort", "created")   # date | name | id | created
+    sort_by         = request.args.get("sort", "")           # date | name | id | created | ""=auto
+    tab             = request.args.get("tab", "all")        # all | going_out | upcoming | delivered | picked_up
     conn = get_db()
     bookings = []
-    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "partial": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0}
+    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "partial": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0, "going_out": 0, "delivered": 0, "picked_up": 0}
     inventory_status = []
 
     if conn:
@@ -5315,17 +5314,34 @@ def admin_dashboard():
             stats["revenue"] = float(cur.fetchone()[0])
             cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='accepted'")
             stats["amount_due"] = float(cur.fetchone()[0])
-            # Count upcoming (next 8 days, non-cancelled/denied)
             today_dt = date.today()
             seven_days_ago = (today_dt - timedelta(days=7)).isoformat()
             in_8_days = (today_dt + timedelta(days=8)).isoformat()
+
+            # Tab counts
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
-                WHERE event_start_date >= %s AND event_start_date <= %s
+                WHERE setup_date = %s
                   AND status NOT IN ('cancelled','denied')
+                  AND (archived IS NULL OR archived = FALSE)
+            """, (today_dt.isoformat(),))
+            stats["going_out"] = cur.fetchone()[0]
+
+            cur.execute("""
+                SELECT COUNT(*) FROM bookings
+                WHERE setup_date > %s AND setup_date <= %s
+                  AND status NOT IN ('cancelled','denied')
+                  AND (archived IS NULL OR archived = FALSE)
             """, (today_dt.isoformat(), in_8_days))
             stats["upcoming"] = cur.fetchone()[0]
-            # Count past (older than 7 days ago)
+
+            cur.execute("SELECT COUNT(*) FROM bookings WHERE delivery_status = 'delivered'")
+            stats["delivered"] = cur.fetchone()[0]
+
+            cur.execute("SELECT COUNT(*) FROM bookings WHERE delivery_status = 'picked_up' AND picked_up_at >= NOW() - INTERVAL '48 hours'")
+            stats["picked_up"] = cur.fetchone()[0]
+
+            # Count past (kept for legacy)
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
                 WHERE (event_start_date < %s OR event_start_date IS NULL)
@@ -5333,10 +5349,27 @@ def admin_dashboard():
             """, (seven_days_ago,))
             stats["past"] = cur.fetchone()[0]
 
-            # Build filtered query — filter on event_start_date (the date orders go out)
+            # Build filtered query
             wheres = []
             params = []
-            if upcoming_filter:
+            if tab == "going_out":
+                wheres.append("setup_date = %s"); params.append(today_dt.isoformat())
+                wheres.append("status NOT IN ('cancelled','denied')")
+                wheres.append("(archived IS NULL OR archived = FALSE)")
+            elif tab == "upcoming":
+                wheres.append("setup_date > %s"); params.append(today_dt.isoformat())
+                wheres.append("setup_date <= %s"); params.append(in_8_days)
+                wheres.append("status NOT IN ('cancelled','denied')")
+                wheres.append("(archived IS NULL OR archived = FALSE)")
+            elif tab == "delivered":
+                wheres.append("delivery_status = 'delivered'")
+            elif tab == "picked_up":
+                wheres.append("delivery_status = 'picked_up'")
+                wheres.append("picked_up_at >= NOW() - INTERVAL '48 hours'")
+            elif archived_filter:
+                wheres.append("archived = TRUE")
+            elif upcoming_filter:
+                # legacy support
                 wheres.append("event_start_date >= %s"); params.append(today_dt.isoformat())
                 wheres.append("event_start_date <= %s"); params.append(in_8_days)
                 wheres.append("status NOT IN ('cancelled','denied')")
@@ -5347,16 +5380,11 @@ def admin_dashboard():
                 wheres.append("(archived IS NULL OR archived = FALSE)")
                 if status_filter:
                     wheres.append("status=%s"); params.append(status_filter)
-            elif archived_filter:
-                wheres.append("archived = TRUE")
             else:
+                # All tab — no date restriction, newest first
                 wheres.append("(archived IS NULL OR archived = FALSE)")
                 if status_filter:
-                    # Status tab: show ALL bookings with that status, no date restriction
                     wheres.append("status=%s"); params.append(status_filter)
-                else:
-                    # Default "All" view: recent (past 7 days) + future only
-                    wheres.append("(event_start_date >= %s OR event_start_date IS NULL)"); params.append(seven_days_ago)
                 if date_from:
                     wheres.append("event_start_date >= %s"); params.append(date_from)
                 if date_to:
@@ -5364,7 +5392,7 @@ def admin_dashboard():
             q = "SELECT * FROM bookings"
             if wheres:
                 q += " WHERE " + " AND ".join(wheres)
-            # Sort order
+            # Sort order — auto-default based on tab
             sort_map = {
                 "date":        "event_start_date ASC NULLS LAST, created_at DESC",
                 "date_desc":   "event_start_date DESC NULLS LAST, created_at DESC",
@@ -5376,7 +5404,18 @@ def admin_dashboard():
                 "created":     "created_at DESC",
                 "created_asc": "created_at ASC",
             }
-            q += " ORDER BY " + sort_map.get(sort_by, "event_start_date ASC NULLS LAST, created_at DESC")
+            tab_default_sort = {
+                "all":        "created_at DESC",
+                "going_out":  "setup_date ASC NULLS LAST, created_at DESC",
+                "upcoming":   "setup_date ASC NULLS LAST, created_at DESC",
+                "delivered":  "delivered_at DESC NULLS LAST",
+                "picked_up":  "picked_up_at DESC NULLS LAST",
+            }
+            if sort_by and sort_by in sort_map:
+                order_clause = sort_map[sort_by]
+            else:
+                order_clause = tab_default_sort.get(tab, "created_at DESC")
+            q += " ORDER BY " + order_clause
             q += " LIMIT 1000"
             cur.execute(q, params)
             rows = cur.fetchall()
@@ -5525,6 +5564,7 @@ def admin_dashboard():
         archived_filter=archived_filter,
         past_filter=past_filter,
         sort_by=sort_by,
+        tab=tab,
         inv_conflicts=inv_conflicts,
         going_out=going_out,
         coming_back=coming_back,
@@ -6809,13 +6849,16 @@ def booking_delivery_status(booking_id):
             cur.execute("SELECT delivery_status FROM bookings WHERE id=%s", (booking_id,))
             row = cur.fetchone()
             current = row[0] if row else None
+            now = datetime.now(timezone.utc)
             if current is None:
                 new_status = "delivered"
+                cur.execute("UPDATE bookings SET delivery_status=%s, delivered_at=%s WHERE id=%s", (new_status, now, booking_id))
             elif current == "delivered":
                 new_status = "picked_up"
+                cur.execute("UPDATE bookings SET delivery_status=%s, picked_up_at=%s WHERE id=%s", (new_status, now, booking_id))
             else:
                 new_status = current  # already picked_up, no change
-            cur.execute("UPDATE bookings SET delivery_status=%s WHERE id=%s", (new_status, booking_id))
+                cur.execute("UPDATE bookings SET delivery_status=%s WHERE id=%s", (new_status, booking_id))
             conn.commit()
             cur.close()
             conn.close()
