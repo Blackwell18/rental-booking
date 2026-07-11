@@ -5940,12 +5940,12 @@ def admin_dashboard():
             cur2 = conn2.cursor(cursor_factory=psycopg2.extras.DictCursor)
             today_iso = date.today().isoformat()
             cur2.execute("""
-                SELECT id, full_name, email, event_start_time, items_json, status
+                SELECT id, full_name, email, setup_time AS event_start_time, items_json, status
                 FROM bookings
-                WHERE event_start_date = %s
+                WHERE setup_date = %s
                   AND status NOT IN ('denied','cancelled')
                   AND (archived IS NULL OR archived = FALSE)
-                ORDER BY event_start_time ASC NULLS LAST, id ASC
+                ORDER BY setup_time ASC NULLS LAST, id ASC
             """, (today_iso,))
             for row in cur2.fetchall():
                 b2 = dict(row)
