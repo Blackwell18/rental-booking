@@ -506,37 +506,46 @@ def get_booking_inventory_check(booking_id):
         others = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
-        others_reserved = {}
-        # Track which bookings consume which product IDs
-        pid_to_bookings = {}
+        others_reserved   = {}   # pid -> total qty reserved by others
+        name_to_bookings  = {}   # item_name_lower -> list of booking dicts
+
         for o in others:
             for item in json.loads(o.get("items_json") or "[]"):
-                pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
-                qty = int(item.get("qty") or 0)
-                if pid and qty > 0:
-                    others_reserved[pid] = others_reserved.get(pid, 0) + qty
-                    if pid not in pid_to_bookings:
-                        pid_to_bookings[pid] = []
-                    pid_to_bookings[pid].append({
-                        "id":   o["id"],
-                        "name": o.get("full_name", "Unknown"),
+                iname = (item.get("name") or "").strip()
+                iname_lower = iname.lower()
+                pid   = item.get("id") or name_to_pid.get(iname_lower)
+                qty   = int(item.get("qty") or 0)
+                if qty > 0:
+                    if pid:
+                        others_reserved[pid] = others_reserved.get(pid, 0) + qty
+                    # Always track by name so we can find conflicts even without pid
+                    if iname_lower not in name_to_bookings:
+                        name_to_bookings[iname_lower] = []
+                    # Avoid duplicate booking entries for the same booking+item
+                    entry = {
+                        "id":    o["id"],
+                        "name":  o.get("full_name", "Unknown"),
                         "start": str(o.get("event_start_date", ""))[:10],
-                        "end":   str(o.get("event_end_date", ""))[:10],
+                        "end":   str(o.get("event_end_date",   ""))[:10],
                         "qty":   qty,
-                    })
+                    }
+                    if not any(e["id"] == o["id"] for e in name_to_bookings[iname_lower]):
+                        name_to_bookings[iname_lower].append(entry)
 
         for item in json.loads(b.get("items_json") or "[]"):
-            pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
-            qty = int(item.get("qty") or 0)
+            iname       = (item.get("name") or "").strip()
+            iname_lower = iname.lower()
+            pid         = item.get("id") or name_to_pid.get(iname_lower)
+            qty         = int(item.get("qty") or 0)
             if pid and qty > 0 and pid in prod_totals:
                 avail = max(0, prod_totals[pid] - others_reserved.get(pid, 0))
                 if qty > avail:
                     issues.append({
-                        "item":              item.get("name", ""),
-                        "needed":            qty,
-                        "available":         avail,
-                        "shortfall":         qty - avail,
-                        "conflicting_bookings": pid_to_bookings.get(pid, []),
+                        "item":                 iname,
+                        "needed":               qty,
+                        "available":            avail,
+                        "shortfall":            qty - avail,
+                        "conflicting_bookings": name_to_bookings.get(iname_lower, []),
                     })
     except Exception as e:
         log.error(f"Booking inventory check error: {e}")
@@ -3838,25 +3847,37 @@ ADMIN_BOOKING_HTML = """
       Profile email: {{ mc.email or '—' }} &nbsp;|&nbsp; Profile phone: {{ mc.phone or '—' }}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:.5rem">
-      {%- set _profile_differs = (mc.email != b.email or mc.phone != b.phone
-            or (mc.street and mc.street != b.renter_street)
-            or (mc.city and mc.city != b.renter_city)
-            or (mc.state and mc.state != b.renter_state)
-            or (mc.zip and mc.zip != b.renter_zip)) -%}
-      {% if _profile_differs %}
+      {%- set _booking_has_new = (
+            (b.email and b.email != mc.email) or
+            (b.phone and b.phone != mc.phone) or
+            (b.renter_street and b.renter_street != mc.street) or
+            (b.renter_city and b.renter_city != mc.city) or
+            (b.renter_state and b.renter_state != mc.state) or
+            (b.renter_zip and b.renter_zip != mc.zip)) -%}
+      {%- set _profile_has_new = (
+            (mc.email and mc.email != b.email) or
+            (mc.phone and mc.phone != b.phone) or
+            (mc.street and mc.street != b.renter_street) or
+            (mc.city and mc.city != b.renter_city) or
+            (mc.state and mc.state != b.renter_state) or
+            (mc.zip and mc.zip != b.renter_zip)) -%}
+      {% if _booking_has_new %}
       <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
         <input type="hidden" name="action" value="update_profile">
         <button style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer">
           ↑ Update Profile with Booking Info
         </button>
       </form>
+      {% endif %}
+      {% if _profile_has_new %}
       <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
         <input type="hidden" name="action" value="update_booking">
         <button style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer">
           ↓ Fill Booking from Profile
         </button>
       </form>
-      {% else %}
+      {% endif %}
+      {% if not _booking_has_new and not _profile_has_new %}
       <span style="font-size:.85rem;color:#166534;font-weight:600">✅ Profile info matches — no update needed</span>
       {% endif %}
       <a href="/admin/customers/{{ mc.id }}" style="background:white;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;text-decoration:none">
