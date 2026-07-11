@@ -507,12 +507,23 @@ def get_booking_inventory_check(booking_id):
         cur.close(); conn.close()
 
         others_reserved = {}
+        # Track which bookings consume which product IDs
+        pid_to_bookings = {}
         for o in others:
             for item in json.loads(o.get("items_json") or "[]"):
                 pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
                 qty = int(item.get("qty") or 0)
                 if pid and qty > 0:
                     others_reserved[pid] = others_reserved.get(pid, 0) + qty
+                    if pid not in pid_to_bookings:
+                        pid_to_bookings[pid] = []
+                    pid_to_bookings[pid].append({
+                        "id":   o["id"],
+                        "name": o.get("full_name", "Unknown"),
+                        "start": str(o.get("event_start_date", ""))[:10],
+                        "end":   str(o.get("event_end_date", ""))[:10],
+                        "qty":   qty,
+                    })
 
         for item in json.loads(b.get("items_json") or "[]"):
             pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
@@ -521,10 +532,11 @@ def get_booking_inventory_check(booking_id):
                 avail = max(0, prod_totals[pid] - others_reserved.get(pid, 0))
                 if qty > avail:
                     issues.append({
-                        "item":      item.get("name", ""),
-                        "needed":    qty,
-                        "available": avail,
-                        "shortfall": qty - avail,
+                        "item":              item.get("name", ""),
+                        "needed":            qty,
+                        "available":         avail,
+                        "shortfall":         qty - avail,
+                        "conflicting_bookings": pid_to_bookings.get(pid, []),
                     })
     except Exception as e:
         log.error(f"Booking inventory check error: {e}")
@@ -3784,12 +3796,29 @@ ADMIN_BOOKING_HTML = """
   <div style="background:#fef2f2;border:2px solid #f87171;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
     <div style="font-weight:700;color:#dc2626;font-size:1rem;margin-bottom:.5rem">⚠️ Inventory Shortage — Review Before Accepting</div>
     {% for c in booking_inv_issues %}
-    <div style="font-size:.9rem;color:#7f1d1d;margin-bottom:.3rem">
-      <strong>{{ c.item }}</strong>: customer needs <strong>{{ c.needed }}</strong>, only <strong>{{ c.available }}</strong> available after other bookings
-      <span style="background:#fee2e2;color:#b91c1c;border-radius:4px;padding:.1rem .45rem;font-size:.78rem;font-weight:700;margin-left:.4rem">{{ c.shortfall }} short</span>
+    <div style="margin-bottom:.75rem">
+      <div style="font-size:.9rem;color:#7f1d1d;margin-bottom:.4rem">
+        <strong>{{ c.item }}</strong>: customer needs <strong>{{ c.needed }}</strong>, only <strong>{{ c.available }}</strong> available after other bookings
+        <span style="background:#fee2e2;color:#b91c1c;border-radius:4px;padding:.1rem .45rem;font-size:.78rem;font-weight:700;margin-left:.4rem">{{ c.shortfall }} short</span>
+      </div>
+      {% if c.conflicting_bookings %}
+      <div style="font-size:.8rem;color:#991b1b;margin-bottom:.3rem;font-weight:600">Bookings using this item on overlapping dates:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.4rem">
+        {% for cb in c.conflicting_bookings %}
+        <a href="/admin/booking/{{ cb.id }}"
+           style="display:inline-flex;align-items:center;gap:.35rem;background:#fff;border:1px solid #f87171;border-radius:6px;padding:.3rem .65rem;font-size:.8rem;color:#b91c1c;text-decoration:none;font-weight:600"
+           title="{{ cb.name }} — {{ cb.start }} to {{ cb.end }} ({{ cb.qty }} units)">
+          #{{ cb.id }} {{ cb.name }}
+          <span style="color:#6b7280;font-weight:400">{{ cb.start }}{% if cb.end and cb.end != cb.start %} → {{ cb.end }}{% endif %}</span>
+          <span style="background:#fecaca;border-radius:3px;padding:.05rem .3rem">&times;{{ cb.qty }}</span>
+          <span style="font-size:.75rem;background:#dc2626;color:white;border-radius:4px;padding:.05rem .35rem;margin-left:.1rem">View →</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     {% endfor %}
-    <div style="font-size:.82rem;color:#991b1b;margin-top:.6rem">Other confirmed bookings on these dates are using the remaining inventory. You may need to source more or contact the customer.</div>
+    <div style="font-size:.82rem;color:#991b1b;margin-top:.4rem;border-top:1px solid #fca5a5;padding-top:.6rem">You may need to source more inventory or contact the customer to adjust quantities.</div>
   </div>
   {% endif %}
 
