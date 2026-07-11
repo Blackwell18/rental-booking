@@ -633,42 +633,42 @@ def _deactivate_booking_links(booking_id):
     conn.close()
   except Exception as e:
     log.error(f"_deactivate_booking_links error: {e}")
-  def create_stripe_payment_link(booking_id, deposit_amount, customer_email, items_desc, product_name=None):
-    """Create a Stripe Payment Link. Returns (url, stripe_link_id, error)."""
-    if not STRIPE_SECRET_KEY:
-        log.warning("STRIPE_SECRET_KEY not set — cannot create payment link")
-        return None, None, "Stripe not configured"
-    _deactivate_booking_links(booking_id)
-    try:
-        name = product_name or f"25% Deposit — Booking #{booking_id}"
-        product = stripe.Product.create(
-            name=name,
-            description=(items_desc[:500] if items_desc else "Rental deposit"),
-        )
-        price = stripe.Price.create(
-            unit_amount=int(round(deposit_amount * 100)),
-            currency="usd",
-            product=product.id,
-        )
-        kwargs = {
-            "line_items": [{"price": price.id, "quantity": 1}],
-            "metadata": {
-                "booking_id": str(booking_id),
-                "payment_type": "deposit",
-                "amount": str(deposit_amount),
-            },
-        }
-        if BASE_URL:
-            kwargs["after_completion"] = {
-                "type": "redirect",
-                "redirect": {"url": f"{BASE_URL}/payment/success/{booking_id}"}
-            }
-        link = stripe.PaymentLink.create(**kwargs)
-        log.info(f"Stripe Payment Link created for booking #{booking_id}: {link.url}")
-        return link.url, link.id, None
-    except Exception as e:
-        log.error(f"Stripe Payment Link error: {e}")
-        return None, None, str(e)
+def create_stripe_payment_link(booking_id, deposit_amount, customer_email, items_desc, product_name=None):
+  """Create a Stripe Payment Link. Returns (url, stripe_link_id, error)."""
+  if not STRIPE_SECRET_KEY:
+      log.warning("STRIPE_SECRET_KEY not set — cannot create payment link")
+      return None, None, "Stripe not configured"
+  _deactivate_booking_links(booking_id)
+  try:
+      name = product_name or f"25% Deposit — Booking #{booking_id}"
+      product = stripe.Product.create(
+          name=name,
+          description=(items_desc[:500] if items_desc else "Rental deposit"),
+      )
+      price = stripe.Price.create(
+          unit_amount=int(round(deposit_amount * 100)),
+          currency="usd",
+          product=product.id,
+      )
+      kwargs = {
+          "line_items": [{"price": price.id, "quantity": 1}],
+          "metadata": {
+              "booking_id": str(booking_id),
+              "payment_type": "deposit",
+              "amount": str(deposit_amount),
+          },
+      }
+      if BASE_URL:
+          kwargs["after_completion"] = {
+              "type": "redirect",
+              "redirect": {"url": f"{BASE_URL}/payment/success/{booking_id}"}
+          }
+      link = stripe.PaymentLink.create(**kwargs)
+      log.info(f"Stripe Payment Link created for booking #{booking_id}: {link.url}")
+      return link.url, link.id, None
+  except Exception as e:
+      log.error(f"Stripe Payment Link error: {e}")
+      return None, None, str(e)
 
 
 def save_payment_link(booking_id, label, amount, url, stripe_link_id):
