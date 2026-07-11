@@ -3158,6 +3158,9 @@ function initEditEventAutocomplete() {
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+
+<!-- Floating back button -->
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
 </body></html>
 """
@@ -3698,6 +3701,9 @@ function initEventAutocomplete() {
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+
+<!-- Floating back button -->
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
 </body></html>
 """
@@ -4776,6 +4782,9 @@ Commit and push when done.
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+
+<!-- Floating back button -->
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
 </body></html>
 """
@@ -5376,6 +5385,9 @@ function setMode(m){
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+
+<!-- Floating back button -->
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
 </body></html>
 """
@@ -8719,6 +8731,9 @@ function filterCustomers(){
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+
+<!-- Floating back button -->
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
 </body></html>
 """
@@ -8934,6 +8949,9 @@ function handleDrop(e){
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+
+<!-- Floating back button -->
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
 </body></html>
 """
@@ -9176,6 +9194,9 @@ function initCustStreetAutocomplete() {
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+
+<!-- Floating back button -->
+<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.25rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:background .15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
 </script>
 </body></html>
 """
