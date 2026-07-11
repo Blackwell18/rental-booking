@@ -6024,99 +6024,109 @@ def admin_booking(booking_id):
 @admin_required
 def accept_booking(booking_id):
     """Accept booking: create Stripe payment link, email invoice + contract + link to customer."""
-    conn = get_db()
-    if not conn:
-        return redirect(url_for("admin_dashboard"))
-
-    b = None
+    import traceback as _tb
     try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        if row:
-            b = _row(row)
-    except Exception as e:
-        log.error(f"Accept fetch error: {e}")
-        return redirect(url_for("admin_dashboard"))
+        conn = get_db()
+        if not conn:
+            return redirect(url_for("admin_dashboard"))
 
-    if not b:
-        return "Booking not found", 404
-
-    grand_total = float(b.get("grand_total") or 0)
-    items = json.loads(b.get("items_json") or "[]")
-    items_desc = ", ".join(f"{i['qty']}x {i['name']}" for i in items)
-
-    # ── Determine payment type based on days until event ──────────────────
-    event_date_raw = b.get("event_start_date")
-    days_until = 999
-    try:
-        # Convert to string first — handles date objects, datetime objects, and strings
-        event_dt = datetime.strptime(str(event_date_raw)[:10], "%Y-%m-%d").date()
-        days_until = (event_dt - date.today()).days
-        log.info(f"Booking #{booking_id}: event={event_dt}, today={date.today()}, days_until={days_until}")
-    except Exception as e:
-        log.error(f"Date calc error for booking #{booking_id}: {e} (raw={event_date_raw!r})")
-
-    if days_until <= 7:
-        # Event within 7 days — full payment required
-        charge_amount  = round(grand_total, 2)
-        payment_type   = "full"
-        product_name   = f"Full Payment — Booking #{booking_id}"
-        stripe_desc    = items_desc
-        log.info(f"Booking #{booking_id}: {days_until} days away — requiring FULL payment ${charge_amount:.2f}")
-    else:
-        # More than 7 days away — 25% deposit
-        charge_amount  = round(grand_total * DEPOSIT_PERCENT, 2)
-        payment_type   = "deposit"
-        product_name   = f"25% Deposit — Booking #{booking_id}"
-        stripe_desc    = items_desc
-        log.info(f"Booking #{booking_id}: {days_until} days away — requiring 25% deposit ${charge_amount:.2f}")
-
-    # Override with admin-specified amount if provided
-    try:
-        custom = float(request.form.get("custom_amount") or 0)
-        if custom > 0:
-            charge_amount = round(custom, 2)
-            product_name  = f"Payment — Booking #{booking_id}"
-            log.info(f"Booking #{booking_id}: admin overrode charge to ${charge_amount:.2f}")
-    except Exception:
-        pass
-
-    # Create Stripe Payment Link
-    payment_link, plink_id, stripe_error = create_stripe_payment_link(
-        booking_id, charge_amount, b.get("email"), stripe_desc, product_name
-    )
-    if stripe_error:
-        log.warning(f"Stripe error for #{booking_id}: {stripe_error}")
-    if payment_link:
-        save_payment_link(booking_id, product_name, charge_amount, payment_link, plink_id)
-
-    # Update DB: status -> accepted, store payment link
-    conn = get_db()
-    if conn:
+        b = None
         try:
-            cur = conn.cursor()
-            cur.execute(
-                "UPDATE bookings SET status='accepted', stripe_payment_link=%s WHERE id=%s",
-                (payment_link, booking_id)
-            )
-            conn.commit()
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
             cur.close()
             conn.close()
-            log.info(f"Booking #{booking_id} accepted ({payment_type})")
+            if row:
+                b = _row(row)
         except Exception as e:
-            log.error(f"Accept DB update error: {e}")
+            log.error(f"Accept fetch error: {e}")
+            return redirect(url_for("admin_dashboard"))
 
-    # Send acceptance email with invoice + contract + payment link
-    b["stripe_payment_link"] = payment_link
-    try:
-        send_accepted_email(b, charge_amount, payment_type)
-    except Exception as e:
-        log.error(f"send_accepted_email error for #{booking_id}: {e}")
+        if not b:
+            return "Booking not found", 404
 
-    return redirect(url_for("admin_booking", booking_id=booking_id))
+        grand_total = float(b.get("grand_total") or 0)
+        try:
+            items = json.loads(b.get("items_json") or "[]")
+        except Exception:
+            items = []
+        items_desc = ", ".join(f"{i.get('qty','')}x {i.get('name','')}" for i in items if isinstance(i, dict))
+
+        # ── Determine payment type based on days until event ──────────────────
+        event_date_raw = b.get("event_start_date")
+        days_until = 999
+        try:
+            # Convert to string first — handles date objects, datetime objects, and strings
+            event_dt = datetime.strptime(str(event_date_raw)[:10], "%Y-%m-%d").date()
+            days_until = (event_dt - date.today()).days
+            log.info(f"Booking #{booking_id}: event={event_dt}, today={date.today()}, days_until={days_until}")
+        except Exception as e:
+            log.error(f"Date calc error for booking #{booking_id}: {e} (raw={event_date_raw!r})")
+
+        if days_until <= 7:
+            # Event within 7 days — full payment required
+            charge_amount  = round(grand_total, 2)
+            payment_type   = "full"
+            product_name   = f"Full Payment — Booking #{booking_id}"
+            stripe_desc    = items_desc
+            log.info(f"Booking #{booking_id}: {days_until} days away — requiring FULL payment ${charge_amount:.2f}")
+        else:
+            # More than 7 days away — 25% deposit
+            charge_amount  = round(grand_total * DEPOSIT_PERCENT, 2)
+            payment_type   = "deposit"
+            product_name   = f"25% Deposit — Booking #{booking_id}"
+            stripe_desc    = items_desc
+            log.info(f"Booking #{booking_id}: {days_until} days away — requiring 25% deposit ${charge_amount:.2f}")
+
+        # Override with admin-specified amount if provided
+        try:
+            custom = float(request.form.get("custom_amount") or 0)
+            if custom > 0:
+                charge_amount = round(custom, 2)
+                product_name  = f"Payment — Booking #{booking_id}"
+                log.info(f"Booking #{booking_id}: admin overrode charge to ${charge_amount:.2f}")
+        except Exception:
+            pass
+
+        # Create Stripe Payment Link
+        payment_link, plink_id, stripe_error = create_stripe_payment_link(
+            booking_id, charge_amount, b.get("email"), stripe_desc, product_name
+        )
+        if stripe_error:
+            log.warning(f"Stripe error for #{booking_id}: {stripe_error}")
+        if payment_link:
+            save_payment_link(booking_id, product_name, charge_amount, payment_link, plink_id)
+
+        # Update DB: status -> accepted, store payment link
+        conn2 = get_db()
+        if conn2:
+            try:
+                cur2 = conn2.cursor()
+                cur2.execute(
+                    "UPDATE bookings SET status='accepted', stripe_payment_link=%s WHERE id=%s",
+                    (payment_link, booking_id)
+                )
+                conn2.commit()
+                cur2.close()
+                conn2.close()
+                log.info(f"Booking #{booking_id} accepted ({payment_type})")
+            except Exception as e:
+                log.error(f"Accept DB update error: {e}")
+
+        # Send acceptance email with invoice + contract + payment link
+        b["stripe_payment_link"] = payment_link
+        try:
+            send_accepted_email(b, charge_amount, payment_type)
+        except Exception as e:
+            log.error(f"send_accepted_email error for #{booking_id}: {e}")
+
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+
+    except Exception as _top_err:
+        _trace = _tb.format_exc()
+        log.error(f"ACCEPT BOOKING #{booking_id} UNHANDLED ERROR: {_top_err}\n{_trace}")
+        return f"<pre style='color:red;padding:2rem'>Accept booking error — please report this:\n\n{_trace}</pre>", 500
 
 
 @app.route("/admin/booking/<int:booking_id>/deny", methods=["POST"])
