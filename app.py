@@ -2704,7 +2704,7 @@ ADMIN_DASH_HTML = """
     <div class="day-panels">
       <div class="day-panel">
         <div class="panel-hdr">
-          <span class="panel-hdr-title">Going out</span>
+          <a href="/admin/dashboard?tab=going_out" class="panel-hdr-title" style="color:inherit;text-decoration:none">🚚 Deliveries Today</a>
           <span class="panel-hdr-date">{{ today_label }}</span>
         </div>
         {% if going_out %}
@@ -2731,7 +2731,7 @@ ADMIN_DASH_HTML = """
 
       <div class="day-panel">
         <div class="panel-hdr">
-          <span class="panel-hdr-title">Coming back</span>
+          <a href="/admin/dashboard?tab=coming_back" class="panel-hdr-title" style="color:inherit;text-decoration:none">🔄 Pickups Today</a>
           <span class="panel-hdr-date">{{ today_label }}</span>
         </div>
         {% if coming_back %}
@@ -2767,7 +2767,8 @@ ADMIN_DASH_HTML = """
     {% set sf = ('&sort=' ~ sort_by) if (sort_by and sort_by != 'date') else '' %}
     <div class="tabs">
       <a href="/admin/dashboard?tab=all" class="tab {% if tab=='all' %}active{% endif %}">All ({{ stats.total }})</a>
-      <a href="/admin/dashboard?tab=going_out" class="tab {% if tab=='going_out' %}active{% endif %}" style="{% if tab=='going_out' %}color:#dc2626;border-bottom-color:#dc2626;{% endif %}">🚚 Going Out{% if stats.going_out > 0 %} <span style="background:#dc2626;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.going_out }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?tab=going_out" class="tab {% if tab=='going_out' %}active{% endif %}" style="{% if tab=='going_out' %}color:#dc2626;border-bottom-color:#dc2626;{% endif %}">🚚 Deliveries{% if stats.going_out > 0 %} <span style="background:#dc2626;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.going_out }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?tab=coming_back" class="tab {% if tab=='coming_back' %}active{% endif %}" style="{% if tab=='coming_back' %}color:#7c3aed;border-bottom-color:#7c3aed;{% endif %}">🔄 Pickups{% if stats.coming_back > 0 %} <span style="background:#7c3aed;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.coming_back }}</span>{% endif %}</a>
       <a href="/admin/dashboard?tab=upcoming" class="tab {% if tab=='upcoming' %}active{% endif %}" style="{% if tab=='upcoming' %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔 Upcoming{% if stats.upcoming > 0 %} <span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
       <a href="/admin/dashboard?tab=delivered" class="tab {% if tab=='delivered' %}active{% endif %}" style="{% if tab=='delivered' %}color:#16a34a;border-bottom-color:#16a34a;{% endif %}">📦 Delivered{% if stats.delivered > 0 %} <span style="background:#16a34a;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.delivered }}</span>{% endif %}</a>
       <a href="/admin/dashboard?tab=picked_up" class="tab {% if tab=='picked_up' %}active{% endif %}" style="{% if tab=='picked_up' %}color:#2563eb;border-bottom-color:#2563eb;{% endif %}">✅ Picked Up{% if stats.picked_up > 0 %} <span style="background:#2563eb;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.picked_up }}</span>{% endif %}</a>
@@ -5753,7 +5754,7 @@ def admin_dashboard():
     tab             = request.args.get("tab", "all")        # all | going_out | upcoming | delivered | picked_up
     conn = get_db()
     bookings = []
-    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "partial": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0, "going_out": 0, "delivered": 0, "picked_up": 0}
+    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "partial": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0, "going_out": 0, "coming_back": 0, "delivered": 0, "picked_up": 0}
     inventory_status = []
 
     if conn:
@@ -5783,6 +5784,14 @@ def admin_dashboard():
 
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
+                WHERE event_end_date = %s
+                  AND status NOT IN ('cancelled','denied')
+                  AND (archived IS NULL OR archived = FALSE)
+            """, (today_dt.isoformat(),))
+            stats["coming_back"] = cur.fetchone()[0]
+
+            cur.execute("""
+                SELECT COUNT(*) FROM bookings
                 WHERE setup_date > %s AND setup_date <= %s
                   AND status NOT IN ('cancelled','denied')
                   AND (archived IS NULL OR archived = FALSE)
@@ -5808,6 +5817,10 @@ def admin_dashboard():
             params = []
             if tab == "going_out":
                 wheres.append("setup_date = %s"); params.append(today_dt.isoformat())
+                wheres.append("status NOT IN ('cancelled','denied')")
+                wheres.append("(archived IS NULL OR archived = FALSE)")
+            elif tab == "coming_back":
+                wheres.append("event_end_date = %s"); params.append(today_dt.isoformat())
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "upcoming":
@@ -5861,6 +5874,7 @@ def admin_dashboard():
             tab_default_sort = {
                 "all":        "created_at DESC",
                 "going_out":  "setup_date ASC NULLS LAST, created_at DESC",
+                "coming_back": "event_end_date ASC NULLS LAST, created_at DESC",
                 "upcoming":   "setup_date ASC NULLS LAST, created_at DESC",
                 "delivered":  "delivered_at DESC NULLS LAST",
                 "picked_up":  "picked_up_at DESC NULLS LAST",
