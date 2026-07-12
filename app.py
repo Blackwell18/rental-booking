@@ -5403,10 +5403,21 @@ ADMIN_INVENTORY_HTML = """
         style="border:1px solid #d1d5db;border-radius:7px;padding:.35rem .75rem;font-size:.85rem;width:220px;outline:none;transition:border .12s"
         onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#d1d5db'">
     </div>
-    <form method="POST" action="/admin/inventory/save">
+    <!-- Bulk action bar -->
+    <div id="inv-bulk-bar" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:.65rem 1.1rem;margin:0 1.25rem .75rem;display:none;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <span id="inv-sel-count" style="font-size:.88rem;font-weight:600;color:#92400e"></span>
+      <button onclick="invDeleteSelected()" style="background:#dc2626;color:white;border:none;border-radius:6px;padding:.35rem .9rem;font-size:.83rem;font-weight:700;cursor:pointer">🗑 Delete Selected</button>
+      <button onclick="invClearAll()" style="background:white;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.35rem .8rem;font-size:.83rem;font-weight:600;cursor:pointer">✕ Clear</button>
+    </div>
+
+    <form method="POST" action="/admin/inventory/save" id="inv-save-form">
       <table>
         <thead>
           <tr>
+            <th style="width:36px;padding:.65rem .5rem .65rem 1rem">
+              <input type="checkbox" id="inv-select-all" onchange="invToggleAll(this.checked)"
+                     style="width:15px;height:15px;accent-color:#2563eb;cursor:pointer">
+            </th>
             <th>Item Name</th>
             <th>Price / Unit</th>
             <th>Total Qty</th>
@@ -5415,7 +5426,12 @@ ADMIN_INVENTORY_HTML = """
         </thead>
         <tbody>
           {% for p in products %}
-          <tr>
+          <tr id="inv-row-{{ p.id }}">
+            <td style="padding:.6rem .5rem .6rem 1rem">
+              <input type="checkbox" class="inv-cb" value="{{ p.id }}"
+                     onchange="invUpdateBulk()"
+                     style="width:15px;height:15px;accent-color:#2563eb;cursor:pointer">
+            </td>
             <td>
               <input type="hidden" name="id_{{ loop.index0 }}" value="{{ p.id }}">
               <input type="text" name="name_{{ loop.index0 }}" value="{{ p.name }}" required>
@@ -5430,7 +5446,8 @@ ADMIN_INVENTORY_HTML = """
               <input type="number" name="total_{{ loop.index0 }}" value="{{ p.total }}" min="0" step="1" required>
             </td>
             <td>
-              <button type="submit" form="del_{{ p.id }}" class="btn btn-danger" onclick="return confirm('Remove {{ p.name }} from inventory?')">Remove</button>
+              <button type="submit" form="del_{{ p.id }}" class="btn btn-danger"
+                      onclick="return confirm('Remove {{ p.name }}?')">✕</button>
             </td>
           </tr>
           {% endfor %}
@@ -5447,6 +5464,43 @@ ADMIN_INVENTORY_HTML = """
     {% for p in products %}
     <form id="del_{{ p.id }}" method="POST" action="/admin/inventory/delete/{{ p.id }}" style="display:none"></form>
     {% endfor %}
+
+    <script>
+    function invToggleAll(checked) {
+      document.querySelectorAll('.inv-cb').forEach(cb => cb.checked = checked);
+      invUpdateBulk();
+    }
+    function invUpdateBulk() {
+      const checked = [...document.querySelectorAll('.inv-cb:checked')];
+      const bar = document.getElementById('inv-bulk-bar');
+      const allCb = document.getElementById('inv-select-all');
+      const total = document.querySelectorAll('.inv-cb').length;
+      bar.style.display = checked.length > 0 ? 'flex' : 'none';
+      document.getElementById('inv-sel-count').textContent = checked.length + ' item' + (checked.length > 1 ? 's' : '') + ' selected';
+      allCb.indeterminate = checked.length > 0 && checked.length < total;
+      allCb.checked = checked.length === total;
+    }
+    function invClearAll() {
+      document.querySelectorAll('.inv-cb').forEach(cb => cb.checked = false);
+      document.getElementById('inv-select-all').checked = false;
+      invUpdateBulk();
+    }
+    async function invDeleteSelected() {
+      const ids = [...document.querySelectorAll('.inv-cb:checked')].map(cb => cb.value);
+      if (!ids.length) return;
+      if (!confirm('Delete ' + ids.length + ' item' + (ids.length > 1 ? 's' : '') + '? This cannot be undone.')) return;
+      for (const id of ids) {
+        const form = document.getElementById('del_' + id);
+        if (form) {
+          const fd = new FormData(form);
+          await fetch(form.action, {method:'POST', body:fd, credentials:'same-origin'});
+          const row = document.getElementById('inv-row-' + id);
+          if (row) row.remove();
+        }
+      }
+      location.reload();
+    }
+    </script>
 
     <!-- Add new item -->
     <form method="POST" action="/admin/inventory/add">
