@@ -7946,20 +7946,34 @@ ADMIN_ROUTE_HTML = """
 <div class="page-content">
 <div class="pg-hdr">
   <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
-  <h1>Delivery Route</h1>
+  <h1>{% if view == 'pickup' %}Pickup Route{% else %}Delivery Route{% endif %}</h1>
 </div>
 <div class="main">
   <form method="GET" action="/admin/route" class="date-row">
     <label for="rdate">Date:</label>
     <input type="date" id="rdate" name="date" value="{{ route_date }}" onchange="this.form.submit()">
-    <a href="/admin/route" class="btn-today">Today</a>
+    <input type="hidden" name="view" value="{{ view }}">
+    <a href="/admin/route?view={{ view }}" class="btn-today">Today</a>
   </form>
+
+  <div style="display:flex;gap:.5rem;margin-bottom:1.1rem;border-bottom:2px solid #e5e7eb;padding-bottom:.5rem">
+    <a href="/admin/route?date={{ route_date }}&view=delivery"
+       style="padding:.4rem .9rem;border-radius:8px 8px 0 0;font-size:.85rem;font-weight:600;text-decoration:none;border:1px solid #e5e7eb;border-bottom:none;
+       {% if view != 'pickup' %}background:#2563eb;color:#fff;border-color:#2563eb{% else %}background:#f9fafb;color:#374151{% endif %}">
+      🚚 Deliveries
+    </a>
+    <a href="/admin/route?date={{ route_date }}&view=pickup"
+       style="padding:.4rem .9rem;border-radius:8px 8px 0 0;font-size:.85rem;font-weight:600;text-decoration:none;border:1px solid #e5e7eb;border-bottom:none;
+       {% if view == 'pickup' %}background:#7c3aed;color:#fff;border-color:#7c3aed{% else %}background:#f9fafb;color:#374151{% endif %}">
+      🔄 Pickups
+    </a>
+  </div>
 
   {% if route_bookings %}
   {% set addrs = route_bookings|selectattr('nav_address')|map(attribute='nav_address')|list %}
 
   <div class="launch-strip">
-    <div class="stop-count">{{ route_bookings|length }} stop{{ 's' if route_bookings|length != 1 }} · {{ route_date }}</div>
+    <div class="stop-count">{{ route_bookings|length }} {% if view == "pickup" %}pickup{% else %}delivery{% endif %}{{ 's' if route_bookings|length != 1 }} · {{ route_date }}</div>
     {% if addrs|length >= 1 %}
     {# Google Maps: depot → stop1 → ... → stopN #}
     {% set gurl = "https://www.google.com/maps/dir/" + depot_address|replace(" ","+") + "/" + (addrs|join("/"))|replace(" ", "+") %}
@@ -8070,7 +8084,7 @@ ADMIN_ROUTE_HTML = """
   </div>
   {% endfor %}
   {% else %}
-  <div class="empty">No deliveries scheduled for {{ route_date }}.</div>
+  <div class="empty">{% if view == "pickup" %}No pickups scheduled for {{ route_date }}.{% else %}No deliveries scheduled for {{ route_date }}.{% endif %}</div>
   {% endif %}
 </div>
 </div>
@@ -8559,24 +8573,38 @@ def admin_calendar():
 @admin_required
 def admin_route():
     route_date = request.args.get("date", date.today().isoformat())
+    view = request.args.get("view", "delivery")  # "delivery" or "pickup"
     conn = get_db()
     route_bookings = []
     if conn:
         try:
             cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            cur.execute("""
-                SELECT id, full_name, phone, email, delivery_location,
-                       event_street, event_city, event_state, event_zip,
-                       event_start_time, items_json, status, grand_total
-                FROM bookings
-                WHERE event_start_date = %s
-                  AND status NOT IN ('denied','cancelled')
-                  AND (archived IS NULL OR archived = FALSE)
-                ORDER BY event_start_time ASC NULLS LAST
-            """, (route_date,))
+            if view == "pickup":
+                cur.execute("""
+                    SELECT id, full_name, phone, email, delivery_location,
+                           event_street, event_city, event_state, event_zip,
+                           event_start_time, items_json, status, grand_total,
+                           event_end_date AS route_date_field
+                    FROM bookings
+                    WHERE event_end_date = %s
+                      AND status NOT IN ('denied','cancelled')
+                      AND (archived IS NULL OR archived = FALSE)
+                    ORDER BY event_start_time ASC NULLS LAST, id ASC
+                """, (route_date,))
+            else:
+                cur.execute("""
+                    SELECT id, full_name, phone, email, delivery_location,
+                           event_street, event_city, event_state, event_zip,
+                           setup_time AS event_start_time, items_json, status, grand_total,
+                           setup_date AS route_date_field
+                    FROM bookings
+                    WHERE setup_date = %s
+                      AND status NOT IN ('denied','cancelled')
+                      AND (archived IS NULL OR archived = FALSE)
+                    ORDER BY setup_time ASC NULLS LAST, id ASC
+                """, (route_date,))
             for row in cur.fetchall():
                 b = dict(row)
-                # Build navigable address from event address fields
                 parts = [
                     (b.get('event_street') or '').strip(),
                     (b.get('event_city')   or '').strip(),
@@ -8601,6 +8629,7 @@ def admin_route():
         business_name=BUSINESS_NAME,
         depot_address=DEPOT_ADDRESS,
         route_date=route_date,
+        view=view,
         route_bookings=route_bookings,
         stops_json=stops_json,
     )
