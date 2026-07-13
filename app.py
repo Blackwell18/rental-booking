@@ -3572,15 +3572,72 @@ function delRow(rc) {
   recalc();
 }
 
-function recalc() {
-  let sub = 0;
+// ── Marquee Tier Pricing (must match the public booking form / server) ──
+const MARQUEE_NUMBER_TIERS = [
+  { count:1, total:80 },
+  { count:2, total:150 },
+  { count:3, total:215 },
+  { count:4, total:275 },
+];
+function getMarqueeNumberTotal(n){
+  if(n<=0) return 0;
+  const t=MARQUEE_NUMBER_TIERS.find(x=>x.count===n);
+  if(t) return t.total;
+  return 275+(n-4)*55;
+}
+const MARQUEE_LETTER_TIERS = [
+  { count:1, total:85 },
+  { count:2, total:160 },
+  { count:3, total:225 },
+  { count:4, total:285 },
+];
+function getMarqueeLetterTotal(n){
+  if(n<=0) return 0;
+  const t=MARQUEE_LETTER_TIERS.find(x=>x.count===n);
+  if(t) return t.total;
+  return 285+(n-4)*55;
+}
+function isMarqueeNumber(name){ return /^marquee\s+#?\d/i.test(name); }
+function isMarqueeLetter(name){ return /^marquee\s+[a-z]$/i.test(name); }
+
+function getRowsData() {
+  const rows = [];
   document.querySelectorAll('.item-row').forEach(row => {
     const rc = row.id.replace('row','');
+    const name = (document.getElementById('rn'+rc)?.value || '').trim();
     const qty = parseFloat(document.getElementById('rq'+rc)?.value || 0);
     const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
-    const tot = qty * price;
+    rows.push({ rc, name, qty, price });
+  });
+  return rows;
+}
+
+// Computes each row's effective unit price, applying the marquee tier
+// discount across ALL marquee-letter rows together, and ALL marquee-number
+// rows together — same grouping logic the server uses.
+function getTieredUnitPrices(rows) {
+  let mlCount = 0, mnCount = 0;
+  rows.forEach(r => {
+    if (isMarqueeLetter(r.name)) mlCount += r.qty;
+    else if (isMarqueeNumber(r.name)) mnCount += r.qty;
+  });
+  const mlUnit = mlCount > 0 ? getMarqueeLetterTotal(mlCount) / mlCount : 0;
+  const mnUnit = mnCount > 0 ? getMarqueeNumberTotal(mnCount) / mnCount : 0;
+  return rows.map(r => {
+    let unit = r.price;
+    if (isMarqueeLetter(r.name)) unit = mlUnit;
+    else if (isMarqueeNumber(r.name)) unit = mnUnit;
+    return { ...r, unit };
+  });
+}
+
+function recalc() {
+  let sub = 0;
+  const priced = getTieredUnitPrices(getRowsData());
+  priced.forEach(r => {
+    const tot = r.qty * r.unit;
     sub += tot;
-    const totEl = document.getElementById('rt'+rc);
+    const totEl = document.getElementById('rt'+r.rc);
     if (totEl) totEl.textContent = '$' + tot.toFixed(2);
   });
   document.getElementById('items-sub').textContent = '$' + sub.toFixed(2);
@@ -3598,13 +3655,12 @@ function recalc() {
 }
 
 function prepSubmit() {
+  const priced = getTieredUnitPrices(getRowsData());
   const items = [];
-  document.querySelectorAll('.item-row').forEach(row => {
-    const rc = row.id.replace('row','');
-    const name = (document.getElementById('rn'+rc)?.value || '').trim();
-    const qty = parseInt(document.getElementById('rq'+rc)?.value || 0);
-    const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
-    if (name && qty > 0) items.push({name, qty, unit_price: price, total: Math.round(qty*price*100)/100});
+  priced.forEach(r => {
+    if (r.name && r.qty > 0) {
+      items.push({ name: r.name, qty: r.qty, unit_price: r.unit, total: Math.round(r.qty*r.unit*100)/100 });
+    }
   });
   document.getElementById('items_json_field').value = JSON.stringify(items);
   // un-readonly grand_total and tax so they submit
