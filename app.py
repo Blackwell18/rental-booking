@@ -3932,6 +3932,20 @@ ADMIN_BOOKING_HTML = """
   <span class="badge badge-{{ b.status }}">{{ b.status|upper }}</span>
   <div style="font-size:.8rem;color:#718096;margin-bottom:1rem">Received: {{ b.created_at }}</div>
 
+  {% if cust_change == 'ok' %}
+  <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:.65rem 1rem;margin-bottom:1rem;font-size:.88rem;color:#166534;font-weight:600">
+    ✓ Customer updated — this booking is now assigned to {{ b.full_name }}.
+  </div>
+  {% elif cust_change == 'fail' %}
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.65rem 1rem;margin-bottom:1rem;font-size:.88rem;color:#991b1b;font-weight:600">
+    ✗ Something went wrong updating the customer — the booking still shows the previous customer. Check the server logs, or try again.
+  </div>
+  {% elif cust_change == 'empty' %}
+  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.65rem 1rem;margin-bottom:1rem;font-size:.88rem;color:#92400e;font-weight:600">
+    ⚠ No customer was selected, so nothing was changed.
+  </div>
+  {% endif %}
+
   {% if b.status == 'accepted' %}
   <div class="payment-link-box">
     <div style="font-weight:700;color:#276749;margin-bottom:.4rem">Awaiting Deposit Payment</div>
@@ -6408,7 +6422,8 @@ def admin_booking(booking_id):
             products=get_products(), payment_links=get_payment_links(booking_id),
             matched_customer=matched_customer, weekend_residential=weekend_residential,
             booking_inv_issues=booking_inv_issues,
-            cal_bookings=cal_bookings)
+            cal_bookings=cal_bookings,
+            cust_change=request.args.get("cust_change"))
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
         return "Error rendering booking — please contact support.", 500
@@ -7136,33 +7151,45 @@ def change_booking_customer(booking_id):
     f = request.form
     full_name = f.get("full_name", "").strip()
     if not full_name:
-        return redirect(url_for("admin_booking", booking_id=booking_id))
+        return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="empty"))
     conn = get_db()
-    if conn:
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE bookings SET
-                  full_name=%s, company_name=%s, email=%s, phone=%s,
-                  renter_street=%s, renter_city=%s, renter_state=%s, renter_zip=%s
-                WHERE id=%s
-            """, (
-                full_name,
-                f.get("company_name","").strip() or None,
-                f.get("email","").strip() or None,
-                f.get("phone","").strip() or None,
-                f.get("renter_street","").strip() or None,
-                f.get("renter_city","").strip() or None,
-                f.get("renter_state","").strip() or None,
-                f.get("renter_zip","").strip() or None,
-                booking_id
-            ))
-            conn.commit()
-            cur.close(); conn.close()
+    if not conn:
+        log.error(f"Change customer error: no DB connection for booking #{booking_id}")
+        return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="fail"))
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE bookings SET
+              full_name=%s, company_name=%s, email=%s, phone=%s,
+              renter_street=%s, renter_city=%s, renter_state=%s, renter_zip=%s
+            WHERE id=%s
+        """, (
+            full_name,
+            f.get("company_name","").strip() or None,
+            f.get("email","").strip() or None,
+            f.get("phone","").strip() or None,
+            f.get("renter_street","").strip() or None,
+            f.get("renter_city","").strip() or None,
+            f.get("renter_state","").strip() or None,
+            f.get("renter_zip","").strip() or None,
+            booking_id
+        ))
+        updated = cur.rowcount
+        conn.commit()
+        cur.close(); conn.close()
+        if updated:
             log.info(f"Booking #{booking_id} reassigned to customer: {full_name}")
-        except Exception as e:
-            log.error(f"Change customer error: {e}")
-    return redirect(url_for("admin_booking", booking_id=booking_id))
+            return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="ok"))
+        else:
+            log.error(f"Change customer: UPDATE matched 0 rows for booking #{booking_id}")
+            return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="fail"))
+    except Exception as e:
+        log.error(f"Change customer error for booking #{booking_id}: {e}")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="fail"))
 
 
 @app.route("/admin/booking/<int:booking_id>/admin-notes", methods=["POST"])
