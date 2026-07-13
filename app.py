@@ -4039,10 +4039,17 @@ ADMIN_BOOKING_HTML = """
   <div class="card">
     <h2 style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
       Customer
-      <button id="cust-edit-btn" onclick="custEditToggle(true)"
-              style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
-        ✏️ Edit
-      </button>
+      <span style="display:flex;gap:.5rem">
+        <button id="chg-cust-btn" type="button" onclick="openChangeCustomerModal()"
+                style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer"
+                title="Replace this booking's customer with a different one">
+          🔄 Change Customer
+        </button>
+        <button id="cust-edit-btn" onclick="custEditToggle(true)"
+                style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
+          ✏️ Edit
+        </button>
+      </span>
     </h2>
 
     <!-- READ-ONLY VIEW -->
@@ -4991,6 +4998,129 @@ Commit and push when done.
   // Enter key confirms
   amountIn.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') confirmBtn.click();
+  });
+})();
+</script>
+
+<!-- ── Change Customer Modal ── -->
+<div id="change-customer-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:14px;padding:2rem;width:min(460px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h2 style="margin:0 0 .35rem;font-size:1.2rem;color:#1a202c">Change Customer</h2>
+    <p style="margin:0 0 1.1rem;font-size:.85rem;color:#718096">
+      Search for an existing customer to replace the name, company, email, phone, and address on this booking.
+      Event details, items, and totals are not affected.
+    </p>
+    <div style="position:relative">
+      <input id="chg-cust-search" type="text" placeholder="Type a customer's name…" autocomplete="off"
+             style="width:100%;box-sizing:border-box;border:2px solid #d1d5db;border-radius:8px;padding:.6rem .85rem;font-size:.95rem;color:#1a202c">
+      <ul id="chg-cust-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10000;background:white;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,.15);margin:4px 0 0;padding:0;list-style:none;max-height:240px;overflow-y:auto"></ul>
+    </div>
+    <p id="chg-cust-selected" style="display:none;margin:.85rem 0 0;font-size:.85rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:.6rem .85rem"></p>
+    <div style="display:flex;gap:.75rem;margin-top:1.5rem">
+      <button id="chg-cust-confirm" disabled style="flex:1;background:#9ca3af;color:white;border:none;border-radius:8px;padding:.7rem;font-size:.95rem;font-weight:700;cursor:not-allowed">
+        ✓ Assign to This Booking
+      </button>
+      <button type="button" onclick="closeChangeCustomerModal()"
+              style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:.7rem 1.25rem;font-size:.95rem;cursor:pointer">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<form id="change-customer-form" method="POST" action="/admin/booking/{{ b.id }}/change-customer" style="display:none">
+  <input type="hidden" name="full_name" id="chg_full_name">
+  <input type="hidden" name="company_name" id="chg_company_name">
+  <input type="hidden" name="email" id="chg_email">
+  <input type="hidden" name="phone" id="chg_phone">
+  <input type="hidden" name="renter_street" id="chg_renter_street">
+  <input type="hidden" name="renter_city" id="chg_renter_city">
+  <input type="hidden" name="renter_state" id="chg_renter_state">
+  <input type="hidden" name="renter_zip" id="chg_renter_zip">
+</form>
+
+<script>
+(function() {
+  var modal      = document.getElementById('change-customer-modal');
+  var search     = document.getElementById('chg-cust-search');
+  var results    = document.getElementById('chg-cust-results');
+  var selected   = document.getElementById('chg-cust-selected');
+  var confirmBtn = document.getElementById('chg-cust-confirm');
+  var form       = document.getElementById('change-customer-form');
+  var debounce, pickedCustomer = null;
+
+  function resetSelection() {
+    pickedCustomer = null;
+    selected.style.display = 'none';
+    confirmBtn.disabled = true;
+    confirmBtn.style.background = '#9ca3af';
+    confirmBtn.style.cursor = 'not-allowed';
+  }
+
+  window.openChangeCustomerModal = function() {
+    modal.style.display = 'flex';
+    search.value = '';
+    results.style.display = 'none';
+    results.innerHTML = '';
+    resetSelection();
+    search.focus();
+  };
+  window.closeChangeCustomerModal = function() {
+    modal.style.display = 'none';
+  };
+
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeChangeCustomerModal();
+  });
+
+  search.addEventListener('input', function() {
+    clearTimeout(debounce);
+    var q = this.value.trim();
+    resetSelection();
+    if (q.length < 1) { results.style.display = 'none'; return; }
+    debounce = setTimeout(function() {
+      fetch('/admin/customer-search?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          results.innerHTML = '';
+          if (!data.length) { results.style.display = 'none'; return; }
+          data.forEach(function(c) {
+            var li = document.createElement('li');
+            li.style.cssText = 'padding:.6rem .85rem;cursor:pointer;font-size:.9rem;border-bottom:1px solid #f1f5f9';
+            var addr = [c.renter_street, c.renter_city, c.renter_state].filter(Boolean).join(', ');
+            li.innerHTML = '<strong>' + c.full_name + '</strong>' +
+              (c.email ? ' <span style="color:#64748b;font-size:.8rem">— ' + c.email + '</span>' : '') +
+              (addr ? '<br><span style="color:#94a3b8;font-size:.78rem">' + addr + '</span>' : '');
+            li.addEventListener('mousedown', function(e) {
+              e.preventDefault();
+              pickedCustomer = c;
+              search.value = c.full_name;
+              results.style.display = 'none';
+              selected.textContent = '✓ Selected: ' + c.full_name + (c.email ? ' (' + c.email + ')' : '');
+              selected.style.display = 'block';
+              confirmBtn.disabled = false;
+              confirmBtn.style.background = '#16a34a';
+              confirmBtn.style.cursor = 'pointer';
+            });
+            results.appendChild(li);
+          });
+          results.style.display = 'block';
+        })
+        .catch(function() { results.style.display = 'none'; });
+    }, 250);
+  });
+
+  confirmBtn.addEventListener('click', function() {
+    if (!pickedCustomer || confirmBtn.disabled) return;
+    document.getElementById('chg_full_name').value      = pickedCustomer.full_name     || '';
+    document.getElementById('chg_company_name').value   = pickedCustomer.company_name  || '';
+    document.getElementById('chg_email').value          = pickedCustomer.email         || '';
+    document.getElementById('chg_phone').value          = pickedCustomer.phone         || '';
+    document.getElementById('chg_renter_street').value  = pickedCustomer.renter_street || '';
+    document.getElementById('chg_renter_city').value    = pickedCustomer.renter_city   || '';
+    document.getElementById('chg_renter_state').value   = pickedCustomer.renter_state  || '';
+    document.getElementById('chg_renter_zip').value     = pickedCustomer.renter_zip    || '';
+    form.submit();
   });
 })();
 </script>
@@ -6992,6 +7122,46 @@ def update_booking_address(booking_id):
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"Update address error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/change-customer", methods=["POST"])
+@admin_required
+def change_booking_customer(booking_id):
+    """
+    Completely reassign this booking to a different customer — overwrites
+    name, company, email, phone, and address with the selected customer's
+    info. Event details, items, and totals are left untouched.
+    """
+    f = request.form
+    full_name = f.get("full_name", "").strip()
+    if not full_name:
+        return redirect(url_for("admin_booking", booking_id=booking_id))
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE bookings SET
+                  full_name=%s, company_name=%s, email=%s, phone=%s,
+                  renter_street=%s, renter_city=%s, renter_state=%s, renter_zip=%s
+                WHERE id=%s
+            """, (
+                full_name,
+                f.get("company_name","").strip() or None,
+                f.get("email","").strip() or None,
+                f.get("phone","").strip() or None,
+                f.get("renter_street","").strip() or None,
+                f.get("renter_city","").strip() or None,
+                f.get("renter_state","").strip() or None,
+                f.get("renter_zip","").strip() or None,
+                booking_id
+            ))
+            conn.commit()
+            cur.close(); conn.close()
+            log.info(f"Booking #{booking_id} reassigned to customer: {full_name}")
+        except Exception as e:
+            log.error(f"Change customer error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
