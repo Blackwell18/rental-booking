@@ -263,28 +263,30 @@ def init_db():
             ON customers (email) WHERE email IS NOT NULL
         """)
 
-        # Import all existing booking customers into customers table (safe to run every time)
+        # One-time backfill: populate customers table from existing bookings.
+        # IMPORTANT: this must only ever run once, on a fresh/empty customers
+        # table. It used to run on every startup with an ON CONFLICT DO UPDATE,
+        # which meant every redeploy would silently overwrite any manual edit
+        # made on the Clients page (and resurrect any deleted customer) with
+        # stale data from that person's most recent booking. Guard on the
+        # table being empty so it behaves as a one-time bootstrap only.
         try:
             cur.execute("SAVEPOINT cust_import")
-            cur.execute("""
-                INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
-                SELECT DISTINCT ON (email)
-                    full_name, company_name, email, phone,
-                    renter_street, renter_city, renter_state, renter_zip
-                FROM bookings
-                WHERE email IS NOT NULL
-                ORDER BY email, created_at DESC
-                ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
-                    full_name    = EXCLUDED.full_name,
-                    company_name = EXCLUDED.company_name,
-                    phone        = EXCLUDED.phone,
-                    street       = EXCLUDED.street,
-                    city         = EXCLUDED.city,
-                    state        = EXCLUDED.state,
-                    zip          = EXCLUDED.zip
-            """)
+            cur.execute("SELECT COUNT(*) FROM customers")
+            _existing_customer_count = cur.fetchone()[0]
+            if _existing_customer_count == 0:
+                cur.execute("""
+                    INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
+                    SELECT DISTINCT ON (email)
+                        full_name, company_name, email, phone,
+                        renter_street, renter_city, renter_state, renter_zip
+                    FROM bookings
+                    WHERE email IS NOT NULL
+                    ORDER BY email, created_at DESC
+                    ON CONFLICT (email) WHERE email IS NOT NULL DO NOTHING
+                """)
+                log.info("Customers table was empty — backfilled from existing bookings (one-time)")
             cur.execute("RELEASE SAVEPOINT cust_import")
-            log.info("Existing booking customers synced to customers table")
         except Exception as ie:
             cur.execute("ROLLBACK TO SAVEPOINT cust_import")
             log.warning(f"Customer import warning: {ie}")
