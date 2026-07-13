@@ -602,6 +602,65 @@ def calc_delivery_fee(miles):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  MARQUEE TIER PRICING
+#  Shared by the public booking form (/submit) AND both admin booking paths
+#  (New Booking, and the "Edit Items" panel on a booking's detail page) so
+#  all three always apply the same 1/2/3/4/5+ discount schedule.
+# ══════════════════════════════════════════════════════════════════════════════
+
+MARQUEE_LETTER_TIERS = [(1, 85), (2, 160), (3, 225), (4, 285)]
+MARQUEE_NUMBER_TIERS = [(1, 80), (2, 150), (3, 215), (4, 275)]
+
+def is_marquee_letter(name):
+    return bool(re.match(r'^marquee\s+[a-z]$', (name or "").strip(), re.IGNORECASE))
+
+def is_marquee_number(name):
+    return bool(re.match(r'^marquee\s+#?\d', (name or "").strip(), re.IGNORECASE))
+
+def marquee_letter_total(n):
+    for c, t in MARQUEE_LETTER_TIERS:
+        if c == n:
+            return float(t)
+    return 285.0 + (n - 4) * 55.0 if n > 4 else 0.0
+
+def marquee_number_total(n):
+    for c, t in MARQUEE_NUMBER_TIERS:
+        if c == n:
+            return float(t)
+    return 275.0 + (n - 4) * 55.0 if n > 4 else 0.0
+
+def apply_marquee_tier_pricing(raw_items):
+    """
+    raw_items: list of {"name", "qty", "base_price", "id"(optional)}
+    Returns (order_items, subtotal) with any marquee-letter items priced as a
+    group against MARQUEE_LETTER_TIERS, and marquee-number items against
+    MARQUEE_NUMBER_TIERS. Non-marquee items keep their base_price unchanged.
+    """
+    ml_count = sum(i["qty"] for i in raw_items if is_marquee_letter(i["name"]))
+    mn_count = sum(i["qty"] for i in raw_items if is_marquee_number(i["name"]))
+    ml_unit = (marquee_letter_total(ml_count) / ml_count) if ml_count > 0 else 0.0
+    mn_unit = (marquee_number_total(mn_count) / mn_count) if mn_count > 0 else 0.0
+
+    order_items, subtotal = [], 0.0
+    for item in raw_items:
+        name = item["name"]
+        qty = item["qty"]
+        if is_marquee_letter(name):
+            unit_price = ml_unit
+        elif is_marquee_number(name):
+            unit_price = mn_unit
+        else:
+            unit_price = item["base_price"]
+        line = round(qty * unit_price, 2)
+        subtotal += line
+        entry = {"name": name, "qty": qty, "unit_price": round(unit_price, 2), "total": line}
+        if "id" in item:
+            entry["id"] = item["id"]
+        order_items.append(entry)
+    return order_items, round(subtotal, 2)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  STRIPE
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -5019,38 +5078,8 @@ def submit():
         if qty > 0:
             _raw_items.append({"id": p["id"], "name": p["name"], "qty": qty, "base_price": float(p["price"])})
 
-    # Marquee tier pricing (must match JS logic exactly)
-    def _is_ml(name): return bool(re.match(r'^marquee\s+[a-z]$', name.strip(), re.IGNORECASE))
-    def _is_mn(name): return bool(re.match(r'^marquee\s+#?\d', name.strip(), re.IGNORECASE))
-    _ML_TIERS = [(1,85),(2,160),(3,225),(4,285)]
-    _MN_TIERS = [(1,80),(2,150),(3,215),(4,275)]
-    def _ml_total(n):
-        for c,t in _ML_TIERS:
-            if c==n: return float(t)
-        return 285.0+(n-4)*55.0
-    def _mn_total(n):
-        for c,t in _MN_TIERS:
-            if c==n: return float(t)
-        return 275.0+(n-4)*55.0
-    ml_count = sum(i["qty"] for i in _raw_items if _is_ml(i["name"]))
-    mn_count = sum(i["qty"] for i in _raw_items if _is_mn(i["name"]))
-    ml_unit = (_ml_total(ml_count)/ml_count) if ml_count>0 else 0.0
-    mn_unit = (_mn_total(mn_count)/mn_count) if mn_count>0 else 0.0
-
-    order_items, subtotal = [], 0.0
-    for item in _raw_items:
-        name = item["name"]
-        qty  = item["qty"]
-        if _is_ml(name):
-            unit_price = ml_unit
-        elif _is_mn(name):
-            unit_price = mn_unit
-        else:
-            unit_price = item["base_price"]
-        line = round(qty * unit_price, 2)
-        subtotal += line
-        order_items.append({"id": item["id"], "name": name, "qty": qty,
-                             "unit_price": round(unit_price, 2), "total": line})
+    # Marquee tier pricing (shared helper — keeps this in sync with both admin routes)
+    order_items, subtotal = apply_marquee_tier_pricing(_raw_items)
 
     # Stackable marquee fee
     stackable     = f.get("stackable", "no").strip().lower() == "yes"
@@ -6631,16 +6660,24 @@ def new_booking():
     try:
         items_json_raw = f.get("items_json", "[]")
         try:
-            items = json.loads(items_json_raw)
+            _submitted_items = json.loads(items_json_raw)
         except Exception:
-            items = []
-        items_subtotal = float(f.get("items_subtotal") or 0)
+            _submitted_items = []
+        # Recompute marquee tier pricing server-side (don't trust the client's
+        # naive qty*price subtotal) so admin-created bookings get the same
+        # 1/2/3/4/5+ discount schedule as the public booking form.
+        _raw_items = [
+            {"name": i.get("name", ""), "qty": int(i.get("qty") or 0),
+             "base_price": float(i.get("unit_price") or 0)}
+            for i in _submitted_items if i.get("name") and int(i.get("qty") or 0) > 0
+        ]
+        items, items_subtotal = apply_marquee_tier_pricing(_raw_items)
         delivery_fee   = float(f.get("delivery_fee") or 0)
         tax_exempt     = f.get("tax_exempt", "0") == "1"
         tax_rate       = 0.0 if tax_exempt else 0.0635
         taxable        = items_subtotal + delivery_fee
         tax_amount     = 0.0 if tax_exempt else round(taxable * tax_rate, 2)
-        grand_total    = float(f.get("grand_total") or round(taxable + tax_amount, 2))
+        grand_total    = round(taxable + tax_amount, 2)
         amount_paid    = float(f.get("amount_paid") or 0)
         conn = get_db()
         if not conn:
@@ -6718,7 +6755,7 @@ def update_booking_items(booking_id):
 
     # Build product price map as fallback
     _prod_map = {p["name"].lower(): float(p.get("price") or 0) for p in get_products()}
-    items = []
+    _raw_items = []
     for name, qty, price in zip(names, qtys, prices):
         name = name.strip()
         if name:
@@ -6732,7 +6769,10 @@ def update_booking_items(booking_id):
                 up = 0
             if up == 0:
                 up = _prod_map.get(name.lower(), 0)
-            items.append({"name": name, "qty": q, "unit_price": up, "total": round(up * q, 2)})
+            _raw_items.append({"name": name, "qty": q, "base_price": up})
+
+    # Marquee tier pricing (same schedule/logic as the public booking form)
+    items, items_subtotal = apply_marquee_tier_pricing(_raw_items)
 
     # Exact time delivery & delivery fee
     exact_time = bool(request.form.get("exact_time_delivery"))
@@ -6741,8 +6781,7 @@ def update_booking_items(booking_id):
     except Exception:
         delivery_fee = 0.0
 
-    # Recalculate all totals
-    items_subtotal = round(sum(i["total"] for i in items), 2)
+    # Recalculate remaining totals (items_subtotal already computed via tier pricing above)
     exact_fee      = 175.0 if exact_time else 0.0
     pre_tax        = round(items_subtotal + delivery_fee + exact_fee, 2)
 
