@@ -2425,6 +2425,36 @@ function initPublicEventAutocomplete() {
 {% if google_maps_key %}
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initPublicEventAutocomplete" async defer></script>
 {% endif %}
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -2463,6 +2493,36 @@ SUCCESS_HTML = """
     {% if business_phone %}<p>Questions? Call <strong>{{ business_phone }}</strong></p>{% endif %}
     <a href="/">Submit Another Request</a>
   </div>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -2497,6 +2557,36 @@ PAYMENT_SUCCESS_HTML = """
     <p style="font-weight:600;color:#2d3748">&#8212; {{ business_name }}</p>
     {% if business_phone %}<p style="font-size:.9rem;color:#718096">Questions? Call {{ business_phone }}</p>{% endif %}
   </div>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -2535,6 +2625,36 @@ ADMIN_LOGIN_HTML = """
       <button type="submit">Sign In</button>
     </form>
   </div>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -2908,6 +3028,36 @@ function bulkAction(type){var ids=getChecked();if(ids.length===0)return;var msg=
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -3164,6 +3314,36 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -3706,6 +3886,36 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -4887,6 +5097,36 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -5560,6 +5800,36 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -7853,6 +8123,36 @@ function closePopup(){
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -8236,6 +8536,36 @@ if(STOPS.length>0) loadDistances();
 </style>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -8951,6 +9281,36 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -9168,6 +9528,36 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
@@ -9412,6 +9802,36 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 </script>
 
 <button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<style>
+/* ── Mobile horizontal scroll fix ── */
+html{overflow-x:auto}
+body{overflow-x:auto}
+.page-content{overflow-x:auto}
+.main{overflow-x:auto}
+table{border-collapse:collapse}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;display:block}
+@media(max-width:768px){
+  .card{overflow-x:auto}
+  td,th{white-space:nowrap}
+}
+</style>
+<script>
+(function(){
+  /* Wrap every unwrapped table in a scroll div on mobile */
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(function(t){
+      var p=t.parentElement;
+      if(p && p.className && (p.className.indexOf('tbl-wrap')>-1 || p.className.indexOf('table-scroll')>-1)) return;
+      var w=document.createElement('div');
+      w.className='tbl-wrap';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
+  else{wrapTables();}
+})();
+</script>
 </body></html>
 """
 
