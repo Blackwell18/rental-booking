@@ -263,30 +263,28 @@ def init_db():
             ON customers (email) WHERE email IS NOT NULL
         """)
 
-        # One-time backfill: populate customers table from existing bookings.
-        # IMPORTANT: this must only ever run once, on a fresh/empty customers
-        # table. It used to run on every startup with an ON CONFLICT DO UPDATE,
-        # which meant every redeploy would silently overwrite any manual edit
-        # made on the Clients page (and resurrect any deleted customer) with
-        # stale data from that person's most recent booking. Guard on the
-        # table being empty so it behaves as a one-time bootstrap only.
+        # Import all existing booking customers into customers table (safe to run every time)
         try:
             cur.execute("SAVEPOINT cust_import")
-            cur.execute("SELECT COUNT(*) FROM customers")
-            _existing_customer_count = cur.fetchone()[0]
-            if _existing_customer_count == 0:
-                cur.execute("""
-                    INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
-                    SELECT DISTINCT ON (email)
-                        full_name, company_name, email, phone,
-                        renter_street, renter_city, renter_state, renter_zip
-                    FROM bookings
-                    WHERE email IS NOT NULL
-                    ORDER BY email, created_at DESC
-                    ON CONFLICT (email) WHERE email IS NOT NULL DO NOTHING
-                """)
-                log.info("Customers table was empty — backfilled from existing bookings (one-time)")
+            cur.execute("""
+                INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip)
+                SELECT DISTINCT ON (email)
+                    full_name, company_name, email, phone,
+                    renter_street, renter_city, renter_state, renter_zip
+                FROM bookings
+                WHERE email IS NOT NULL
+                ORDER BY email, created_at DESC
+                ON CONFLICT (email) WHERE email IS NOT NULL DO UPDATE SET
+                    full_name    = EXCLUDED.full_name,
+                    company_name = EXCLUDED.company_name,
+                    phone        = EXCLUDED.phone,
+                    street       = EXCLUDED.street,
+                    city         = EXCLUDED.city,
+                    state        = EXCLUDED.state,
+                    zip          = EXCLUDED.zip
+            """)
             cur.execute("RELEASE SAVEPOINT cust_import")
+            log.info("Existing booking customers synced to customers table")
         except Exception as ie:
             cur.execute("ROLLBACK TO SAVEPOINT cust_import")
             log.warning(f"Customer import warning: {ie}")
@@ -601,65 +599,6 @@ def calc_delivery_fee(miles):
         return DELIVERY_BASE_FEE, f"{miles} mi — flat delivery fee"
     fee = round(miles * DELIVERY_RATE, 2)
     return fee, f"{miles} mi x ${DELIVERY_RATE:.2f}/mi"
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  MARQUEE TIER PRICING
-#  Shared by the public booking form (/submit) AND both admin booking paths
-#  (New Booking, and the "Edit Items" panel on a booking's detail page) so
-#  all three always apply the same 1/2/3/4/5+ discount schedule.
-# ══════════════════════════════════════════════════════════════════════════════
-
-MARQUEE_LETTER_TIERS = [(1, 85), (2, 160), (3, 225), (4, 285)]
-MARQUEE_NUMBER_TIERS = [(1, 80), (2, 150), (3, 215), (4, 275)]
-
-def is_marquee_letter(name):
-    return bool(re.match(r'^marquee\s+[a-z]$', (name or "").strip(), re.IGNORECASE))
-
-def is_marquee_number(name):
-    return bool(re.match(r'^marquee\s+#?\d', (name or "").strip(), re.IGNORECASE))
-
-def marquee_letter_total(n):
-    for c, t in MARQUEE_LETTER_TIERS:
-        if c == n:
-            return float(t)
-    return 285.0 + (n - 4) * 55.0 if n > 4 else 0.0
-
-def marquee_number_total(n):
-    for c, t in MARQUEE_NUMBER_TIERS:
-        if c == n:
-            return float(t)
-    return 275.0 + (n - 4) * 55.0 if n > 4 else 0.0
-
-def apply_marquee_tier_pricing(raw_items):
-    """
-    raw_items: list of {"name", "qty", "base_price", "id"(optional)}
-    Returns (order_items, subtotal) with any marquee-letter items priced as a
-    group against MARQUEE_LETTER_TIERS, and marquee-number items against
-    MARQUEE_NUMBER_TIERS. Non-marquee items keep their base_price unchanged.
-    """
-    ml_count = sum(i["qty"] for i in raw_items if is_marquee_letter(i["name"]))
-    mn_count = sum(i["qty"] for i in raw_items if is_marquee_number(i["name"]))
-    ml_unit = (marquee_letter_total(ml_count) / ml_count) if ml_count > 0 else 0.0
-    mn_unit = (marquee_number_total(mn_count) / mn_count) if mn_count > 0 else 0.0
-
-    order_items, subtotal = [], 0.0
-    for item in raw_items:
-        name = item["name"]
-        qty = item["qty"]
-        if is_marquee_letter(name):
-            unit_price = ml_unit
-        elif is_marquee_number(name):
-            unit_price = mn_unit
-        else:
-            unit_price = item["base_price"]
-        line = round(qty * unit_price, 2)
-        subtotal += line
-        entry = {"name": name, "qty": qty, "unit_price": round(unit_price, 2), "total": line}
-        if "id" in item:
-            entry["id"] = item["id"]
-        order_items.append(entry)
-    return order_items, round(subtotal, 2)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3574,72 +3513,15 @@ function delRow(rc) {
   recalc();
 }
 
-// ── Marquee Tier Pricing (must match the public booking form / server) ──
-const MARQUEE_NUMBER_TIERS = [
-  { count:1, total:80 },
-  { count:2, total:150 },
-  { count:3, total:215 },
-  { count:4, total:275 },
-];
-function getMarqueeNumberTotal(n){
-  if(n<=0) return 0;
-  const t=MARQUEE_NUMBER_TIERS.find(x=>x.count===n);
-  if(t) return t.total;
-  return 275+(n-4)*55;
-}
-const MARQUEE_LETTER_TIERS = [
-  { count:1, total:85 },
-  { count:2, total:160 },
-  { count:3, total:225 },
-  { count:4, total:285 },
-];
-function getMarqueeLetterTotal(n){
-  if(n<=0) return 0;
-  const t=MARQUEE_LETTER_TIERS.find(x=>x.count===n);
-  if(t) return t.total;
-  return 285+(n-4)*55;
-}
-function isMarqueeNumber(name){ return /^marquee\s+#?\d/i.test(name); }
-function isMarqueeLetter(name){ return /^marquee\s+[a-z]$/i.test(name); }
-
-function getRowsData() {
-  const rows = [];
-  document.querySelectorAll('.item-row').forEach(row => {
-    const rc = row.id.replace('row','');
-    const name = (document.getElementById('rn'+rc)?.value || '').trim();
-    const qty = parseFloat(document.getElementById('rq'+rc)?.value || 0);
-    const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
-    rows.push({ rc, name, qty, price });
-  });
-  return rows;
-}
-
-// Computes each row's effective unit price, applying the marquee tier
-// discount across ALL marquee-letter rows together, and ALL marquee-number
-// rows together — same grouping logic the server uses.
-function getTieredUnitPrices(rows) {
-  let mlCount = 0, mnCount = 0;
-  rows.forEach(r => {
-    if (isMarqueeLetter(r.name)) mlCount += r.qty;
-    else if (isMarqueeNumber(r.name)) mnCount += r.qty;
-  });
-  const mlUnit = mlCount > 0 ? getMarqueeLetterTotal(mlCount) / mlCount : 0;
-  const mnUnit = mnCount > 0 ? getMarqueeNumberTotal(mnCount) / mnCount : 0;
-  return rows.map(r => {
-    let unit = r.price;
-    if (isMarqueeLetter(r.name)) unit = mlUnit;
-    else if (isMarqueeNumber(r.name)) unit = mnUnit;
-    return { ...r, unit };
-  });
-}
-
 function recalc() {
   let sub = 0;
-  const priced = getTieredUnitPrices(getRowsData());
-  priced.forEach(r => {
-    const tot = r.qty * r.unit;
+  document.querySelectorAll('.item-row').forEach(row => {
+    const rc = row.id.replace('row','');
+    const qty = parseFloat(document.getElementById('rq'+rc)?.value || 0);
+    const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
+    const tot = qty * price;
     sub += tot;
-    const totEl = document.getElementById('rt'+r.rc);
+    const totEl = document.getElementById('rt'+rc);
     if (totEl) totEl.textContent = '$' + tot.toFixed(2);
   });
   document.getElementById('items-sub').textContent = '$' + sub.toFixed(2);
@@ -3657,12 +3539,13 @@ function recalc() {
 }
 
 function prepSubmit() {
-  const priced = getTieredUnitPrices(getRowsData());
   const items = [];
-  priced.forEach(r => {
-    if (r.name && r.qty > 0) {
-      items.push({ name: r.name, qty: r.qty, unit_price: r.unit, total: Math.round(r.qty*r.unit*100)/100 });
-    }
+  document.querySelectorAll('.item-row').forEach(row => {
+    const rc = row.id.replace('row','');
+    const name = (document.getElementById('rn'+rc)?.value || '').trim();
+    const qty = parseInt(document.getElementById('rq'+rc)?.value || 0);
+    const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
+    if (name && qty > 0) items.push({name, qty, unit_price: price, total: Math.round(qty*price*100)/100});
   });
   document.getElementById('items_json_field').value = JSON.stringify(items);
   // un-readonly grand_total and tax so they submit
@@ -3934,20 +3817,6 @@ ADMIN_BOOKING_HTML = """
   <span class="badge badge-{{ b.status }}">{{ b.status|upper }}</span>
   <div style="font-size:.8rem;color:#718096;margin-bottom:1rem">Received: {{ b.created_at }}</div>
 
-  {% if cust_change == 'ok' %}
-  <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:.65rem 1rem;margin-bottom:1rem;font-size:.88rem;color:#166534;font-weight:600">
-    ✓ Customer updated — this booking is now assigned to {{ b.full_name }}.
-  </div>
-  {% elif cust_change == 'fail' %}
-  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.65rem 1rem;margin-bottom:1rem;font-size:.88rem;color:#991b1b;font-weight:600">
-    ✗ Something went wrong updating the customer — the booking still shows the previous customer. Check the server logs, or try again.
-  </div>
-  {% elif cust_change == 'empty' %}
-  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.65rem 1rem;margin-bottom:1rem;font-size:.88rem;color:#92400e;font-weight:600">
-    ⚠ No customer was selected, so nothing was changed.
-  </div>
-  {% endif %}
-
   {% if b.status == 'accepted' %}
   <div class="payment-link-box">
     <div style="font-weight:700;color:#276749;margin-bottom:.4rem">Awaiting Deposit Payment</div>
@@ -4055,17 +3924,10 @@ ADMIN_BOOKING_HTML = """
   <div class="card">
     <h2 style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
       Customer
-      <span style="display:flex;gap:.5rem">
-        <button id="chg-cust-btn" type="button" onclick="openChangeCustomerModal()"
-                style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer"
-                title="Replace this booking's customer with a different one">
-          🔄 Change Customer
-        </button>
-        <button id="cust-edit-btn" onclick="custEditToggle(true)"
-                style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
-          ✏️ Edit
-        </button>
-      </span>
+      <button id="cust-edit-btn" onclick="custEditToggle(true)"
+              style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
+        ✏️ Edit
+      </button>
     </h2>
 
     <!-- READ-ONLY VIEW -->
@@ -5018,129 +4880,6 @@ Commit and push when done.
 })();
 </script>
 
-<!-- ── Change Customer Modal ── -->
-<div id="change-customer-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:white;border-radius:14px;padding:2rem;width:min(460px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h2 style="margin:0 0 .35rem;font-size:1.2rem;color:#1a202c">Change Customer</h2>
-    <p style="margin:0 0 1.1rem;font-size:.85rem;color:#718096">
-      Search for an existing customer to replace the name, company, email, phone, and address on this booking.
-      Event details, items, and totals are not affected.
-    </p>
-    <div style="position:relative">
-      <input id="chg-cust-search" type="text" placeholder="Type a customer's name…" autocomplete="off"
-             style="width:100%;box-sizing:border-box;border:2px solid #d1d5db;border-radius:8px;padding:.6rem .85rem;font-size:.95rem;color:#1a202c">
-      <ul id="chg-cust-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10000;background:white;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,.15);margin:4px 0 0;padding:0;list-style:none;max-height:240px;overflow-y:auto"></ul>
-    </div>
-    <p id="chg-cust-selected" style="display:none;margin:.85rem 0 0;font-size:.85rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:.6rem .85rem"></p>
-    <div style="display:flex;gap:.75rem;margin-top:1.5rem">
-      <button id="chg-cust-confirm" disabled style="flex:1;background:#9ca3af;color:white;border:none;border-radius:8px;padding:.7rem;font-size:.95rem;font-weight:700;cursor:not-allowed">
-        ✓ Assign to This Booking
-      </button>
-      <button type="button" onclick="closeChangeCustomerModal()"
-              style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:.7rem 1.25rem;font-size:.95rem;cursor:pointer">
-        Cancel
-      </button>
-    </div>
-  </div>
-</div>
-
-<form id="change-customer-form" method="POST" action="/admin/booking/{{ b.id }}/change-customer" style="display:none">
-  <input type="hidden" name="full_name" id="chg_full_name">
-  <input type="hidden" name="company_name" id="chg_company_name">
-  <input type="hidden" name="email" id="chg_email">
-  <input type="hidden" name="phone" id="chg_phone">
-  <input type="hidden" name="renter_street" id="chg_renter_street">
-  <input type="hidden" name="renter_city" id="chg_renter_city">
-  <input type="hidden" name="renter_state" id="chg_renter_state">
-  <input type="hidden" name="renter_zip" id="chg_renter_zip">
-</form>
-
-<script>
-(function() {
-  var modal      = document.getElementById('change-customer-modal');
-  var search     = document.getElementById('chg-cust-search');
-  var results    = document.getElementById('chg-cust-results');
-  var selected   = document.getElementById('chg-cust-selected');
-  var confirmBtn = document.getElementById('chg-cust-confirm');
-  var form       = document.getElementById('change-customer-form');
-  var debounce, pickedCustomer = null;
-
-  function resetSelection() {
-    pickedCustomer = null;
-    selected.style.display = 'none';
-    confirmBtn.disabled = true;
-    confirmBtn.style.background = '#9ca3af';
-    confirmBtn.style.cursor = 'not-allowed';
-  }
-
-  window.openChangeCustomerModal = function() {
-    modal.style.display = 'flex';
-    search.value = '';
-    results.style.display = 'none';
-    results.innerHTML = '';
-    resetSelection();
-    search.focus();
-  };
-  window.closeChangeCustomerModal = function() {
-    modal.style.display = 'none';
-  };
-
-  modal.addEventListener('click', function(e) {
-    if (e.target === modal) closeChangeCustomerModal();
-  });
-
-  search.addEventListener('input', function() {
-    clearTimeout(debounce);
-    var q = this.value.trim();
-    resetSelection();
-    if (q.length < 1) { results.style.display = 'none'; return; }
-    debounce = setTimeout(function() {
-      fetch('/admin/customer-search?q=' + encodeURIComponent(q))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          results.innerHTML = '';
-          if (!data.length) { results.style.display = 'none'; return; }
-          data.forEach(function(c) {
-            var li = document.createElement('li');
-            li.style.cssText = 'padding:.6rem .85rem;cursor:pointer;font-size:.9rem;border-bottom:1px solid #f1f5f9';
-            var addr = [c.renter_street, c.renter_city, c.renter_state].filter(Boolean).join(', ');
-            li.innerHTML = '<strong>' + c.full_name + '</strong>' +
-              (c.email ? ' <span style="color:#64748b;font-size:.8rem">— ' + c.email + '</span>' : '') +
-              (addr ? '<br><span style="color:#94a3b8;font-size:.78rem">' + addr + '</span>' : '');
-            li.addEventListener('mousedown', function(e) {
-              e.preventDefault();
-              pickedCustomer = c;
-              search.value = c.full_name;
-              results.style.display = 'none';
-              selected.textContent = '✓ Selected: ' + c.full_name + (c.email ? ' (' + c.email + ')' : '');
-              selected.style.display = 'block';
-              confirmBtn.disabled = false;
-              confirmBtn.style.background = '#16a34a';
-              confirmBtn.style.cursor = 'pointer';
-            });
-            results.appendChild(li);
-          });
-          results.style.display = 'block';
-        })
-        .catch(function() { results.style.display = 'none'; });
-    }, 250);
-  });
-
-  confirmBtn.addEventListener('click', function() {
-    if (!pickedCustomer || confirmBtn.disabled) return;
-    document.getElementById('chg_full_name').value      = pickedCustomer.full_name     || '';
-    document.getElementById('chg_company_name').value   = pickedCustomer.company_name  || '';
-    document.getElementById('chg_email').value          = pickedCustomer.email         || '';
-    document.getElementById('chg_phone').value          = pickedCustomer.phone         || '';
-    document.getElementById('chg_renter_street').value  = pickedCustomer.renter_street || '';
-    document.getElementById('chg_renter_city').value    = pickedCustomer.renter_city   || '';
-    document.getElementById('chg_renter_state').value   = pickedCustomer.renter_state  || '';
-    document.getElementById('chg_renter_zip').value     = pickedCustomer.renter_zip    || '';
-    form.submit();
-  });
-})();
-</script>
-
 </div>
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
@@ -5238,6 +4977,15 @@ def delivery_fee_check():
 
 @app.route("/submit", methods=["POST"])
 def submit():
+    import traceback as _tb_sub
+    try:
+        return _submit_inner()
+    except Exception as _sub_err:
+        _trace = _tb_sub.format_exc()
+        log.error(f"SUBMIT UNHANDLED ERROR: {_sub_err}\n{_trace}")
+        return f"<pre style='color:red;padding:2rem'>Booking submission error (please screenshot and report):\n\n{_trace}</pre>", 500
+
+def _submit_inner():
     f = request.form
 
     full_name        = f.get("full_name",        "").strip()
@@ -5280,8 +5028,38 @@ def submit():
         if qty > 0:
             _raw_items.append({"id": p["id"], "name": p["name"], "qty": qty, "base_price": float(p["price"])})
 
-    # Marquee tier pricing (shared helper — keeps this in sync with both admin routes)
-    order_items, subtotal = apply_marquee_tier_pricing(_raw_items)
+    # Marquee tier pricing (must match JS logic exactly)
+    def _is_ml(name): return bool(re.match(r'^marquee\s+[a-z]$', name.strip(), re.IGNORECASE))
+    def _is_mn(name): return bool(re.match(r'^marquee\s+#?\d', name.strip(), re.IGNORECASE))
+    _ML_TIERS = [(1,85),(2,160),(3,225),(4,285)]
+    _MN_TIERS = [(1,80),(2,150),(3,215),(4,275)]
+    def _ml_total(n):
+        for c,t in _ML_TIERS:
+            if c==n: return float(t)
+        return 285.0+(n-4)*55.0
+    def _mn_total(n):
+        for c,t in _MN_TIERS:
+            if c==n: return float(t)
+        return 275.0+(n-4)*55.0
+    ml_count = sum(i["qty"] for i in _raw_items if _is_ml(i["name"]))
+    mn_count = sum(i["qty"] for i in _raw_items if _is_mn(i["name"]))
+    ml_unit = (_ml_total(ml_count)/ml_count) if ml_count>0 else 0.0
+    mn_unit = (_mn_total(mn_count)/mn_count) if mn_count>0 else 0.0
+
+    order_items, subtotal = [], 0.0
+    for item in _raw_items:
+        name = item["name"]
+        qty  = item["qty"]
+        if _is_ml(name):
+            unit_price = ml_unit
+        elif _is_mn(name):
+            unit_price = mn_unit
+        else:
+            unit_price = item["base_price"]
+        line = round(qty * unit_price, 2)
+        subtotal += line
+        order_items.append({"id": item["id"], "name": name, "qty": qty,
+                             "unit_price": round(unit_price, 2), "total": line})
 
     # Stackable marquee fee
     stackable     = f.get("stackable", "no").strip().lower() == "yes"
@@ -5401,8 +5179,16 @@ def submit():
         "tax_rate": applied_tax_rate, "tax_amount": tax_amount, "tax_exempt": is_tax_exempt,
         "grand_total": grand_total, "notes": notes,
     }
-    send_owner_email(booking_data)
-    send_customer_email(booking_data)
+    try:
+        send_owner_email(booking_data)
+    except Exception as _oe:
+        import traceback as _tb2
+        log.error(f"send_owner_email error: {_oe}\n{_tb2.format_exc()}")
+    try:
+        send_customer_email(booking_data)
+    except Exception as _ce:
+        import traceback as _tb3
+        log.error(f"send_customer_email error: {_ce}\n{_tb3.format_exc()}")
 
     # ── Push notification to owner ───────────────────────────────────────────
     try:
@@ -6424,8 +6210,7 @@ def admin_booking(booking_id):
             products=get_products(), payment_links=get_payment_links(booking_id),
             matched_customer=matched_customer, weekend_residential=weekend_residential,
             booking_inv_issues=booking_inv_issues,
-            cal_bookings=cal_bookings,
-            cust_change=request.args.get("cust_change"))
+            cal_bookings=cal_bookings)
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
         return "Error rendering booking — please contact support.", 500
@@ -6863,24 +6648,16 @@ def new_booking():
     try:
         items_json_raw = f.get("items_json", "[]")
         try:
-            _submitted_items = json.loads(items_json_raw)
+            items = json.loads(items_json_raw)
         except Exception:
-            _submitted_items = []
-        # Recompute marquee tier pricing server-side (don't trust the client's
-        # naive qty*price subtotal) so admin-created bookings get the same
-        # 1/2/3/4/5+ discount schedule as the public booking form.
-        _raw_items = [
-            {"name": i.get("name", ""), "qty": int(i.get("qty") or 0),
-             "base_price": float(i.get("unit_price") or 0)}
-            for i in _submitted_items if i.get("name") and int(i.get("qty") or 0) > 0
-        ]
-        items, items_subtotal = apply_marquee_tier_pricing(_raw_items)
+            items = []
+        items_subtotal = float(f.get("items_subtotal") or 0)
         delivery_fee   = float(f.get("delivery_fee") or 0)
         tax_exempt     = f.get("tax_exempt", "0") == "1"
         tax_rate       = 0.0 if tax_exempt else 0.0635
         taxable        = items_subtotal + delivery_fee
         tax_amount     = 0.0 if tax_exempt else round(taxable * tax_rate, 2)
-        grand_total    = round(taxable + tax_amount, 2)
+        grand_total    = float(f.get("grand_total") or round(taxable + tax_amount, 2))
         amount_paid    = float(f.get("amount_paid") or 0)
         conn = get_db()
         if not conn:
@@ -6958,7 +6735,7 @@ def update_booking_items(booking_id):
 
     # Build product price map as fallback
     _prod_map = {p["name"].lower(): float(p.get("price") or 0) for p in get_products()}
-    _raw_items = []
+    items = []
     for name, qty, price in zip(names, qtys, prices):
         name = name.strip()
         if name:
@@ -6972,10 +6749,7 @@ def update_booking_items(booking_id):
                 up = 0
             if up == 0:
                 up = _prod_map.get(name.lower(), 0)
-            _raw_items.append({"name": name, "qty": q, "base_price": up})
-
-    # Marquee tier pricing (same schedule/logic as the public booking form)
-    items, items_subtotal = apply_marquee_tier_pricing(_raw_items)
+            items.append({"name": name, "qty": q, "unit_price": up, "total": round(up * q, 2)})
 
     # Exact time delivery & delivery fee
     exact_time = bool(request.form.get("exact_time_delivery"))
@@ -6984,7 +6758,8 @@ def update_booking_items(booking_id):
     except Exception:
         delivery_fee = 0.0
 
-    # Recalculate remaining totals (items_subtotal already computed via tier pricing above)
+    # Recalculate all totals
+    items_subtotal = round(sum(i["total"] for i in items), 2)
     exact_fee      = 175.0 if exact_time else 0.0
     pre_tax        = round(items_subtotal + delivery_fee + exact_fee, 2)
 
@@ -7140,58 +6915,6 @@ def update_booking_address(booking_id):
         except Exception as e:
             log.error(f"Update address error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
-
-
-@app.route("/admin/booking/<int:booking_id>/change-customer", methods=["POST"])
-@admin_required
-def change_booking_customer(booking_id):
-    """
-    Completely reassign this booking to a different customer — overwrites
-    name, company, email, phone, and address with the selected customer's
-    info. Event details, items, and totals are left untouched.
-    """
-    f = request.form
-    full_name = f.get("full_name", "").strip()
-    if not full_name:
-        return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="empty"))
-    conn = get_db()
-    if not conn:
-        log.error(f"Change customer error: no DB connection for booking #{booking_id}")
-        return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="fail"))
-    try:
-        cur = conn.cursor()
-        cur.execute("""
-            UPDATE bookings SET
-              full_name=%s, company_name=%s, email=%s, phone=%s,
-              renter_street=%s, renter_city=%s, renter_state=%s, renter_zip=%s
-            WHERE id=%s
-        """, (
-            full_name,
-            f.get("company_name","").strip() or None,
-            f.get("email","").strip() or None,
-            f.get("phone","").strip() or None,
-            f.get("renter_street","").strip() or None,
-            f.get("renter_city","").strip() or None,
-            f.get("renter_state","").strip() or None,
-            f.get("renter_zip","").strip() or None,
-            booking_id
-        ))
-        updated = cur.rowcount
-        conn.commit()
-        cur.close(); conn.close()
-        if updated:
-            log.info(f"Booking #{booking_id} reassigned to customer: {full_name}")
-            return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="ok"))
-        else:
-            log.error(f"Change customer: UPDATE matched 0 rows for booking #{booking_id}")
-            return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="fail"))
-    except Exception as e:
-        log.error(f"Change customer error for booking #{booking_id}: {e}")
-        try:
-            conn.close()
-        except Exception:
-            pass
-        return redirect(url_for("admin_booking", booking_id=booking_id, cust_change="fail"))
 
 
 @app.route("/admin/booking/<int:booking_id>/admin-notes", methods=["POST"])
@@ -8269,23 +7992,12 @@ ADMIN_ROUTE_HTML = """
   <div class="launch-strip">
     <div class="stop-count">{{ route_bookings|length }} {% if view == "pickup" %}pickup{% else %}delivery{% endif %}{{ 's' if route_bookings|length != 1 }} · {{ route_date }}</div>
     {% if addrs|length >= 1 %}
-    <div style="flex-basis:100%;display:flex;align-items:center;gap:1rem;margin-bottom:.35rem;font-size:.82rem;color:#374151;flex-wrap:wrap">
-      <span style="font-weight:600">Start from:</span>
-      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer">
-        <input type="radio" name="route_origin" value="depot" id="origin-depot" checked onchange="updateRouteLinks()"> 🏠 Depot
-      </label>
-      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer">
-        <input type="radio" name="route_origin" value="location" id="origin-location" onchange="updateRouteLinks()"> 📍 My Current Location
-      </label>
-      <span id="origin-status" style="font-size:.75rem;color:#9ca3af"></span>
-    </div>
-    {# Google Maps: depot → stop1 → ... → stopN (pickups also return to depot at the end) #}
-    {% set gurl = "https://www.google.com/maps/dir/" + depot_address|replace(" ","+") + "/" + (addrs|join("/"))|replace(" ", "+") + ("/" + depot_address|replace(" ","+") if view == "pickup" else "") %}
-    <a class="btn-launch btn-gmap" id="btn-gmap" href="{{ gurl }}" target="_blank">
+    {# Google Maps: depot → stop1 → ... → stopN #}
+    {% set gurl = "https://www.google.com/maps/dir/" + depot_address|replace(" ","+") + "/" + (addrs|join("/"))|replace(" ", "+") %}
+    <a class="btn-launch btn-gmap" href="{{ gurl }}" target="_blank">
       🗺 Start Route — Google Maps
     </a>
-    <a class="btn-launch btn-amap" id="btn-amap"
-       href="https://maps.apple.com/?saddr={{ depot_address|urlencode }}&daddr={{ (depot_address if view == 'pickup' else addrs[-1])|urlencode }}&dirflg=d" target="_blank">
+    <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ depot_address|urlencode }}&daddr={{ addrs[-1]|urlencode }}&dirflg=d" target="_blank">
       🗺 Start Route — Apple Maps
     </a>
     {% else %}
@@ -8293,7 +8005,7 @@ ADMIN_ROUTE_HTML = """
     {% endif %}
   </div>
 
-  {# ── Origin section: current location → depot (delivery) or current location → stop 1 (pickup, depot moves to the end) ── #}
+  {# ── Origin section: current location → depot ── #}
   <div id="origin-section">
     <!-- Current location card (shown when GPS available) -->
     <div id="curr-loc-card" style="display:none;flex-direction:row;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
@@ -8304,7 +8016,7 @@ ADMIN_ROUTE_HTML = """
         <strong>Your Location</strong> <span id="curr-loc-label" style="color:#6b7280;font-size:.75rem">(detecting…)</span>
       </div>
     </div>
-    <!-- leg: current → depot (delivery) / current → stop 1 (pickup) -->
+    <!-- leg: current → depot -->
     <div id="curr-to-depot-leg" style="display:none;flex-direction:row;align-items:center;gap:.6rem;padding:.3rem 0 .3rem 1rem">
       <div style="width:2rem;flex-shrink:0;display:flex;justify-content:center">
         <div style="width:2px;height:32px;background:#d1d5db"></div>
@@ -8313,8 +8025,7 @@ ADMIN_ROUTE_HTML = """
         <span class="leg-spin">&#9696;</span> Calculating…
       </a>
     </div>
-    {% if view != "pickup" %}
-    <!-- Depot card (delivery: depot is the starting point) -->
+    <!-- Depot card -->
     <div style="display:flex;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
       <div style="width:2rem;display:flex;justify-content:center;flex-direction:column;align-items:center;gap:.25rem">
         <div style="width:2rem;height:2rem;border-radius:50%;background:#6b7280;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#127968;</div>
@@ -8324,7 +8035,6 @@ ADMIN_ROUTE_HTML = """
         <strong style="color:#374151">Depot:</strong> {{ depot_address }}
       </div>
     </div>
-    {% endif %}
   </div>
   <div style="display:flex;margin-left:.95rem"><div style="width:2px;height:24px;background:#d1d5db"></div></div>
 
@@ -8390,33 +8100,6 @@ ADMIN_ROUTE_HTML = """
     </div>
   </div>
   {% endfor %}
-
-  {% if view == "pickup" %}
-  {# Return leg: last stop → Depot (pickups end back at the Depot) #}
-  <div class="leg" id="leg-to-depot">
-    <div style="width:2rem;flex-shrink:0;display:flex;justify-content:center">
-      <div style="width:2px;height:36px;background:#d1d5db"></div>
-    </div>
-    {% if addrs %}
-    <a class="leg-link" id="leg-link-to-depot" target="_blank"
-       href="https://www.google.com/maps/dir/{{ addrs[-1]|urlencode }}/{{ depot_address|urlencode }}">
-      <span class="leg-spin">&#9696;</span> Calculating…
-    </a>
-    {% else %}
-    <span style="font-size:.72rem;color:#9ca3af">— add event addresses for distance —</span>
-    {% endif %}
-  </div>
-  <!-- Depot card (pickup: depot is the final drop-off) -->
-  <div style="display:flex;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
-    <div style="width:2rem;display:flex;justify-content:center;flex-direction:column;align-items:center;gap:.25rem">
-      <div style="width:2rem;height:2rem;border-radius:50%;background:#6b7280;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#127968;</div>
-      <div class="stop-eta" id="eta-depot" style="font-size:.62rem"></div>
-    </div>
-    <div style="font-size:.82rem;color:#6b7280;font-weight:500">
-      <strong style="color:#374151">Depot:</strong> {{ depot_address }}
-    </div>
-  </div>
-  {% endif %}
   {% else %}
   <div class="empty">{% if view == "pickup" %}No pickups scheduled for {{ route_date }}.{% else %}No deliveries scheduled for {{ route_date }}.{% endif %}</div>
   {% endif %}
@@ -8429,47 +8112,6 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 /* ── Distance/time between stops via Nominatim + OSRM ── */
 const STOPS = {{ stops_json|safe }};
 const DEPOT = {{ depot_address|tojson }};
-const VIEW = {{ view|tojson }};
-
-/* ── Start-from toggle: Depot vs current location ── */
-function buildGoogleUrl(originEncoded){
-  const addrs = STOPS.map(s=>s.addr).filter(Boolean).map(a=>encodeURIComponent(a));
-  const parts = [originEncoded, ...addrs];
-  if(VIEW === 'pickup') parts.push(encodeURIComponent(DEPOT)); // round trip: end back at depot
-  return 'https://www.google.com/maps/dir/' + parts.join('/');
-}
-function buildAppleUrl(saddrEncoded){
-  const addrs = STOPS.map(s=>s.addr).filter(Boolean);
-  const daddr = (VIEW === 'pickup') ? DEPOT : (addrs.length ? addrs[addrs.length-1] : DEPOT);
-  return 'https://maps.apple.com/?saddr='+saddrEncoded+'&daddr='+encodeURIComponent(daddr)+'&dirflg=d';
-}
-async function updateRouteLinks(){
-  const locRadio = document.getElementById('origin-location');
-  const gmapBtn = document.getElementById('btn-gmap');
-  const amapBtn = document.getElementById('btn-amap');
-  const statusEl = document.getElementById('origin-status');
-  if(!gmapBtn || !amapBtn || !locRadio) return; // no addresses on this page
-  if(locRadio.checked){
-    if(statusEl) statusEl.textContent = 'Locating…';
-    try{
-      const pos = await getCurrentPos();
-      const originStr = `${pos.lat},${pos.lon}`;
-      gmapBtn.href = buildGoogleUrl(originStr);
-      amapBtn.href = buildAppleUrl(originStr);
-      if(statusEl) statusEl.textContent = '📍 Using your current location';
-    }catch(e){
-      if(statusEl) statusEl.textContent = '⚠ Could not get your location — using Depot instead';
-      document.getElementById('origin-depot').checked = true;
-      gmapBtn.href = buildGoogleUrl(encodeURIComponent(DEPOT));
-      amapBtn.href = buildAppleUrl(encodeURIComponent(DEPOT));
-    }
-  } else {
-    if(statusEl) statusEl.textContent = '';
-    gmapBtn.href = buildGoogleUrl(encodeURIComponent(DEPOT));
-    amapBtn.href = buildAppleUrl(encodeURIComponent(DEPOT));
-  }
-}
-updateRouteLinks();
 
 async function geocode(addr){
   const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(addr)+'&format=json&limit=1&countrycodes=us';
@@ -8526,114 +8168,63 @@ async function loadDistances(){
   }
 
   let cumSecs=0;
-  const depotCoord=coords[DEPOT];
-  const stop1Coord=STOPS[0]&&coords[STOPS[0].addr];
+  let chainStart=coords[DEPOT]; // default: start chain from depot
 
-  // Try geolocation for a "Your Location" starting card
-  let originCoord=null;
+  // Try geolocation → current → depot leg
   try{
-    originCoord=await getCurrentPos();
+    const geoPos=await getCurrentPos();
+    // Show current location card
     document.getElementById('curr-loc-card').style.display='flex';
-    document.getElementById('curr-loc-label').textContent=`${originCoord.lat.toFixed(4)}, ${originCoord.lon.toFixed(4)}`;
+    document.getElementById('curr-loc-label').textContent=`${geoPos.lat.toFixed(4)}, ${geoPos.lon.toFixed(4)}`;
     document.getElementById('curr-to-depot-leg').style.display='flex';
+    const depotCoord=coords[DEPOT];
+    if(depotCoord){
+      const info=await getDrivingInfo(geoPos,depotCoord);
+      if(info){
+        const ctdLink=document.getElementById('curr-to-depot-link');
+        ctdLink.href=`https://www.google.com/maps/dir/${geoPos.lat},${geoPos.lon}/${encodeURIComponent(DEPOT)}`;
+        ctdLink.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+        cumSecs+=info.rawSecs;
+        const etaDepot=new Date(startTime.getTime()+cumSecs*1000);
+        const ed=document.getElementById('eta-depot');
+        if(ed){ed.textContent=fmtTime(etaDepot);ed.classList.add('show');}
+      }
+    }
+    chainStart=geoPos; // recalculate depot→stop1 from geoPos for cumulative ETAs
+    // reset cumSecs to depotArrival then add depot→stop1
+    // actually keep cumSecs as-is (includes drive to depot)
   }catch(e){
-    // Geolocation denied or unavailable — silent fallback, chain starts at depot/stop1
+    // Geolocation denied or unavailable — silent fallback to depot start
   }
 
-  if(VIEW === 'pickup'){
-    // Chain: [current location →] stop 1 → stop 2 → ... → Depot (last, round trip return)
-    if(originCoord && stop1Coord){
-      try{
-        const info=await getDrivingInfo(originCoord,stop1Coord);
-        if(info){
-          const ctdLink=document.getElementById('curr-to-depot-link');
-          if(ctdLink){
-            ctdLink.href=`https://www.google.com/maps/dir/${originCoord.lat},${originCoord.lon}/${encodeURIComponent(STOPS[0].addr)}`;
-            ctdLink.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-          }
-          cumSecs+=info.rawSecs;
-          setEta(1,new Date(startTime.getTime()+cumSecs*1000));
-        }
-      }catch(e){}
-    }
+  // Leg: (depot or current) → stop 1
+  const depotCoord=coords[DEPOT];
+  const stop1Coord=STOPS[0]&&coords[STOPS[0].addr];
+  if(depotCoord&&stop1Coord){
+    try{
+      const info=await getDrivingInfo(depotCoord,stop1Coord);
+      if(info){
+        cumSecs+=info.rawSecs;
+        setEta(1,new Date(startTime.getTime()+cumSecs*1000));
+      }
+    }catch(e){}
+  }
 
-    // Legs between stops
-    for(let i=1;i<STOPS.length;i++){
-      const el=document.getElementById('leg-link-'+i);
-      const fromCoord=coords[STOPS[i-1].addr], toCoord=coords[STOPS[i].addr];
-      if(!fromCoord||!toCoord){if(el)el.innerHTML='⇕ Open in Maps';continue;}
-      try{
-        const info=await getDrivingInfo(fromCoord,toCoord);
-        if(info){
-          if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-          cumSecs+=info.rawSecs;
-          setEta(i+1,new Date(startTime.getTime()+cumSecs*1000));
-        } else {
-          if(el) el.innerHTML='⇕ Open in Maps';
-        }
-      }catch(e){if(el)el.innerHTML='⇕ Open in Maps';}
-    }
-
-    // Final leg: last stop → Depot (drop-off / return)
-    const lastStop=STOPS[STOPS.length-1];
-    const lastCoord=lastStop&&coords[lastStop.addr];
-    const toDepotEl=document.getElementById('leg-link-to-depot');
-    if(lastCoord&&depotCoord){
-      try{
-        const info=await getDrivingInfo(lastCoord,depotCoord);
-        if(info){
-          if(toDepotEl) toDepotEl.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-          cumSecs+=info.rawSecs;
-          setEta('depot',new Date(startTime.getTime()+cumSecs*1000));
-        } else if(toDepotEl){
-          toDepotEl.innerHTML='⇕ Open in Maps';
-        }
-      }catch(e){if(toDepotEl) toDepotEl.innerHTML='⇕ Open in Maps';}
-    } else if(toDepotEl){
-      toDepotEl.innerHTML='⇕ Open in Maps';
-    }
-  } else {
-    // DELIVERY (unchanged): [current location →] Depot → stop 1 → stop 2 → ...
-    if(originCoord && depotCoord){
-      try{
-        const info=await getDrivingInfo(originCoord,depotCoord);
-        if(info){
-          const ctdLink=document.getElementById('curr-to-depot-link');
-          if(ctdLink){
-            ctdLink.href=`https://www.google.com/maps/dir/${originCoord.lat},${originCoord.lon}/${encodeURIComponent(DEPOT)}`;
-            ctdLink.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-          }
-          cumSecs+=info.rawSecs;
-          setEta('depot',new Date(startTime.getTime()+cumSecs*1000));
-        }
-      }catch(e){}
-    }
-
-    if(depotCoord&&stop1Coord){
-      try{
-        const info=await getDrivingInfo(depotCoord,stop1Coord);
-        if(info){
-          cumSecs+=info.rawSecs;
-          setEta(1,new Date(startTime.getTime()+cumSecs*1000));
-        }
-      }catch(e){}
-    }
-
-    for(let i=1;i<STOPS.length;i++){
-      const el=document.getElementById('leg-link-'+i);
-      const fromCoord=coords[STOPS[i-1].addr], toCoord=coords[STOPS[i].addr];
-      if(!fromCoord||!toCoord){if(el)el.innerHTML='⇕ Open in Maps';continue;}
-      try{
-        const info=await getDrivingInfo(fromCoord,toCoord);
-        if(info){
-          if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-          cumSecs+=info.rawSecs;
-          setEta(i+1,new Date(startTime.getTime()+cumSecs*1000));
-        } else {
-          if(el) el.innerHTML='⇕ Open in Maps';
-        }
-      }catch(e){if(el)el.innerHTML='⇕ Open in Maps';}
-    }
+  // Legs between stops
+  for(let i=1;i<STOPS.length;i++){
+    const el=document.getElementById('leg-link-'+i);
+    const fromCoord=coords[STOPS[i-1].addr], toCoord=coords[STOPS[i].addr];
+    if(!fromCoord||!toCoord){if(el)el.innerHTML='⇕ Open in Maps';continue;}
+    try{
+      const info=await getDrivingInfo(fromCoord,toCoord);
+      if(info){
+        if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+        cumSecs+=info.rawSecs;
+        setEta(i+1,new Date(startTime.getTime()+cumSecs*1000));
+      } else {
+        if(el) el.innerHTML='⇕ Open in Maps';
+      }
+    }catch(e){if(el)el.innerHTML='⇕ Open in Maps';}
   }
 }
 
@@ -9324,8 +8915,6 @@ ADMIN_CUSTOMERS_HTML = """
           <td>
             <div class="action-btns">
               <a href="/admin/customers/{{ c.id }}/edit" class="btn btn-edit">Edit</a>
-              <button type="button" class="btn btn-outline"
-                      onclick="openMergeModal({{ c.id }}, {{ c.full_name|tojson }})">⇄ Merge</button>
               <form method="POST" action="/admin/customers/{{ c.id }}/delete" style="display:inline">
                 <button class="btn btn-danger" onclick="return confirm('Remove {{ c.full_name }}?')">Remove</button>
               </form>
@@ -9354,122 +8943,6 @@ function filterCustomers(){
     row.style.display=(name.includes(q)||email.includes(q))?'':'none';
   });
 }
-</script>
-
-<!-- ── Merge Customers Modal ── -->
-<div id="merge-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:white;border-radius:14px;padding:2rem;width:min(460px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h2 style="margin:0 0 .35rem;font-size:1.2rem;color:#1a202c">Merge Customer</h2>
-    <p id="merge-source-label" style="margin:0 0 1.1rem;font-size:.85rem;color:#718096"></p>
-    <p style="margin:0 0 .5rem;font-size:.8rem;color:#9ca3af">
-      All of this customer's bookings will be moved onto the customer you pick below,
-      any blank fields on that customer will be filled in from this one, and this
-      record will then be deleted. This can't be undone.
-    </p>
-    <div style="position:relative">
-      <input id="merge-search" type="text" placeholder="Search for the customer to merge into…" autocomplete="off"
-             style="width:100%;box-sizing:border-box;border:2px solid #d1d5db;border-radius:8px;padding:.6rem .85rem;font-size:.95rem;color:#1a202c">
-      <ul id="merge-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10000;background:white;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,.15);margin:4px 0 0;padding:0;list-style:none;max-height:220px;overflow-y:auto"></ul>
-    </div>
-    <p id="merge-selected" style="display:none;margin:.85rem 0 0;font-size:.85rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:.6rem .85rem"></p>
-    <div style="display:flex;gap:.75rem;margin-top:1.5rem">
-      <button id="merge-confirm" disabled style="flex:1;background:#9ca3af;color:white;border:none;border-radius:8px;padding:.7rem;font-size:.95rem;font-weight:700;cursor:not-allowed">
-        ⚠ Merge — This Can't Be Undone
-      </button>
-      <button type="button" onclick="closeMergeModal()"
-              style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:.7rem 1.25rem;font-size:.95rem;cursor:pointer">
-        Cancel
-      </button>
-    </div>
-  </div>
-</div>
-
-<form id="merge-form" method="POST" action="" style="display:none">
-  <input type="hidden" name="target_id" id="merge_target_id">
-</form>
-
-<script>
-(function() {
-  var modal      = document.getElementById('merge-modal');
-  var sourceLabel= document.getElementById('merge-source-label');
-  var search     = document.getElementById('merge-search');
-  var results    = document.getElementById('merge-results');
-  var selected   = document.getElementById('merge-selected');
-  var confirmBtn = document.getElementById('merge-confirm');
-  var form       = document.getElementById('merge-form');
-  var debounce, sourceId = null, pickedTarget = null;
-
-  function resetSelection() {
-    pickedTarget = null;
-    selected.style.display = 'none';
-    confirmBtn.disabled = true;
-    confirmBtn.style.background = '#9ca3af';
-    confirmBtn.style.cursor = 'not-allowed';
-  }
-
-  window.openMergeModal = function(cid, fullName) {
-    sourceId = cid;
-    sourceLabel.textContent = 'Merging "' + fullName + '" into another customer:';
-    form.action = '/admin/customers/' + cid + '/merge';
-    modal.style.display = 'flex';
-    search.value = '';
-    results.style.display = 'none';
-    results.innerHTML = '';
-    resetSelection();
-    search.focus();
-  };
-  window.closeMergeModal = function() {
-    modal.style.display = 'none';
-  };
-
-  modal.addEventListener('click', function(e) {
-    if (e.target === modal) closeMergeModal();
-  });
-
-  search.addEventListener('input', function() {
-    clearTimeout(debounce);
-    var q = this.value.trim();
-    resetSelection();
-    if (q.length < 1) { results.style.display = 'none'; return; }
-    debounce = setTimeout(function() {
-      fetch('/admin/customers/search-with-id?q=' + encodeURIComponent(q) + '&exclude=' + sourceId)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          results.innerHTML = '';
-          if (!data.length) { results.style.display = 'none'; return; }
-          data.forEach(function(c) {
-            var li = document.createElement('li');
-            li.style.cssText = 'padding:.6rem .85rem;cursor:pointer;font-size:.9rem;border-bottom:1px solid #f1f5f9';
-            var loc = [c.city, c.state].filter(Boolean).join(', ');
-            li.innerHTML = '<strong>' + c.full_name + '</strong>' +
-              (c.email ? ' <span style="color:#64748b;font-size:.8rem">— ' + c.email + '</span>' : '') +
-              (loc ? '<br><span style="color:#94a3b8;font-size:.78rem">' + loc + '</span>' : '');
-            li.addEventListener('mousedown', function(e) {
-              e.preventDefault();
-              pickedTarget = c;
-              search.value = c.full_name;
-              results.style.display = 'none';
-              selected.textContent = '✓ Will merge into: ' + c.full_name + (c.email ? ' (' + c.email + ')' : '');
-              selected.style.display = 'block';
-              confirmBtn.disabled = false;
-              confirmBtn.style.background = '#dc2626';
-              confirmBtn.style.cursor = 'pointer';
-            });
-            results.appendChild(li);
-          });
-          results.style.display = 'block';
-        })
-        .catch(function() { results.style.display = 'none'; });
-    }, 250);
-  });
-
-  confirmBtn.addEventListener('click', function() {
-    if (!pickedTarget || confirmBtn.disabled) return;
-    if (!confirm('Merge this customer into "' + pickedTarget.full_name + '"? This cannot be undone.')) return;
-    document.getElementById('merge_target_id').value = pickedTarget.id;
-    form.submit();
-  });
-})();
 </script>
 </div>
 <script>
@@ -10099,107 +9572,6 @@ def delete_customer(cid):
         except Exception as e:
             log.error(f"delete_customer error: {e}")
     return redirect(url_for("admin_customers", flash_ok="Customer removed"))
-
-
-@app.route("/admin/customers/search-with-id")
-@admin_required
-def customer_search_with_id():
-    """
-    Like /admin/customer-search, but only searches the customers table
-    directly and includes each match's real id — needed for the Merge
-    Customers picker, which has to name an exact target row to merge into.
-    """
-    q = request.args.get("q", "").strip()
-    exclude_id = request.args.get("exclude", type=int)
-    if len(q) < 1:
-        return jsonify([])
-    conn = get_db()
-    if not conn:
-        return jsonify([])
-    try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
-            SELECT id, full_name, email, phone, company_name, city, state
-            FROM customers
-            WHERE full_name ILIKE %s
-              AND full_name IS NOT NULL AND TRIM(full_name) != ''
-            ORDER BY full_name LIMIT 20
-        """, (f"%{q}%",))
-        rows = [dict(r) for r in cur.fetchall()]
-        cur.close(); conn.close()
-        if exclude_id:
-            rows = [r for r in rows if r["id"] != exclude_id]
-        return jsonify(rows)
-    except Exception as e:
-        log.error(f"customer_search_with_id error: {e}")
-        return jsonify([])
-
-
-@app.route("/admin/customers/<int:cid>/merge", methods=["POST"])
-@admin_required
-def merge_customer(cid):
-    """
-    Merge customer #cid into another existing customer (the "keep" record):
-    every booking currently filed under #cid's email gets reassigned to the
-    keep record's email, any blank fields on the keep record get filled in
-    from #cid (without overwriting values it already has), and #cid is then
-    deleted. This is an explicit, admin-triggered action — not an automatic
-    migration — precisely because auto-merging/auto-syncing customer data on
-    every deploy is what caused the earlier data-loss bug.
-    """
-    target_id = request.form.get("target_id", type=int)
-    if not target_id or target_id == cid:
-        return redirect(url_for("admin_customers", flash_err="Pick a different customer to merge into"))
-    conn = get_db()
-    if not conn:
-        return redirect(url_for("admin_customers", flash_err="Database unavailable"))
-    try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cur.execute("SELECT * FROM customers WHERE id=%s", (cid,))
-        source = cur.fetchone()
-        cur.execute("SELECT * FROM customers WHERE id=%s", (target_id,))
-        target = cur.fetchone()
-        if not source or not target:
-            cur.close(); conn.close()
-            return redirect(url_for("admin_customers", flash_err="Customer not found"))
-        source = dict(source); target = dict(target)
-
-        # Reassign every booking currently filed under the source's email to
-        # the target's email, so its order history moves over.
-        if source.get("email"):
-            cur2 = conn.cursor()
-            cur2.execute("UPDATE bookings SET email=%s WHERE LOWER(email)=LOWER(%s)",
-                         (target["email"], source["email"]))
-            cur2.close()
-
-        # Fill in any blank fields on the target from the source — never
-        # overwrite a field the target already has a value for.
-        fill_fields = ["company_name", "phone", "street", "street2", "city", "state", "zip", "notes"]
-        updates, params = [], []
-        for field in fill_fields:
-            if not target.get(field) and source.get(field):
-                updates.append(f"{field}=%s")
-                params.append(source[field])
-        if updates:
-            cur3 = conn.cursor()
-            cur3.execute(f"UPDATE customers SET {', '.join(updates)} WHERE id=%s", (*params, target_id))
-            cur3.close()
-
-        cur4 = conn.cursor()
-        cur4.execute("DELETE FROM customers WHERE id=%s", (cid,))
-        cur4.close()
-
-        conn.commit()
-        cur.close(); conn.close()
-        log.info(f"Merged customer #{cid} ({source.get('email')}) into #{target_id} ({target.get('email')})")
-        return redirect(url_for("admin_customers", flash_ok=f"Merged into {target['full_name']}"))
-    except Exception as e:
-        log.error(f"merge_customer error: {e}")
-        try:
-            conn.close()
-        except Exception:
-            pass
-        return redirect(url_for("admin_customers", flash_err="Error merging customers"))
 
 
 @app.route("/admin/customers/import", methods=["GET", "POST"])
