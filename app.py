@@ -8293,7 +8293,7 @@ ADMIN_ROUTE_HTML = """
     {% endif %}
   </div>
 
-  {# ── Origin section: current location → depot ── #}
+  {# ── Origin section: current location → depot (delivery) or current location → stop 1 (pickup, depot moves to the end) ── #}
   <div id="origin-section">
     <!-- Current location card (shown when GPS available) -->
     <div id="curr-loc-card" style="display:none;flex-direction:row;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
@@ -8304,7 +8304,7 @@ ADMIN_ROUTE_HTML = """
         <strong>Your Location</strong> <span id="curr-loc-label" style="color:#6b7280;font-size:.75rem">(detecting…)</span>
       </div>
     </div>
-    <!-- leg: current → depot -->
+    <!-- leg: current → depot (delivery) / current → stop 1 (pickup) -->
     <div id="curr-to-depot-leg" style="display:none;flex-direction:row;align-items:center;gap:.6rem;padding:.3rem 0 .3rem 1rem">
       <div style="width:2rem;flex-shrink:0;display:flex;justify-content:center">
         <div style="width:2px;height:32px;background:#d1d5db"></div>
@@ -8313,7 +8313,8 @@ ADMIN_ROUTE_HTML = """
         <span class="leg-spin">&#9696;</span> Calculating…
       </a>
     </div>
-    <!-- Depot card -->
+    {% if view != "pickup" %}
+    <!-- Depot card (delivery: depot is the starting point) -->
     <div style="display:flex;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
       <div style="width:2rem;display:flex;justify-content:center;flex-direction:column;align-items:center;gap:.25rem">
         <div style="width:2rem;height:2rem;border-radius:50%;background:#6b7280;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#127968;</div>
@@ -8323,6 +8324,7 @@ ADMIN_ROUTE_HTML = """
         <strong style="color:#374151">Depot:</strong> {{ depot_address }}
       </div>
     </div>
+    {% endif %}
   </div>
   <div style="display:flex;margin-left:.95rem"><div style="width:2px;height:24px;background:#d1d5db"></div></div>
 
@@ -8388,6 +8390,33 @@ ADMIN_ROUTE_HTML = """
     </div>
   </div>
   {% endfor %}
+
+  {% if view == "pickup" %}
+  {# Return leg: last stop → Depot (pickups end back at the Depot) #}
+  <div class="leg" id="leg-to-depot">
+    <div style="width:2rem;flex-shrink:0;display:flex;justify-content:center">
+      <div style="width:2px;height:36px;background:#d1d5db"></div>
+    </div>
+    {% if addrs %}
+    <a class="leg-link" id="leg-link-to-depot" target="_blank"
+       href="https://www.google.com/maps/dir/{{ addrs[-1]|urlencode }}/{{ depot_address|urlencode }}">
+      <span class="leg-spin">&#9696;</span> Calculating…
+    </a>
+    {% else %}
+    <span style="font-size:.72rem;color:#9ca3af">— add event addresses for distance —</span>
+    {% endif %}
+  </div>
+  <!-- Depot card (pickup: depot is the final drop-off) -->
+  <div style="display:flex;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
+    <div style="width:2rem;display:flex;justify-content:center;flex-direction:column;align-items:center;gap:.25rem">
+      <div style="width:2rem;height:2rem;border-radius:50%;background:#6b7280;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#127968;</div>
+      <div class="stop-eta" id="eta-depot" style="font-size:.62rem"></div>
+    </div>
+    <div style="font-size:.82rem;color:#6b7280;font-weight:500">
+      <strong style="color:#374151">Depot:</strong> {{ depot_address }}
+    </div>
+  </div>
+  {% endif %}
   {% else %}
   <div class="empty">{% if view == "pickup" %}No pickups scheduled for {{ route_date }}.{% else %}No deliveries scheduled for {{ route_date }}.{% endif %}</div>
   {% endif %}
@@ -8497,63 +8526,114 @@ async function loadDistances(){
   }
 
   let cumSecs=0;
-  let chainStart=coords[DEPOT]; // default: start chain from depot
-
-  // Try geolocation → current → depot leg
-  try{
-    const geoPos=await getCurrentPos();
-    // Show current location card
-    document.getElementById('curr-loc-card').style.display='flex';
-    document.getElementById('curr-loc-label').textContent=`${geoPos.lat.toFixed(4)}, ${geoPos.lon.toFixed(4)}`;
-    document.getElementById('curr-to-depot-leg').style.display='flex';
-    const depotCoord=coords[DEPOT];
-    if(depotCoord){
-      const info=await getDrivingInfo(geoPos,depotCoord);
-      if(info){
-        const ctdLink=document.getElementById('curr-to-depot-link');
-        ctdLink.href=`https://www.google.com/maps/dir/${geoPos.lat},${geoPos.lon}/${encodeURIComponent(DEPOT)}`;
-        ctdLink.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-        cumSecs+=info.rawSecs;
-        const etaDepot=new Date(startTime.getTime()+cumSecs*1000);
-        const ed=document.getElementById('eta-depot');
-        if(ed){ed.textContent=fmtTime(etaDepot);ed.classList.add('show');}
-      }
-    }
-    chainStart=geoPos; // recalculate depot→stop1 from geoPos for cumulative ETAs
-    // reset cumSecs to depotArrival then add depot→stop1
-    // actually keep cumSecs as-is (includes drive to depot)
-  }catch(e){
-    // Geolocation denied or unavailable — silent fallback to depot start
-  }
-
-  // Leg: (depot or current) → stop 1
   const depotCoord=coords[DEPOT];
   const stop1Coord=STOPS[0]&&coords[STOPS[0].addr];
-  if(depotCoord&&stop1Coord){
-    try{
-      const info=await getDrivingInfo(depotCoord,stop1Coord);
-      if(info){
-        cumSecs+=info.rawSecs;
-        setEta(1,new Date(startTime.getTime()+cumSecs*1000));
-      }
-    }catch(e){}
+
+  // Try geolocation for a "Your Location" starting card
+  let originCoord=null;
+  try{
+    originCoord=await getCurrentPos();
+    document.getElementById('curr-loc-card').style.display='flex';
+    document.getElementById('curr-loc-label').textContent=`${originCoord.lat.toFixed(4)}, ${originCoord.lon.toFixed(4)}`;
+    document.getElementById('curr-to-depot-leg').style.display='flex';
+  }catch(e){
+    // Geolocation denied or unavailable — silent fallback, chain starts at depot/stop1
   }
 
-  // Legs between stops
-  for(let i=1;i<STOPS.length;i++){
-    const el=document.getElementById('leg-link-'+i);
-    const fromCoord=coords[STOPS[i-1].addr], toCoord=coords[STOPS[i].addr];
-    if(!fromCoord||!toCoord){if(el)el.innerHTML='⇕ Open in Maps';continue;}
-    try{
-      const info=await getDrivingInfo(fromCoord,toCoord);
-      if(info){
-        if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-        cumSecs+=info.rawSecs;
-        setEta(i+1,new Date(startTime.getTime()+cumSecs*1000));
-      } else {
-        if(el) el.innerHTML='⇕ Open in Maps';
-      }
-    }catch(e){if(el)el.innerHTML='⇕ Open in Maps';}
+  if(VIEW === 'pickup'){
+    // Chain: [current location →] stop 1 → stop 2 → ... → Depot (last, round trip return)
+    if(originCoord && stop1Coord){
+      try{
+        const info=await getDrivingInfo(originCoord,stop1Coord);
+        if(info){
+          const ctdLink=document.getElementById('curr-to-depot-link');
+          if(ctdLink){
+            ctdLink.href=`https://www.google.com/maps/dir/${originCoord.lat},${originCoord.lon}/${encodeURIComponent(STOPS[0].addr)}`;
+            ctdLink.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+          }
+          cumSecs+=info.rawSecs;
+          setEta(1,new Date(startTime.getTime()+cumSecs*1000));
+        }
+      }catch(e){}
+    }
+
+    // Legs between stops
+    for(let i=1;i<STOPS.length;i++){
+      const el=document.getElementById('leg-link-'+i);
+      const fromCoord=coords[STOPS[i-1].addr], toCoord=coords[STOPS[i].addr];
+      if(!fromCoord||!toCoord){if(el)el.innerHTML='⇕ Open in Maps';continue;}
+      try{
+        const info=await getDrivingInfo(fromCoord,toCoord);
+        if(info){
+          if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+          cumSecs+=info.rawSecs;
+          setEta(i+1,new Date(startTime.getTime()+cumSecs*1000));
+        } else {
+          if(el) el.innerHTML='⇕ Open in Maps';
+        }
+      }catch(e){if(el)el.innerHTML='⇕ Open in Maps';}
+    }
+
+    // Final leg: last stop → Depot (drop-off / return)
+    const lastStop=STOPS[STOPS.length-1];
+    const lastCoord=lastStop&&coords[lastStop.addr];
+    const toDepotEl=document.getElementById('leg-link-to-depot');
+    if(lastCoord&&depotCoord){
+      try{
+        const info=await getDrivingInfo(lastCoord,depotCoord);
+        if(info){
+          if(toDepotEl) toDepotEl.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+          cumSecs+=info.rawSecs;
+          setEta('depot',new Date(startTime.getTime()+cumSecs*1000));
+        } else if(toDepotEl){
+          toDepotEl.innerHTML='⇕ Open in Maps';
+        }
+      }catch(e){if(toDepotEl) toDepotEl.innerHTML='⇕ Open in Maps';}
+    } else if(toDepotEl){
+      toDepotEl.innerHTML='⇕ Open in Maps';
+    }
+  } else {
+    // DELIVERY (unchanged): [current location →] Depot → stop 1 → stop 2 → ...
+    if(originCoord && depotCoord){
+      try{
+        const info=await getDrivingInfo(originCoord,depotCoord);
+        if(info){
+          const ctdLink=document.getElementById('curr-to-depot-link');
+          if(ctdLink){
+            ctdLink.href=`https://www.google.com/maps/dir/${originCoord.lat},${originCoord.lon}/${encodeURIComponent(DEPOT)}`;
+            ctdLink.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+          }
+          cumSecs+=info.rawSecs;
+          setEta('depot',new Date(startTime.getTime()+cumSecs*1000));
+        }
+      }catch(e){}
+    }
+
+    if(depotCoord&&stop1Coord){
+      try{
+        const info=await getDrivingInfo(depotCoord,stop1Coord);
+        if(info){
+          cumSecs+=info.rawSecs;
+          setEta(1,new Date(startTime.getTime()+cumSecs*1000));
+        }
+      }catch(e){}
+    }
+
+    for(let i=1;i<STOPS.length;i++){
+      const el=document.getElementById('leg-link-'+i);
+      const fromCoord=coords[STOPS[i-1].addr], toCoord=coords[STOPS[i].addr];
+      if(!fromCoord||!toCoord){if(el)el.innerHTML='⇕ Open in Maps';continue;}
+      try{
+        const info=await getDrivingInfo(fromCoord,toCoord);
+        if(info){
+          if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
+          cumSecs+=info.rawSecs;
+          setEta(i+1,new Date(startTime.getTime()+cumSecs*1000));
+        } else {
+          if(el) el.innerHTML='⇕ Open in Maps';
+        }
+      }catch(e){if(el)el.innerHTML='⇕ Open in Maps';}
+    }
   }
 }
 
