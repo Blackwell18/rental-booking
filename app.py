@@ -9192,6 +9192,8 @@ ADMIN_CUSTOMERS_HTML = """
           <td>
             <div class="action-btns">
               <a href="/admin/customers/{{ c.id }}/edit" class="btn btn-edit">Edit</a>
+              <button type="button" class="btn btn-outline"
+                      onclick="openMergeModal({{ c.id }}, {{ c.full_name|tojson }})">⇄ Merge</button>
               <form method="POST" action="/admin/customers/{{ c.id }}/delete" style="display:inline">
                 <button class="btn btn-danger" onclick="return confirm('Remove {{ c.full_name }}?')">Remove</button>
               </form>
@@ -9220,6 +9222,122 @@ function filterCustomers(){
     row.style.display=(name.includes(q)||email.includes(q))?'':'none';
   });
 }
+</script>
+
+<!-- ── Merge Customers Modal ── -->
+<div id="merge-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:14px;padding:2rem;width:min(460px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h2 style="margin:0 0 .35rem;font-size:1.2rem;color:#1a202c">Merge Customer</h2>
+    <p id="merge-source-label" style="margin:0 0 1.1rem;font-size:.85rem;color:#718096"></p>
+    <p style="margin:0 0 .5rem;font-size:.8rem;color:#9ca3af">
+      All of this customer's bookings will be moved onto the customer you pick below,
+      any blank fields on that customer will be filled in from this one, and this
+      record will then be deleted. This can't be undone.
+    </p>
+    <div style="position:relative">
+      <input id="merge-search" type="text" placeholder="Search for the customer to merge into…" autocomplete="off"
+             style="width:100%;box-sizing:border-box;border:2px solid #d1d5db;border-radius:8px;padding:.6rem .85rem;font-size:.95rem;color:#1a202c">
+      <ul id="merge-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10000;background:white;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,.15);margin:4px 0 0;padding:0;list-style:none;max-height:220px;overflow-y:auto"></ul>
+    </div>
+    <p id="merge-selected" style="display:none;margin:.85rem 0 0;font-size:.85rem;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:.6rem .85rem"></p>
+    <div style="display:flex;gap:.75rem;margin-top:1.5rem">
+      <button id="merge-confirm" disabled style="flex:1;background:#9ca3af;color:white;border:none;border-radius:8px;padding:.7rem;font-size:.95rem;font-weight:700;cursor:not-allowed">
+        ⚠ Merge — This Can't Be Undone
+      </button>
+      <button type="button" onclick="closeMergeModal()"
+              style="background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:.7rem 1.25rem;font-size:.95rem;cursor:pointer">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<form id="merge-form" method="POST" action="" style="display:none">
+  <input type="hidden" name="target_id" id="merge_target_id">
+</form>
+
+<script>
+(function() {
+  var modal      = document.getElementById('merge-modal');
+  var sourceLabel= document.getElementById('merge-source-label');
+  var search     = document.getElementById('merge-search');
+  var results    = document.getElementById('merge-results');
+  var selected   = document.getElementById('merge-selected');
+  var confirmBtn = document.getElementById('merge-confirm');
+  var form       = document.getElementById('merge-form');
+  var debounce, sourceId = null, pickedTarget = null;
+
+  function resetSelection() {
+    pickedTarget = null;
+    selected.style.display = 'none';
+    confirmBtn.disabled = true;
+    confirmBtn.style.background = '#9ca3af';
+    confirmBtn.style.cursor = 'not-allowed';
+  }
+
+  window.openMergeModal = function(cid, fullName) {
+    sourceId = cid;
+    sourceLabel.textContent = 'Merging "' + fullName + '" into another customer:';
+    form.action = '/admin/customers/' + cid + '/merge';
+    modal.style.display = 'flex';
+    search.value = '';
+    results.style.display = 'none';
+    results.innerHTML = '';
+    resetSelection();
+    search.focus();
+  };
+  window.closeMergeModal = function() {
+    modal.style.display = 'none';
+  };
+
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeMergeModal();
+  });
+
+  search.addEventListener('input', function() {
+    clearTimeout(debounce);
+    var q = this.value.trim();
+    resetSelection();
+    if (q.length < 1) { results.style.display = 'none'; return; }
+    debounce = setTimeout(function() {
+      fetch('/admin/customers/search-with-id?q=' + encodeURIComponent(q) + '&exclude=' + sourceId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          results.innerHTML = '';
+          if (!data.length) { results.style.display = 'none'; return; }
+          data.forEach(function(c) {
+            var li = document.createElement('li');
+            li.style.cssText = 'padding:.6rem .85rem;cursor:pointer;font-size:.9rem;border-bottom:1px solid #f1f5f9';
+            var loc = [c.city, c.state].filter(Boolean).join(', ');
+            li.innerHTML = '<strong>' + c.full_name + '</strong>' +
+              (c.email ? ' <span style="color:#64748b;font-size:.8rem">— ' + c.email + '</span>' : '') +
+              (loc ? '<br><span style="color:#94a3b8;font-size:.78rem">' + loc + '</span>' : '');
+            li.addEventListener('mousedown', function(e) {
+              e.preventDefault();
+              pickedTarget = c;
+              search.value = c.full_name;
+              results.style.display = 'none';
+              selected.textContent = '✓ Will merge into: ' + c.full_name + (c.email ? ' (' + c.email + ')' : '');
+              selected.style.display = 'block';
+              confirmBtn.disabled = false;
+              confirmBtn.style.background = '#dc2626';
+              confirmBtn.style.cursor = 'pointer';
+            });
+            results.appendChild(li);
+          });
+          results.style.display = 'block';
+        })
+        .catch(function() { results.style.display = 'none'; });
+    }, 250);
+  });
+
+  confirmBtn.addEventListener('click', function() {
+    if (!pickedTarget || confirmBtn.disabled) return;
+    if (!confirm('Merge this customer into "' + pickedTarget.full_name + '"? This cannot be undone.')) return;
+    document.getElementById('merge_target_id').value = pickedTarget.id;
+    form.submit();
+  });
+})();
 </script>
 </div>
 <script>
@@ -9849,6 +9967,107 @@ def delete_customer(cid):
         except Exception as e:
             log.error(f"delete_customer error: {e}")
     return redirect(url_for("admin_customers", flash_ok="Customer removed"))
+
+
+@app.route("/admin/customers/search-with-id")
+@admin_required
+def customer_search_with_id():
+    """
+    Like /admin/customer-search, but only searches the customers table
+    directly and includes each match's real id — needed for the Merge
+    Customers picker, which has to name an exact target row to merge into.
+    """
+    q = request.args.get("q", "").strip()
+    exclude_id = request.args.get("exclude", type=int)
+    if len(q) < 1:
+        return jsonify([])
+    conn = get_db()
+    if not conn:
+        return jsonify([])
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT id, full_name, email, phone, company_name, city, state
+            FROM customers
+            WHERE full_name ILIKE %s
+              AND full_name IS NOT NULL AND TRIM(full_name) != ''
+            ORDER BY full_name LIMIT 20
+        """, (f"%{q}%",))
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        if exclude_id:
+            rows = [r for r in rows if r["id"] != exclude_id]
+        return jsonify(rows)
+    except Exception as e:
+        log.error(f"customer_search_with_id error: {e}")
+        return jsonify([])
+
+
+@app.route("/admin/customers/<int:cid>/merge", methods=["POST"])
+@admin_required
+def merge_customer(cid):
+    """
+    Merge customer #cid into another existing customer (the "keep" record):
+    every booking currently filed under #cid's email gets reassigned to the
+    keep record's email, any blank fields on the keep record get filled in
+    from #cid (without overwriting values it already has), and #cid is then
+    deleted. This is an explicit, admin-triggered action — not an automatic
+    migration — precisely because auto-merging/auto-syncing customer data on
+    every deploy is what caused the earlier data-loss bug.
+    """
+    target_id = request.form.get("target_id", type=int)
+    if not target_id or target_id == cid:
+        return redirect(url_for("admin_customers", flash_err="Pick a different customer to merge into"))
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("admin_customers", flash_err="Database unavailable"))
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM customers WHERE id=%s", (cid,))
+        source = cur.fetchone()
+        cur.execute("SELECT * FROM customers WHERE id=%s", (target_id,))
+        target = cur.fetchone()
+        if not source or not target:
+            cur.close(); conn.close()
+            return redirect(url_for("admin_customers", flash_err="Customer not found"))
+        source = dict(source); target = dict(target)
+
+        # Reassign every booking currently filed under the source's email to
+        # the target's email, so its order history moves over.
+        if source.get("email"):
+            cur2 = conn.cursor()
+            cur2.execute("UPDATE bookings SET email=%s WHERE LOWER(email)=LOWER(%s)",
+                         (target["email"], source["email"]))
+            cur2.close()
+
+        # Fill in any blank fields on the target from the source — never
+        # overwrite a field the target already has a value for.
+        fill_fields = ["company_name", "phone", "street", "street2", "city", "state", "zip", "notes"]
+        updates, params = [], []
+        for field in fill_fields:
+            if not target.get(field) and source.get(field):
+                updates.append(f"{field}=%s")
+                params.append(source[field])
+        if updates:
+            cur3 = conn.cursor()
+            cur3.execute(f"UPDATE customers SET {', '.join(updates)} WHERE id=%s", (*params, target_id))
+            cur3.close()
+
+        cur4 = conn.cursor()
+        cur4.execute("DELETE FROM customers WHERE id=%s", (cid,))
+        cur4.close()
+
+        conn.commit()
+        cur.close(); conn.close()
+        log.info(f"Merged customer #{cid} ({source.get('email')}) into #{target_id} ({target.get('email')})")
+        return redirect(url_for("admin_customers", flash_ok=f"Merged into {target['full_name']}"))
+    except Exception as e:
+        log.error(f"merge_customer error: {e}")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return redirect(url_for("admin_customers", flash_err="Error merging customers"))
 
 
 @app.route("/admin/customers/import", methods=["GET", "POST"])
