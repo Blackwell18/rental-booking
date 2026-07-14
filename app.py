@@ -8269,12 +8269,23 @@ ADMIN_ROUTE_HTML = """
   <div class="launch-strip">
     <div class="stop-count">{{ route_bookings|length }} {% if view == "pickup" %}pickup{% else %}delivery{% endif %}{{ 's' if route_bookings|length != 1 }} · {{ route_date }}</div>
     {% if addrs|length >= 1 %}
-    {# Google Maps: depot → stop1 → ... → stopN #}
-    {% set gurl = "https://www.google.com/maps/dir/" + depot_address|replace(" ","+") + "/" + (addrs|join("/"))|replace(" ", "+") %}
-    <a class="btn-launch btn-gmap" href="{{ gurl }}" target="_blank">
+    <div style="flex-basis:100%;display:flex;align-items:center;gap:1rem;margin-bottom:.35rem;font-size:.82rem;color:#374151;flex-wrap:wrap">
+      <span style="font-weight:600">Start from:</span>
+      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer">
+        <input type="radio" name="route_origin" value="depot" id="origin-depot" checked onchange="updateRouteLinks()"> 🏠 Depot
+      </label>
+      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer">
+        <input type="radio" name="route_origin" value="location" id="origin-location" onchange="updateRouteLinks()"> 📍 My Current Location
+      </label>
+      <span id="origin-status" style="font-size:.75rem;color:#9ca3af"></span>
+    </div>
+    {# Google Maps: depot → stop1 → ... → stopN (pickups also return to depot at the end) #}
+    {% set gurl = "https://www.google.com/maps/dir/" + depot_address|replace(" ","+") + "/" + (addrs|join("/"))|replace(" ", "+") + ("/" + depot_address|replace(" ","+") if view == "pickup" else "") %}
+    <a class="btn-launch btn-gmap" id="btn-gmap" href="{{ gurl }}" target="_blank">
       🗺 Start Route — Google Maps
     </a>
-    <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ depot_address|urlencode }}&daddr={{ addrs[-1]|urlencode }}&dirflg=d" target="_blank">
+    <a class="btn-launch btn-amap" id="btn-amap"
+       href="https://maps.apple.com/?saddr={{ depot_address|urlencode }}&daddr={{ (depot_address if view == 'pickup' else addrs[-1])|urlencode }}&dirflg=d" target="_blank">
       🗺 Start Route — Apple Maps
     </a>
     {% else %}
@@ -8389,6 +8400,47 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 /* ── Distance/time between stops via Nominatim + OSRM ── */
 const STOPS = {{ stops_json|safe }};
 const DEPOT = {{ depot_address|tojson }};
+const VIEW = {{ view|tojson }};
+
+/* ── Start-from toggle: Depot vs current location ── */
+function buildGoogleUrl(originEncoded){
+  const addrs = STOPS.map(s=>s.addr).filter(Boolean).map(a=>encodeURIComponent(a));
+  const parts = [originEncoded, ...addrs];
+  if(VIEW === 'pickup') parts.push(encodeURIComponent(DEPOT)); // round trip: end back at depot
+  return 'https://www.google.com/maps/dir/' + parts.join('/');
+}
+function buildAppleUrl(saddrEncoded){
+  const addrs = STOPS.map(s=>s.addr).filter(Boolean);
+  const daddr = (VIEW === 'pickup') ? DEPOT : (addrs.length ? addrs[addrs.length-1] : DEPOT);
+  return 'https://maps.apple.com/?saddr='+saddrEncoded+'&daddr='+encodeURIComponent(daddr)+'&dirflg=d';
+}
+async function updateRouteLinks(){
+  const locRadio = document.getElementById('origin-location');
+  const gmapBtn = document.getElementById('btn-gmap');
+  const amapBtn = document.getElementById('btn-amap');
+  const statusEl = document.getElementById('origin-status');
+  if(!gmapBtn || !amapBtn || !locRadio) return; // no addresses on this page
+  if(locRadio.checked){
+    if(statusEl) statusEl.textContent = 'Locating…';
+    try{
+      const pos = await getCurrentPos();
+      const originStr = `${pos.lat},${pos.lon}`;
+      gmapBtn.href = buildGoogleUrl(originStr);
+      amapBtn.href = buildAppleUrl(originStr);
+      if(statusEl) statusEl.textContent = '📍 Using your current location';
+    }catch(e){
+      if(statusEl) statusEl.textContent = '⚠ Could not get your location — using Depot instead';
+      document.getElementById('origin-depot').checked = true;
+      gmapBtn.href = buildGoogleUrl(encodeURIComponent(DEPOT));
+      amapBtn.href = buildAppleUrl(encodeURIComponent(DEPOT));
+    }
+  } else {
+    if(statusEl) statusEl.textContent = '';
+    gmapBtn.href = buildGoogleUrl(encodeURIComponent(DEPOT));
+    amapBtn.href = buildAppleUrl(encodeURIComponent(DEPOT));
+  }
+}
+updateRouteLinks();
 
 async function geocode(addr){
   const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(addr)+'&format=json&limit=1&countrycodes=us';
