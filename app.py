@@ -481,6 +481,7 @@ def get_booking_inventory_check(booking_id):
     products    = get_products()
     prod_totals = {p["id"]: int(p["total"]) for p in products}
     name_to_pid = {p["name"].lower(): p["id"] for p in products}
+    log.info(f"[INV CHECK] booking #{booking_id} — prod_totals={prod_totals}")
 
     conn = get_db()
     if not conn:
@@ -501,6 +502,7 @@ def get_booking_inventory_check(booking_id):
 
         # Absolute inventory check (no dates needed) — catch orders > total stock
         b_items = json.loads(b.get("items_json") or "[]")
+        log.info(f"[INV CHECK] #{booking_id} start={b_start} end={b_end} items={b_items}")
         for item in b_items:
             iname = (item.get("name") or "").strip()
             pid   = item.get("id") or name_to_pid.get(iname.lower())
@@ -508,6 +510,7 @@ def get_booking_inventory_check(booking_id):
             if pid and qty > 0 and pid in prod_totals:
                 total_stock = prod_totals[pid]
                 if qty > total_stock:
+                    log.info(f"[INV CHECK] #{booking_id} ABSOLUTE SHORTAGE: {iname} needs {qty}, total stock={total_stock}")
                     issues.append({
                         "item":                 iname,
                         "needed":               qty,
@@ -10488,6 +10491,54 @@ def admin_tax_transfer_delete(transfer_id):
         except Exception as e:
             log.error(f"tax_transfer delete error: {e}")
     return redirect(url_for("admin_tax_report", flash_ok="Transfer record deleted"))
+
+
+
+@app.route("/admin/debug/inv/<int:booking_id>")
+@admin_required
+def debug_inv_check(booking_id):
+    """Debug endpoint: show raw inventory check results for a booking."""
+    issues = get_booking_inventory_check(booking_id)
+    products = get_products()
+    prod_totals = {p["id"]: int(p["total"]) for p in products}
+
+    # Also show what's in the booking items_json
+    conn = get_db()
+    b_items = []
+    b_dates = {}
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT items_json, event_start_date, event_end_date, setup_date FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            if row:
+                b_items = json.loads(row["items_json"] or "[]")
+                b_dates = {
+                    "event_start_date": str(row["event_start_date"]),
+                    "event_end_date": str(row["event_end_date"]),
+                    "setup_date": str(row["setup_date"]),
+                }
+            cur.close(); conn.close()
+        except Exception as e:
+            return f"<pre>DB error: {e}</pre>"
+
+    out = [f"<pre style='font-family:monospace;padding:1rem;font-size:.85rem'>"]
+    out.append(f"=== Inventory Check Debug — Booking #{booking_id} ===\n")
+    out.append(f"Dates: {b_dates}\n")
+    out.append(f"\nBooking items_json:\n")
+    for it in b_items:
+        out.append(f"  id={it.get('id')!r:20} name={it.get('name')!r:35} qty={it.get('qty')}\n")
+    out.append(f"\nInventory prod_totals:\n")
+    for pid, tot in prod_totals.items():
+        out.append(f"  id={pid!r:20} total={tot}\n")
+    out.append(f"\nIssues found ({len(issues)}):\n")
+    for iss in issues:
+        out.append(f"  {iss}\n")
+    if not issues:
+        out.append("  (none)\n")
+    out.append("</pre>")
+    out.append(f'<a href="/admin/booking/{booking_id}" style="margin:1rem;display:inline-block">← Back to Booking</a>')
+    return "".join(out)
 
 
 if __name__ == "__main__":
