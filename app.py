@@ -7833,14 +7833,15 @@ def stripe_webhook():
                 if conn:
                     try:
                         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-# Deduplication: skip if this Stripe session was already recorded
+                        # Deduplication: skip if this Stripe session was already recorded
                         if sess_id:
                             cur.execute("SELECT id FROM bookings WHERE stripe_session_id=%s", (sess_id,))
                             if cur.fetchone():
                                 log.info(f"Webhook duplicate: session {sess_id} already processed. Skipping.")
                                 cur.close(); conn.close()
                                 return jsonify({"status": "already_processed"}), 200
-                                cur.execute("SELECT * FROM bookings WHERE id=%s", (int(booking_id),))
+                        # Fetch the booking
+                        cur.execute("SELECT * FROM bookings WHERE id=%s", (int(booking_id),))
                         row = cur.fetchone()
                         if row:
                             b = _row(row)
@@ -7849,8 +7850,8 @@ def stripe_webhook():
                             grand_total    = float(b.get("grand_total") or 0)
                             new_paid       = round(current_paid + amount_paid_dollars, 2)
 
-                            if ctus == "accepteurrent_stad":
-                                # ── Deposit payment: confirm the booking ──
+                            if current_status == "accepted":
+                                # ── Deposit payment: move accepted → confirmed ──
                                 cur.execute(
                                     "UPDATE bookings SET status='confirmed', amount_paid=%s, stripe_session_id=%s WHERE id=%s",
                                     (new_paid, sess_id, int(booking_id))
@@ -7861,19 +7862,19 @@ def stripe_webhook():
                                 send_receipt_email(b)
                                 log.info(f"Booking #{booking_id} deposit confirmed (${amount_paid_dollars:.2f})")
 
-                            elif current_status in ("confirmed", "pending", "partial"):
+                            elif current_status in ("confirmed", "pending", "partial", "accepted"):
                                 # ── Final / additional payment ──
                                 balance = round(grand_total - new_paid, 2)
-                                new_status = "paid" if balance <= 0.50 else "confirmed"
+                                new_status = "confirmed" if balance <= 0.50 else "confirmed"
                                 cur.execute(
-                                    "UPDATE bookings SET amount_paid=%s, status=%s WHERE id=%s",
-                                    (new_paid, new_status, int(booking_id))
+                                    "UPDATE bookings SET amount_paid=%s, status=%s, stripe_session_id=%s WHERE id=%s",
+                                    (new_paid, new_status, sess_id, int(booking_id))
                                 )
                                 conn.commit()
                                 b["amount_paid"] = new_paid
                                 b["status"] = new_status
                                 send_receipt_email(b)
-                                _notify_subject = f"{'PAID IN FULL' if new_status == 'paid' else 'Payment Received'} — Booking #{booking_id}"
+                                _notify_subject = f"{'PAID IN FULL' if balance <= 0.50 else 'Payment Received'} — Booking #{booking_id}"
                                 _notify_body = (
                                     f"<p><strong>{b.get('full_name')}</strong> just paid "
                                     f"<strong>${amount_paid_dollars:.2f}</strong> on Booking #{booking_id}.</p>"
