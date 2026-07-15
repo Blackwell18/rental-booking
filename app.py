@@ -494,17 +494,39 @@ def get_booking_inventory_check(booking_id):
             cur.close(); conn.close()
             return []
         b       = _row(row)
-        b_start = str(b.get("event_start_date", ""))[:10]
-        b_end   = str(b.get("event_end_date",   ""))[:10]
-        if not b_start or not b_end:
-            cur.close(); conn.close()
-            return []
+        # Use setup_date as fallback if event_start_date is missing
+        b_start = str(b.get("event_start_date", "") or b.get("setup_date", "") or "")[:10]
+        b_end   = str(b.get("event_end_date",   "") or b_start)[:10]
+        has_dates = bool(b_start)
 
-        # All other confirmed/accepted bookings overlapping these dates
+        # Absolute inventory check (no dates needed) — catch orders > total stock
+        b_items = json.loads(b.get("items_json") or "[]")
+        for item in b_items:
+            iname = (item.get("name") or "").strip()
+            pid   = item.get("id") or name_to_pid.get(iname.lower())
+            qty   = int(item.get("qty") or 0)
+            if pid and qty > 0 and pid in prod_totals:
+                total_stock = prod_totals[pid]
+                if qty > total_stock:
+                    issues.append({
+                        "item":                 iname,
+                        "needed":               qty,
+                        "available":            total_stock,
+                        "shortfall":            qty - total_stock,
+                        "conflicting_bookings": [],
+                        "absolute":             True,
+                    })
+
+        if not has_dates:
+            cur.close(); conn.close()
+            return issues  # return absolute issues even without dates
+
+        # All other non-denied/cancelled bookings overlapping these dates
+        # Include pending so back-to-back pending bookings also flag conflicts
         cur.execute("""
             SELECT id, full_name, items_json, event_start_date, event_end_date
             FROM bookings
-            WHERE status IN ('confirmed','partial','accepted')
+            WHERE status IN ('confirmed','partial','accepted','pending')
               AND id != %s
               AND event_start_date IS NOT NULL
               AND event_end_date   IS NOT NULL
@@ -546,6 +568,7 @@ def get_booking_inventory_check(booking_id):
                     if not any(e["id"] == o["id"] for e in name_to_bookings[iname_lower]):
                         name_to_bookings[iname_lower].append(entry)
 
+        already_flagged = {iss["item"] for iss in issues}
         for item in json.loads(b.get("items_json") or "[]"):
             iname       = (item.get("name") or "").strip()
             iname_lower = iname.lower()
@@ -553,7 +576,7 @@ def get_booking_inventory_check(booking_id):
             qty         = int(item.get("qty") or 0)
             if pid and qty > 0 and pid in prod_totals:
                 avail = max(0, prod_totals[pid] - others_reserved.get(pid, 0))
-                if qty > avail:
+                if qty > avail and iname not in already_flagged:
                     # Use pid lookup first; fall back to name lookup
                     conflicting = pid_to_bookings.get(pid) or name_to_bookings.get(iname_lower, [])
                     # Last resort: all overlapping bookings (so user always sees something)
@@ -4053,12 +4076,16 @@ ADMIN_BOOKING_HTML = """
 
   {% if booking_inv_issues %}
   <div style="background:#fef2f2;border:2px solid #f87171;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
-    <div style="font-weight:700;color:#dc2626;font-size:1rem;margin-bottom:.5rem">⚠️ Inventory Shortage — Review Before Accepting</div>
+    <div style="font-weight:700;color:#dc2626;font-size:1rem;margin-bottom:.5rem">🚨 Inventory Shortage — Review Before Accepting</div>
     {% for c in booking_inv_issues %}
     <div style="margin-bottom:.75rem">
       <div style="font-size:.9rem;color:#7f1d1d;margin-bottom:.4rem">
-        <strong>{{ c.item }}</strong>: customer needs <strong>{{ c.needed }}</strong>, only <strong>{{ c.available }}</strong> available after other bookings
+        <strong>{{ c.item }}</strong>: customer needs <strong>{{ c.needed }}</strong>,
+        {% if c.get('absolute') %}only <strong>{{ c.available }}</strong> in stock total
+        <span style="background:#7f1d1d;color:white;border-radius:4px;padding:.1rem .45rem;font-size:.78rem;font-weight:700;margin-left:.4rem">EXCEEDS TOTAL STOCK by {{ c.shortfall }}</span>
+        {% else %}only <strong>{{ c.available }}</strong> available after other bookings
         <span style="background:#fee2e2;color:#b91c1c;border-radius:4px;padding:.1rem .45rem;font-size:.78rem;font-weight:700;margin-left:.4rem">{{ c.shortfall }} short</span>
+        {% endif %}
       </div>
       {% if c.conflicting_bookings %}
       <div style="font-size:.8rem;color:#991b1b;margin-bottom:.3rem;font-weight:600">Bookings using this item on overlapping dates:</div>
