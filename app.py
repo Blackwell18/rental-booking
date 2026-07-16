@@ -243,6 +243,7 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT NULL",
             # Migrate: confirmed → accepted + paid
             "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='confirmed'",
+            "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='paid'",
             # Migrate: partial → accepted + partial
             "UPDATE bookings SET status='accepted', payment_status='partial'  WHERE status='partial'",
             # Migrate accepted bookings: set payment_status based on amount_paid
@@ -10722,6 +10723,43 @@ def debug_inv_check(booking_id):
             total = prod_totals.get(pid, 0)
             avail = max(0, total - qty)
             out.append(f"  {pid}: {qty} reserved / {total} total → {avail} available\n")
+
+        # Also show bookings on these dates that are NOT being counted
+        cur2 = conn.cursor(cursor_factory=psycopg2.extras.DictCursor) if not conn.closed else None
+        try:
+            conn2 = get_db()
+            if conn2:
+                cur2 = conn2.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                cur2.execute("""
+                    SELECT id, full_name, status, payment_status, delivery_status,
+                           setup_date, event_end_date, items_json, amount_paid, grand_total
+                    FROM bookings
+                    WHERE id != %s
+                      AND setup_date IS NOT NULL AND event_end_date IS NOT NULL
+                      AND setup_date <= %s AND event_end_date >= %s
+                      AND NOT (status='accepted' AND payment_status IN ('paid','partial')
+                               AND (delivery_status IS NULL OR delivery_status != 'picked_up'))
+                      AND status NOT IN ('cancelled','denied','concluded')
+                    ORDER BY setup_date, id
+                """, (booking_id, b_back or b_out, b_out or b_back))
+                excluded = [_row(r) for r in cur2.fetchall()]
+                cur2.close(); conn2.close()
+                out.append(f"\n--- Bookings on these dates NOT counted in inventory ({len(excluded)}) ---\n")
+                out.append(f"  (These are excluded: pending, accepted/waiting, already picked up)\n")
+                for o in excluded:
+                    o_start  = str(o.get("setup_date")    or "")[:10]
+                    o_end    = str(o.get("event_end_date") or "")[:10]
+                    pmt      = o.get("payment_status") or "NULL"
+                    paid     = o.get("amount_paid") or 0
+                    gtotal   = o.get("grand_total") or 0
+                    chairs   = sum(int(it.get("qty",0)) for it in json.loads(o.get("items_json") or "[]")
+                                   if "chair" in (it.get("name") or "").lower())
+                    out.append(f"  #{o['id']} {o.get('full_name',''):<25} status:{o.get('status',''):<10} "
+                               f"pmt:{pmt:<8} paid:${paid} total:${gtotal}  "
+                               f"del:{o_start} pickup:{o_end}  chairs:{chairs}\n")
+        except Exception as exc2:
+            out.append(f"  (error fetching excluded: {exc2})\n")
+
         out.append("</pre>")
         out.append(f'<a href="/admin/booking/{booking_id}" style="margin:1rem;display:inline-block">← Back to Booking #{booking_id}</a>')
         return "".join(out)
