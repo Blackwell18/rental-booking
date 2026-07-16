@@ -456,6 +456,11 @@ def get_inventory_conflicts():
                         if pid and qty > 0:
                             others_reserved[pid] = others_reserved.get(pid, 0) + qty
 
+            # Only flag shortages for bookings that aren't fully confirmed/paid.
+            # Confirmed/partial bookings "own" their inventory — alert on pending/accepted instead.
+            if b.get("status") in ("confirmed", "partial", "delivered", "picked_up"):
+                continue
+
             # Check this booking's items against what's left
             for item in json.loads(b.get("items_json") or "[]"):
                 pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
