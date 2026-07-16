@@ -2991,7 +2991,7 @@ ADMIN_DASH_HTML = """
       <table>
         <thead><tr>
           <th style="width:36px;padding-left:.75rem"><input type="checkbox" id="selectAll" onchange="toggleAll(this)" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></th>
-          <th>#</th><th>Client</th><th>Status</th><th>Event Dates</th><th>Items</th><th>Total</th><th>Payment</th><th>Actions</th>
+          <th>#</th><th>Client</th><th>Status</th><th>Delivery → Pickup</th><th>Items</th><th>Total</th><th>Payment</th><th>Actions</th>
         </tr></thead>
         <tbody>
           {% for b in bookings %}
@@ -3011,9 +3011,9 @@ ADMIN_DASH_HTML = """
             <td><span class="badge badge-{{ b.status }}">{{ b.status|capitalize }}</span></td>
             <td>
               <div class="date-range">
-                <span>{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '' }}</span>
+                <span>{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else (b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '—') }}</span>
                 <span class="date-arrow">→</span>
-                <span>{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '' }}</span>
+                <span>{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }}</span>
               </div>
               {% if b.maps_url %}<a href="{{ b.maps_url }}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:.15rem;margin-top:.2rem;font-size:.72rem;color:#2563eb;text-decoration:none;font-weight:500">📍 Map</a>{% endif %}
             </td>
