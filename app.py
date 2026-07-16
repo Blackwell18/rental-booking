@@ -380,8 +380,11 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
         query = """
             SELECT items_json FROM bookings
             WHERE status IN ('confirmed', 'partial', 'accepted')
-              AND event_start_date <= %s
-              AND event_end_date   >= %s
+              AND (delivery_status IS NULL OR delivery_status != 'picked_up')
+              AND setup_date     IS NOT NULL
+              AND event_end_date IS NOT NULL
+              AND setup_date     <= %s
+              AND event_end_date >= %s
         """
         params = [end_date_str, start_date_str]
         if exclude_id:
@@ -424,26 +427,28 @@ def get_inventory_conflicts():
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         cur.execute("""
-            SELECT id, full_name, event_start_date, event_end_date, items_json
+            SELECT id, full_name, setup_date, event_end_date, items_json
             FROM bookings
             WHERE status IN ('confirmed','partial','accepted')
-              AND event_start_date IS NOT NULL
-              AND event_end_date   IS NOT NULL
+              AND (delivery_status IS NULL OR delivery_status != 'picked_up')
+              AND setup_date     IS NOT NULL
+              AND event_end_date IS NOT NULL
         """)
         active = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
         for b in active:
-            b_start = str(b.get("event_start_date",""))[:10]
-            b_end   = str(b.get("event_end_date",""))[:10]
+            b_start = str(b.get("setup_date",     ""))[:10]
+            b_end   = str(b.get("event_end_date", ""))[:10]
 
-            # Sum qty reserved by every OTHER booking that overlaps these dates
+            # Sum qty reserved by every OTHER confirmed booking whose
+            # drop-off→pickup window overlaps this booking's window
             others_reserved = {}
             for o in active:
                 if o["id"] == b["id"]:
                     continue
-                o_start = str(o.get("event_start_date",""))[:10]
-                o_end   = str(o.get("event_end_date",""))[:10]
+                o_start = str(o.get("setup_date",     ""))[:10]
+                o_end   = str(o.get("event_end_date", ""))[:10]
                 if o_start <= b_end and o_end >= b_start:  # date overlap
                     for item in json.loads(o.get("items_json") or "[]"):
                         pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
@@ -461,7 +466,7 @@ def get_inventory_conflicts():
                         conflicts.append({
                             "booking_id": b["id"],
                             "customer":   b.get("full_name","Unknown"),
-                            "event_date": b_start,
+                            "delivery_date": b_start,
                             "item":       item.get("name",""),
                             "needed":     qty,
                             "available":  avail,
@@ -495,10 +500,10 @@ def get_booking_inventory_check(booking_id):
             cur.close(); conn.close()
             return []
         b       = _row(row)
-        # Use setup_date as fallback if event_start_date is missing
-        b_start = str(b.get("event_start_date", "") or b.get("setup_date", "") or "")[:10]
-        b_end   = str(b.get("event_end_date",   "") or b_start)[:10]
-        has_dates = bool(b_start)
+        # Use setup_date (drop-off) → event_end_date (pickup) as the physical window
+        b_start = str(b.get("setup_date",     "") or "")[:10]
+        b_end   = str(b.get("event_end_date", "") or "")[:10]
+        has_dates = bool(b_start or b_end)
 
         # Absolute inventory check (no dates needed) — catch orders > total stock
         b_items = json.loads(b.get("items_json") or "[]")
@@ -524,18 +529,21 @@ def get_booking_inventory_check(booking_id):
             cur.close(); conn.close()
             return issues  # return absolute issues even without dates
 
-        # All other non-denied/cancelled bookings overlapping these dates
-        # Include pending so back-to-back pending bookings also flag conflicts
+        # Other confirmed/accepted/partial bookings whose delivery→pickup
+        # window overlaps this booking's delivery→pickup window
         cur.execute("""
-            SELECT id, full_name, items_json, event_start_date, event_end_date
+            SELECT id, full_name, items_json, setup_date, event_end_date
             FROM bookings
-            WHERE status IN ('confirmed','partial','accepted','pending')
+            WHERE status IN ('confirmed','partial','accepted')
+              AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND id != %s
-              AND event_start_date IS NOT NULL
-              AND event_end_date   IS NOT NULL
-              AND event_start_date <= %s
-              AND event_end_date   >= %s
-        """, (booking_id, b_end, b_start))
+              AND setup_date IS NOT NULL
+              AND event_end_date IS NOT NULL
+              AND setup_date     <= %s
+              AND event_end_date >= %s
+        """, (booking_id,
+              b_end or b_start,
+              b_start or b_end))
         others = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
@@ -547,8 +555,8 @@ def get_booking_inventory_check(booking_id):
             o_entry = {
                 "id":    o["id"],
                 "name":  o.get("full_name", "Unknown"),
-                "start": str(o.get("event_start_date", ""))[:10],
-                "end":   str(o.get("event_end_date",   ""))[:10],
+                "start": str(o.get("setup_date",     ""))[:10],
+                "end":   str(o.get("event_end_date", ""))[:10],
             }
             for item in json.loads(o.get("items_json") or "[]"):
                 iname       = (item.get("name") or "").strip()
@@ -6517,25 +6525,35 @@ def admin_booking(booking_id):
         _products_inv   = get_products()
         _prod_totals_inv = {p["id"]: int(p["total"]) for p in _products_inv}
         _name_to_pid    = {p["name"].lower(): p["id"] for p in _products_inv}
-        _b_items        = json.loads(b.get("items_json") or "[]")
-        _b_start        = str(b.get("event_start_date") or b.get("setup_date") or "")[:10]
-        _b_end          = str(b.get("event_end_date") or _b_start)[:10]
+        _b_items = json.loads(b.get("items_json") or "[]")
 
-        # Compute reserved by other non-denied/cancelled bookings on same dates
+        # Physical window: setup_date (drop-off) → event_end_date (pickup)
+        # Items are "out" the entire time from delivery to pickup
+        _b_out  = str(b.get("setup_date")    or "")[:10]
+        _b_back = str(b.get("event_end_date") or "")[:10]
+
+        # Need at least one date to check conflicts
+        _check_window = _b_out or _b_back
+
+        # Reserved = other confirmed/accepted/partial bookings whose drop-off→pickup
+        # window overlaps this booking, and items haven't been picked up yet
         _others_reserved = {}
-        if _b_start:
+        if _check_window:
             _conn_inv = get_db()
             if _conn_inv:
                 _cur_inv = _conn_inv.cursor(cursor_factory=psycopg2.extras.DictCursor)
                 _cur_inv.execute("""
                     SELECT items_json FROM bookings
-                    WHERE status NOT IN ('denied','cancelled')
+                    WHERE status IN ('confirmed','accepted','partial')
+                      AND (delivery_status IS NULL OR delivery_status != 'picked_up')
                       AND id != %s
-                      AND event_start_date IS NOT NULL
-                      AND event_end_date   IS NOT NULL
-                      AND event_start_date <= %s
-                      AND event_end_date   >= %s
-                """, (booking_id, _b_end or _b_start, _b_start))
+                      AND setup_date IS NOT NULL
+                      AND event_end_date IS NOT NULL
+                      AND setup_date     <= %s
+                      AND event_end_date >= %s
+                """, (booking_id,
+                      _b_back or _b_out,
+                      _b_out  or _b_back))
                 for _orow in _cur_inv.fetchall():
                     for _oit in json.loads(_orow["items_json"] or "[]"):
                         _opid = _oit.get("id") or _name_to_pid.get((_oit.get("name") or "").lower())
