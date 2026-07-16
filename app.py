@@ -2354,20 +2354,22 @@ function updateTotals(){
   if(stackRow) stackRow.style.display=sf>0?'flex':'none';
   const exemptCb=document.getElementById('tax_exempt_request');
   const exempt=exemptCb&&exemptCb.checked;
-  const tax=exempt?0:(sub+ef+sf+lf)*CT_TAX_RATE;
+  const df=typeof _calcDeliveryFee!=='undefined'?_calcDeliveryFee:0;
+  const tax=exempt?0:(sub+ef+sf+lf+df)*CT_TAX_RATE;
   const taxEl=document.getElementById('t_tax');
   if(taxEl){ taxEl.textContent='$'+tax.toFixed(2); taxEl.style.color=exempt?'#16a34a':'';
     const lbl=taxEl.previousElementSibling; if(lbl) lbl.textContent=exempt?'CT Sales Tax (EXEMPT)':'CT Sales Tax (6.35%)'; }
   document.getElementById('t_items').textContent='$'+sub.toFixed(2);
   document.getElementById('t_exact').textContent=ef>0?'$'+ef.toFixed(2):'-';
-  document.getElementById('t_grand').textContent='$'+(sub+ef+sf+lf+tax).toFixed(2)+'+';
+  document.getElementById('t_grand').textContent='$'+(sub+ef+sf+lf+df+tax).toFixed(2)+'+';
 }
 document.addEventListener('DOMContentLoaded', buildDropdowns);
 function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
 setVenue('venue');
 function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{ALL_PRODUCTS.forEach(p=>{if(data[p.id]!==undefined){p.max=data[p.id];}});updateTotals();}).catch(()=>{});}
 let distTimer;
-function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';}).catch(()=>{});}},800);}
+let _calcDeliveryFee=0;
+function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';_calcDeliveryFee=d.fee;updateTotals();}).catch(()=>{});}},800);}
 // ── Date validation ───────────────────────────────────────────────────────
 const today=new Date().toISOString().split('T')[0];
 const startDateEl = document.getElementById('event_start_date');
