@@ -11,7 +11,7 @@
 ╚══════════════════════════════════════════════════════════════╝
 """
 
-import os, re, json, logging, smtplib, secrets, decimal, io
+import os, re, json, logging, smtplib, secrets, decimal, io, hmac, hashlib
 import urllib.parse
 from datetime import datetime, timezone, date, timedelta
 from email.mime.text import MIMEText
@@ -8575,6 +8575,17 @@ ADMIN_ROUTE_HTML = """
     <input type="date" id="rdate" name="date" value="{{ route_date }}" onchange="this.form.submit()">
     <input type="hidden" name="view" value="{{ view }}">
     <a href="/admin/route?view={{ view }}" class="btn-today">Today</a>
+    {% if view == "delivery" %}
+    <a href="/sheet/{{ route_date }}/{{ sheet_token }}"
+       target="_blank"
+       style="background:#059669;color:white;border:none;border-radius:8px;padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem">
+      👁 Preview Sheet
+    </a>
+    <a href="sms:?&body={{ ('Deliveries for ' + route_date + ' — tap to open your route: ' + request.host_url + 'sheet/' + route_date + '/' + sheet_token)|urlencode }}"
+       style="background:#0891b2;color:white;border:none;border-radius:8px;padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem">
+      📱 Text Brother
+    </a>
+    {% endif %}
   </form>
 
   <div style="display:flex;gap:.5rem;margin-bottom:1.1rem;border-bottom:2px solid #e5e7eb;padding-bottom:.5rem">
@@ -9344,7 +9355,201 @@ def admin_route():
         route_bookings=route_bookings,
         excluded_bookings=excluded_bookings,
         stops_json=stops_json,
+        sheet_token=_sheet_token(route_date),
     )
+
+
+# ─── Delivery Sheet (public, no login) ───────────────────────────────────────
+
+def _sheet_token(date_str):
+    """Deterministic token from date + secret. Consistent for the same date."""
+    secret = (app.secret_key or "rentaparty").encode()
+    return hmac.new(secret, date_str.encode(), hashlib.sha256).hexdigest()[:16]
+
+DELIVERY_SHEET_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Deliveries – {{ sheet_date }}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,sans-serif;background:#f0f4f8;min-height:100vh}
+.header{background:#1a365d;color:white;padding:1.1rem 1.25rem;position:sticky;top:0;z-index:10}
+.header h1{font-size:1rem;font-weight:700}
+.header p{font-size:.78rem;opacity:.8;margin-top:.15rem}
+.stops{padding:.75rem;display:flex;flex-direction:column;gap:.75rem}
+.stop{background:white;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.stop.done{opacity:.55}
+.stop-header{display:flex;align-items:center;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid #f1f5f9}
+.num{width:32px;height:32px;border-radius:50%;background:#1a365d;color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;flex-shrink:0}
+.stop.done .num{background:#16a34a}
+.cname{font-weight:700;font-size:.95rem;color:#111827}
+.order{font-size:.75rem;color:#6b7280;margin-top:.1rem}
+.stop-body{padding:.85rem 1rem;display:flex;flex-direction:column;gap:.6rem}
+.addr{font-size:.88rem;color:#374151;display:flex;gap:.4rem;align-items:flex-start}
+.addr-icon{flex-shrink:0;margin-top:.1rem}
+.items{background:#f8fafc;border-radius:8px;padding:.6rem .85rem;font-size:.83rem;color:#374151;line-height:1.65}
+.items strong{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;margin-bottom:.25rem}
+.note-box{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.6rem .85rem;font-size:.83rem;color:#92400e}
+.note-box strong{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:#b45309;margin-bottom:.2rem}
+.actions{display:flex;gap:.5rem;flex-wrap:wrap;padding:.75rem 1rem;border-top:1px solid #f1f5f9;background:#fafafa}
+.btn{display:inline-flex;align-items:center;gap:.35rem;padding:.5rem .85rem;border-radius:8px;font-size:.8rem;font-weight:600;text-decoration:none;border:none;cursor:pointer;white-space:nowrap}
+.btn-map{background:#1d4ed8;color:white}
+.btn-apple{background:#111827;color:white}
+.btn-call{background:#059669;color:white}
+.btn-done{background:#f0fdf4;color:#15803d;border:1.5px solid #bbf7d0;margin-left:auto}
+.btn-done.marked{background:#15803d;color:white;border-color:#15803d}
+.done-stamp{display:none;text-align:center;padding:.5rem;font-size:.78rem;font-weight:700;color:#15803d;background:#f0fdf4;border-top:1px solid #bbf7d0}
+.stop.done .done-stamp{display:block}
+.empty{text-align:center;padding:3rem 1rem;color:#6b7280}
+.footer{text-align:center;padding:1.5rem;font-size:.75rem;color:#9ca3af}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🚚 {{ business_name }} — Deliveries</h1>
+  <p>{{ sheet_date_fmt }} &nbsp;·&nbsp; {{ stops|length }} stop{{ 's' if stops|length != 1 }}</p>
+</div>
+
+{% if stops %}
+<div class="stops">
+{% for s in stops %}
+<div class="stop{% if s.marked %} done{% endif %}" id="stop-{{ s.id }}">
+  <div class="stop-header">
+    <div class="num">{{ loop.index }}</div>
+    <div>
+      <div class="cname">{{ s.full_name }}</div>
+      <div class="order">Order #{{ s.id }}{% if s.event_start_time %} &nbsp;·&nbsp; ⏰ {{ s.event_start_time }}{% endif %}</div>
+    </div>
+  </div>
+  <div class="stop-body">
+    <div class="addr">
+      <span class="addr-icon">📍</span>
+      <span>{{ s.nav_address }}</span>
+    </div>
+    {% if s.delivery_location %}
+    <div class="addr">
+      <span class="addr-icon">📋</span>
+      <span><strong>Where:</strong> {{ s.delivery_location }}</span>
+    </div>
+    {% endif %}
+    {% if s.items_summary %}
+    <div class="items">
+      <strong>Items to deliver</strong>
+      {{ s.items_summary }}
+    </div>
+    {% endif %}
+    {% if s.notes %}
+    <div class="note-box">
+      <strong>Note</strong>{{ s.notes }}
+    </div>
+    {% endif %}
+    <div class="items" style="background:#eff6ff;border-left:3px solid #3b82f6;border-radius:6px;padding:.6rem .85rem">
+      <strong style="color:#1d4ed8">On arrival</strong>
+      1. Call the customer to let them know you're there.<br>
+      2. Deliver items to the location noted above.<br>
+      3. Take a quick photo of the setup.<br>
+      4. Tap <em>Mark Delivered</em> below when done.
+    </div>
+  </div>
+  <div class="actions">
+    {% if s.nav_address %}
+    <a class="btn btn-map" href="https://www.google.com/maps/dir/?api=1&destination={{ s.nav_address|urlencode }}&travelmode=driving" target="_blank">🗺 Google Maps</a>
+    <a class="btn btn-apple" href="https://maps.apple.com/?daddr={{ s.nav_address|urlencode }}&dirflg=d" target="_blank"> Apple Maps</a>
+    {% endif %}
+    {% if s.phone %}
+    <a class="btn btn-call" href="tel:{{ s.phone }}">📞 Call</a>
+    {% endif %}
+    <form method="POST" action="/sheet/{{ sheet_date }}/{{ token }}/mark/{{ s.id }}" style="margin-left:auto">
+      <button type="submit" class="btn btn-done{% if s.marked %} marked{% endif %}">
+        {% if s.marked %}✓ Delivered{% else %}Mark Delivered{% endif %}
+      </button>
+    </form>
+  </div>
+  <div class="done-stamp">✓ Delivered</div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="empty"><p>No deliveries scheduled for this date.</p></div>
+{% endif %}
+<div class="footer">{{ business_name }} · Delivery Sheet · {{ sheet_date }}</div>
+</body></html>"""
+
+
+@app.route("/sheet/<sheet_date>/<token>")
+def public_delivery_sheet(sheet_date, token):
+    if token != _sheet_token(sheet_date):
+        return "<h2 style='font-family:sans-serif;padding:2rem;color:#c00'>Invalid or expired link.</h2>", 403
+    conn = get_db()
+    stops = []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("""
+                SELECT id, full_name, phone, delivery_location,
+                       event_street, event_city, event_state, event_zip,
+                       setup_time AS event_start_time, items_json, notes,
+                       delivery_status
+                FROM bookings
+                WHERE setup_date = %s
+                  AND status = 'accepted'
+                  AND (archived IS NULL OR archived = FALSE)
+                ORDER BY setup_time ASC NULLS LAST, id ASC
+            """, (sheet_date,))
+            for row in cur.fetchall():
+                s = dict(row)
+                parts = [
+                    (s.get("event_street") or "").strip(),
+                    (s.get("event_city")   or "").strip(),
+                    (s.get("event_state")  or "").strip(),
+                    (s.get("event_zip")    or "").strip(),
+                ]
+                s["nav_address"] = ", ".join(p for p in parts if p)
+                try:
+                    items = json.loads(s.get("items_json") or "[]")
+                    s["items_summary"] = ", ".join(
+                        f"{i.get('qty',1)}x {i.get('name','')}" for i in items
+                    )
+                except Exception:
+                    s["items_summary"] = ""
+                s["marked"] = (s.get("delivery_status") == "delivered")
+                stops.append(s)
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Delivery sheet error: {e}")
+    try:
+        dt = datetime.strptime(sheet_date, "%Y-%m-%d")
+        sheet_date_fmt = dt.strftime("%A, %B %-d %Y")
+    except Exception:
+        sheet_date_fmt = sheet_date
+    return render_template_string(DELIVERY_SHEET_HTML,
+        stops=stops,
+        sheet_date=sheet_date,
+        sheet_date_fmt=sheet_date_fmt,
+        token=token,
+        business_name=BUSINESS_NAME,
+    )
+
+
+@app.route("/sheet/<sheet_date>/<token>/mark/<int:booking_id>", methods=["POST"])
+def public_mark_delivered(sheet_date, token, booking_id):
+    if token != _sheet_token(sheet_date):
+        return "Invalid link", 403
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE bookings SET delivery_status='delivered' WHERE id=%s",
+                (booking_id,)
+            )
+            conn.commit()
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Mark delivered error: {e}")
+    return redirect(f"/sheet/{sheet_date}/{token}")
 
 
 @app.route("/admin/route/override/<int:booking_id>", methods=["POST"])
