@@ -245,8 +245,13 @@ def init_db():
             "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='confirmed'",
             # Migrate: partial → accepted + partial
             "UPDATE bookings SET status='accepted', payment_status='partial'  WHERE status='partial'",
-            # Migrate: accepted with payment → waiting
+            # Migrate accepted bookings: set payment_status based on amount_paid
+            "UPDATE bookings SET payment_status='paid'    WHERE status='accepted' AND payment_status IS NULL AND amount_paid >= grand_total - 0.50 AND grand_total > 0",
+            "UPDATE bookings SET payment_status='partial' WHERE status='accepted' AND payment_status IS NULL AND amount_paid > 0 AND amount_paid < grand_total - 0.50",
             "UPDATE bookings SET payment_status='waiting' WHERE status='accepted' AND payment_status IS NULL",
+            # Fix bookings already migrated to 'waiting' that actually have amount_paid
+            "UPDATE bookings SET payment_status='paid'    WHERE status='accepted' AND payment_status='waiting' AND amount_paid >= grand_total - 0.50 AND grand_total > 0 AND amount_paid > 0",
+            "UPDATE bookings SET payment_status='partial' WHERE status='accepted' AND payment_status='waiting' AND amount_paid > 0 AND amount_paid < grand_total - 0.50 AND grand_total > 0",
             # Auto-conclude: picked up 2+ days ago
             """UPDATE bookings SET status='concluded'
                WHERE delivery_status='picked_up'
