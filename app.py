@@ -1195,13 +1195,13 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
         pay_btn_label  = f"Pay ${charge_amount:.2f} Deposit Now"
         header_sub     = "Pay your 25% deposit to secure your date"
         urgency_msg    = "Your booking is <strong>not secured</strong> until the deposit is paid. Pay now to lock in your date."
-        balance_line   = f'<div style="border-top:1px solid #c6f6d5;margin-top:1rem;padding-top:1rem;font-size:.87rem;color:#4a5568"><p style="margin:0"><strong>Remaining balance:</strong> ${remaining:.2f} — due <strong>48 hours before</strong> your event on {b.get("event_start_date")}</p></div>'
-        balance_plain  = f"Remaining balance: ${remaining:.2f} — due 48 hours before your event."
+        balance_line   = f'<div style="border-top:1px solid #c6f6d5;margin-top:1rem;padding-top:1rem;font-size:.87rem;color:#4a5568"><p style="margin:0"><strong>Remaining balance:</strong> ${remaining:.2f} — due <strong>48 hours before</strong> your delivery on {b.get("setup_date") or b.get("event_start_date")}</p></div>'
+        balance_plain  = f"Remaining balance: ${remaining:.2f} — due 48 hours before your delivery."
     else:
         due_label      = "Full Payment Required"
         pay_btn_label  = f"Pay Full Amount ${charge_amount:.2f}"
-        header_sub     = "Full payment required — your event is within 7 days"
-        urgency_msg    = "Because your event is <strong>within 7 days</strong>, full payment is required to secure your booking."
+        header_sub     = "Full payment required — your delivery day is within 7 days"
+        urgency_msg    = "Because your delivery day is <strong>within 7 days</strong>, full payment is required to secure your booking."
         balance_line   = ""
         balance_plain  = "Full payment required — no remaining balance."
 
@@ -6712,16 +6712,15 @@ def accept_booking(booking_id):
             items = []
         items_desc = ", ".join(f"{i.get('qty','')}x {i.get('name','')}" for i in items if isinstance(i, dict))
 
-        # ── Determine payment type based on days until event ──────────────────
-        event_date_raw = b.get("event_start_date")
+        # ── Determine payment type based on days until delivery (setup_date) ──
+        delivery_date_raw = b.get("setup_date") or b.get("event_start_date")
         days_until = 999
         try:
-            # Convert to string first — handles date objects, datetime objects, and strings
-            event_dt = datetime.strptime(str(event_date_raw)[:10], "%Y-%m-%d").date()
+            event_dt = datetime.strptime(str(delivery_date_raw)[:10], "%Y-%m-%d").date()
             days_until = (event_dt - date.today()).days
-            log.info(f"Booking #{booking_id}: event={event_dt}, today={date.today()}, days_until={days_until}")
+            log.info(f"Booking #{booking_id}: delivery={event_dt}, today={date.today()}, days_until={days_until}")
         except Exception as e:
-            log.error(f"Date calc error for booking #{booking_id}: {e} (raw={event_date_raw!r})")
+            log.error(f"Date calc error for booking #{booking_id}: {e} (raw={delivery_date_raw!r})")
 
         if days_until <= 7:
             # Event within 7 days — full payment required
