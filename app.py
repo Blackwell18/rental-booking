@@ -3030,7 +3030,9 @@ ADMIN_DASH_HTML = """
         </tr></thead>
         <tbody>
           {% for b in bookings %}
-          <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '')|lower }} {{ (b.email or '')|lower }} {{ (b.phone or '')|lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '')|lower }}">
+          {% set _bc = conflict_map.get(b.id, []) %}
+          <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '')|lower }} {{ (b.email or '')|lower }} {{ (b.phone or '')|lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '')|lower }}"
+            {% if _bc %}style="background:#fff5f5;border-left:4px solid #e53e3e;"{% endif %}>
             <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
             <td style="font-weight:700;color:#2563eb;font-size:.83rem"><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;text-decoration:none">#{{ b.id }}</a></td>
             <td>
@@ -3042,6 +3044,15 @@ ADMIN_DASH_HTML = """
                   {% if b.phone %}<div style="font-size:.74rem;color:#6b7280;margin-top:.05rem"><a href="tel:{{ b.phone }}" style="color:#6b7280;text-decoration:none">📞 {{ b.phone }}</a></div>{% endif %}
                 </div>
               </div>
+              {% if _bc %}
+              <div style="margin-top:.35rem;display:flex;flex-wrap:wrap;gap:.3rem">
+                {% for _cf in _bc %}
+                <span style="display:inline-flex;align-items:center;gap:.25rem;background:#fed7d7;color:#c53030;border-radius:4px;padding:.15rem .45rem;font-size:.72rem;font-weight:700">
+                  🚨 {{ _cf.item }}: {{ _cf.shortfall }} short
+                </span>
+                {% endfor %}
+              </div>
+              {% endif %}
             </td>
             <td>
               {% if b.status == 'accepted' %}
@@ -6401,6 +6412,9 @@ def admin_dashboard():
         log.error(f"Auto-archive error: {e}")
 
     inv_conflicts = get_inventory_conflicts()
+    conflict_map = {}
+    for _c in inv_conflicts:
+        conflict_map.setdefault(_c["booking_id"], []).append(_c)
 
     # Going out today / Coming back today
     going_out   = []
@@ -6466,6 +6480,7 @@ def admin_dashboard():
         sort_by=sort_by,
         tab=tab,
         inv_conflicts=inv_conflicts,
+        conflict_map=conflict_map,
         going_out=going_out,
         coming_back=coming_back,
         today_label=date.today().strftime('%A, %B %-d %Y'),
