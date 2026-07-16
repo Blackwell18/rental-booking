@@ -1510,6 +1510,88 @@ def send_denied_email(b):
     _send_email(email, subject, html, plain)
 
 
+def send_denied_inventory_email(b, short_items):
+    """Send professional denial email specifically citing inventory shortage."""
+    email = b.get("email")
+    first = (b.get("full_name") or "").split()[0]
+    if not email:
+        return
+
+    event_date_fmt = _fmt_date(b.get("event_start_date"))
+
+    item_rows_html = ""
+    item_rows_plain = ""
+    for name in short_items:
+        item_rows_html += f"""
+        <div style="display:flex;justify-content:space-between;font-size:.88rem;
+                    color:#2d3748;padding:.4rem 0;border-bottom:1px solid #fbd38d">
+          <span>{name}</span>
+          <span style="color:#c05621;font-weight:600">Unavailable for your date</span>
+        </div>"""
+        item_rows_plain += f"  - {name}: unavailable for your date\n"
+
+    subject = f"Regarding Your Rental Request — {BUSINESS_NAME}"
+    html = f"""
+<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:520px;margin:0 auto">
+
+  <div style="background:#1a365d;border-radius:12px 12px 0 0;padding:1.75rem 2rem;color:white;text-align:center">
+    <div style="font-size:.95rem;opacity:.8;margin-bottom:.3rem">{BUSINESS_NAME}</div>
+    <h2 style="margin:0;font-weight:600;font-size:1.3rem">Regarding Your Rental Request</h2>
+  </div>
+
+  <div style="background:white;padding:2rem;border-radius:0 0 12px 12px;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+
+    <p style="color:#2d3748;font-size:1rem;margin:0 0 1rem">Hi <strong>{first}</strong>,</p>
+
+    <p style="color:#4a5568;line-height:1.75;margin:0 0 1rem;font-size:.95rem">
+      Thank you for choosing {BUSINESS_NAME} for your upcoming event. We truly appreciate
+      your interest and the time you took to submit your request.
+    </p>
+
+    <p style="color:#4a5568;line-height:1.75;margin:0 0 1.25rem;font-size:.95rem">
+      Unfortunately, after reviewing your booking for <strong style="color:#2d3748">{event_date_fmt}</strong>,
+      we are unable to fulfill your order at this time. The item(s) you requested are not available
+      in sufficient quantity for your event date due to prior commitments already in place.
+    </p>
+
+    <div style="background:#fffbeb;border:1.5px solid #fbd38d;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem">
+      <div style="font-size:.75rem;font-weight:700;color:#92400e;margin-bottom:.6rem;
+                  text-transform:uppercase;letter-spacing:.05em">Items unavailable</div>
+      {item_rows_html}
+    </div>
+
+    <p style="color:#4a5568;line-height:1.75;margin:0 0 1.25rem;font-size:.95rem">
+      We sincerely apologize for any inconvenience this may cause. We would love the
+      opportunity to serve you and encourage you to reach out if you have a flexible date,
+      need adjusted quantities, or would like to be placed on a waitlist in case
+      availability opens up.
+    </p>
+
+    <div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;
+                padding:.85rem 1.1rem;margin-bottom:1.5rem;font-size:.88rem;color:#4a5568;line-height:1.8">
+      {f'<div>📞 <strong style="color:#2d3748">{BUSINESS_PHONE}</strong></div>' if BUSINESS_PHONE else ''}
+      {f'<div>✉️ <strong style="color:#2d3748">{BUSINESS_EMAIL}</strong></div>' if BUSINESS_EMAIL else ''}
+    </div>
+
+    <p style="margin:0;color:#2d3748;font-size:.95rem;font-weight:600">— The {BUSINESS_NAME} Team</p>
+  </div>
+</div></body></html>"""
+
+    plain = (
+        f"Hi {first},\n\n"
+        f"Thank you for choosing {BUSINESS_NAME} for your upcoming event.\n\n"
+        f"Unfortunately, after reviewing your booking for {event_date_fmt}, we are unable to fulfill "
+        f"your order at this time. The following item(s) are not available in sufficient quantity "
+        f"due to prior commitments:\n\n{item_rows_plain}\n"
+        f"We sincerely apologize for any inconvenience. Please don't hesitate to reach out if you "
+        f"have a flexible date, need adjusted quantities, or would like to discuss other options."
+        + (f"\n\nCall us at {BUSINESS_PHONE}." if BUSINESS_PHONE else "")
+        + f"\n\n— The {BUSINESS_NAME} Team"
+    )
+    _send_email(email, subject, html, plain)
+
+
 def send_final_payment_email(b, remaining_amount, payment_link):
     """Send final payment reminder 48 hours before event with Stripe link for remaining balance."""
     email = b.get("email")
@@ -6820,8 +6902,17 @@ def deny_booking(booking_id):
             cur2.execute("UPDATE bookings SET status='denied' WHERE id=%s", (booking_id,))
             conn.commit()
             cur2.close()
-            send_denied_email(b)
-            log.info(f"Booking #{booking_id} denied")
+            # Check if denial is due to inventory shortage — if so, send specific email
+            try:
+                inv_status = get_booking_inventory_check(booking_id)
+                short_items = [s["item"] for s in inv_status if not s.get("ok")]
+            except Exception:
+                short_items = []
+            if short_items:
+                send_denied_inventory_email(b, short_items)
+            else:
+                send_denied_email(b)
+            log.info(f"Booking #{booking_id} denied (short_items={short_items})")
         cur.close()
         conn.close()
     except Exception as e:
