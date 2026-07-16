@@ -381,9 +381,9 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
             SELECT items_json FROM bookings
             WHERE status IN ('confirmed', 'partial', 'accepted')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
-              AND setup_date     IS NOT NULL
+              AND COALESCE(setup_date, event_start_date) IS NOT NULL
               AND event_end_date IS NOT NULL
-              AND setup_date     <= %s
+              AND COALESCE(setup_date, event_start_date) <= %s
               AND event_end_date >= %s
         """
         params = [end_date_str, start_date_str]
@@ -427,18 +427,18 @@ def get_inventory_conflicts():
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         cur.execute("""
-            SELECT id, full_name, setup_date, event_end_date, items_json
+            SELECT id, full_name, setup_date, event_start_date, event_end_date, items_json
             FROM bookings
             WHERE status IN ('confirmed','partial','accepted')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
-              AND setup_date     IS NOT NULL
+              AND COALESCE(setup_date, event_start_date) IS NOT NULL
               AND event_end_date IS NOT NULL
         """)
         active = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
         for b in active:
-            b_start = str(b.get("setup_date",     ""))[:10]
+            b_start = str(b.get("setup_date") or b.get("event_start_date") or "")[:10]
             b_end   = str(b.get("event_end_date", ""))[:10]
 
             # Sum qty reserved by every OTHER confirmed booking whose
@@ -447,7 +447,7 @@ def get_inventory_conflicts():
             for o in active:
                 if o["id"] == b["id"]:
                     continue
-                o_start = str(o.get("setup_date",     ""))[:10]
+                o_start = str(o.get("setup_date") or o.get("event_start_date") or "")[:10]
                 o_end   = str(o.get("event_end_date", ""))[:10]
                 if o_start <= b_end and o_end >= b_start:  # date overlap
                     for item in json.loads(o.get("items_json") or "[]"):
@@ -530,16 +530,18 @@ def get_booking_inventory_check(booking_id):
             return issues  # return absolute issues even without dates
 
         # Other confirmed/accepted/partial bookings whose delivery→pickup
-        # window overlaps this booking's delivery→pickup window
+        # window overlaps this booking's delivery→pickup window.
+        # Use COALESCE(setup_date, event_start_date) so old bookings without
+        # a delivery date set still count against inventory.
         cur.execute("""
             SELECT id, full_name, items_json, setup_date, event_end_date
             FROM bookings
             WHERE status IN ('confirmed','partial','accepted')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND id != %s
-              AND setup_date IS NOT NULL
+              AND COALESCE(setup_date, event_start_date) IS NOT NULL
               AND event_end_date IS NOT NULL
-              AND setup_date     <= %s
+              AND COALESCE(setup_date, event_start_date) <= %s
               AND event_end_date >= %s
         """, (booking_id,
               b_end or b_start,
@@ -6547,9 +6549,9 @@ def admin_booking(booking_id):
                     WHERE status IN ('confirmed','accepted','partial')
                       AND (delivery_status IS NULL OR delivery_status != 'picked_up')
                       AND id != %s
-                      AND setup_date IS NOT NULL
+                      AND COALESCE(setup_date, event_start_date) IS NOT NULL
                       AND event_end_date IS NOT NULL
-                      AND setup_date     <= %s
+                      AND COALESCE(setup_date, event_start_date) <= %s
                       AND event_end_date >= %s
                 """, (booking_id,
                       _b_back or _b_out,
