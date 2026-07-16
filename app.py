@@ -6591,6 +6591,15 @@ def admin_booking(booking_id):
                         "conflicting_bookings": [],
                     })
         log.info(f"[INV] booking #{booking_id}: status={booking_inv_status} issues={booking_inv_issues}")
+
+        # Confirmed/partial/delivered bookings already have their inventory locked.
+        # Don't show shortage alerts for them — only flag shortages for pending/accepted.
+        if b.get("status") in ("confirmed", "partial", "delivered", "picked_up"):
+            booking_inv_issues = []
+            for _s in booking_inv_status:
+                _s["ok"] = True
+                _s["shortfall"] = 0
+
     except Exception as _inv_err:
         log.error(f"Inventory check error for #{booking_id}: {_inv_err}")
         import traceback as _inv_tb; log.error(_inv_tb.format_exc())
