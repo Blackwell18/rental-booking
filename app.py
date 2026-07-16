@@ -241,6 +241,7 @@ def init_db():
             )""",
             # New status/payment system
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS route_override BOOLEAN DEFAULT FALSE",
             # Migrate: confirmed → accepted + paid
             "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='confirmed'",
             "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='paid'",
@@ -8608,12 +8609,41 @@ ADMIN_ROUTE_HTML = """
         {% if b.phone %}
         <a href="tel:{{ b.phone }}" class="btn-sm">📞 Call</a>
         {% endif %}
+        {% if b.route_override %}
+        <form method="POST" action="/admin/route/override/{{ b.id }}" style="display:inline">
+          <input type="hidden" name="redirect" value="/admin/route?date={{ route_date }}&view={{ view }}">
+          <button type="submit" class="btn-sm" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;cursor:pointer" title="Remove from route">✕ Remove Override</button>
+        </form>
+        {% endif %}
       </div>
     </div>
   </div>
   {% endfor %}
   {% else %}
   <div class="empty">{% if view == "pickup" %}No pickups scheduled for {{ route_date }}.{% else %}No deliveries scheduled for {{ route_date }}.{% endif %}</div>
+  {% endif %}
+
+  {% if excluded_bookings %}
+  <div style="margin-top:2rem;padding:1rem 1.25rem;background:#f9fafb;border:1.5px dashed #d1d5db;border-radius:10px">
+    <div style="font-size:.82rem;font-weight:700;color:#6b7280;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em">
+      📋 Not on route — {{ excluded_bookings|length }} booking{{ 's' if excluded_bookings|length != 1 }} scheduled this day
+    </div>
+    {% for eb in excluded_bookings %}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:white;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:.5rem;gap:1rem">
+      <div style="flex:1;min-width:0">
+        <span style="font-weight:600;color:#111827">{{ eb.full_name }}</span>
+        <span class="badge badge-{{ eb.status }}" style="margin-left:.4rem;font-size:.68rem">{{ eb.status }}</span>
+        <div style="font-size:.78rem;color:#6b7280;margin-top:.15rem">
+          #{{ eb.id }}{% if eb.items_summary %} · {{ eb.items_summary }}{% endif %}
+        </div>
+      </div>
+      <form method="POST" action="/admin/route/override/{{ eb.id }}" style="flex-shrink:0">
+        <input type="hidden" name="redirect" value="/admin/route?date={{ route_date }}&view={{ view }}">
+        <button type="submit" style="background:#1d4ed8;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.78rem;font-weight:600;cursor:pointer">+ Add to Route</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
   {% endif %}
 </div>
 </div>
@@ -9143,9 +9173,10 @@ def admin_route():
                     SELECT id, full_name, phone, email, delivery_location,
                            event_street, event_city, event_state, event_zip,
                            event_start_time, items_json, status, grand_total,
-                           event_end_date AS route_date_field
+                           event_end_date AS route_date_field, route_override
                     FROM bookings
                     WHERE event_end_date = %s
+                      AND (status = 'accepted' OR route_override = TRUE)
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY event_start_time ASC NULLS LAST, id ASC
@@ -9155,9 +9186,10 @@ def admin_route():
                     SELECT id, full_name, phone, email, delivery_location,
                            event_street, event_city, event_state, event_zip,
                            setup_time AS event_start_time, items_json, status, grand_total,
-                           setup_date AS route_date_field
+                           setup_date AS route_date_field, route_override
                     FROM bookings
                     WHERE setup_date = %s
+                      AND (status = 'accepted' OR route_override = TRUE)
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY setup_time ASC NULLS LAST, id ASC
@@ -9184,14 +9216,65 @@ def admin_route():
         {"addr": b["nav_address"], "name": b.get("full_name", "")}
         for b in route_bookings
     ])
+
+    # Bookings on this date that are NOT on the route (pending / waiting / not overridden)
+    excluded_bookings = []
+    date_col = "event_end_date" if view == "pickup" else "setup_date"
+    conn_ex = get_db()
+    if conn_ex:
+        try:
+            cur_ex = conn_ex.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur_ex.execute(f"""
+                SELECT id, full_name, status, items_json
+                FROM bookings
+                WHERE {date_col} = %s
+                  AND status NOT IN ('accepted','denied','cancelled','concluded')
+                  AND (route_override IS NULL OR route_override = FALSE)
+                  AND (archived IS NULL OR archived = FALSE)
+                ORDER BY id ASC
+            """, (route_date,))
+            for row in cur_ex.fetchall():
+                eb = dict(row)
+                try:
+                    items = json.loads(eb.get('items_json') or '[]')
+                    eb['items_summary'] = ', '.join(f"{i.get('qty',1)}x {i.get('name','')}" for i in items)
+                except Exception:
+                    eb['items_summary'] = ''
+                excluded_bookings.append(eb)
+            cur_ex.close(); conn_ex.close()
+        except Exception as e:
+            log.error(f"excluded_bookings error: {e}")
+
     return render_template_string(ADMIN_ROUTE_HTML,
         business_name=BUSINESS_NAME,
         depot_address=DEPOT_ADDRESS,
         route_date=route_date,
         view=view,
         route_bookings=route_bookings,
+        excluded_bookings=excluded_bookings,
         stops_json=stops_json,
     )
+
+
+@app.route("/admin/route/override/<int:booking_id>", methods=["POST"])
+@admin_required
+def admin_route_override(booking_id):
+    """Toggle route_override for a booking — forces it onto (or off of) the route."""
+    redirect_to = request.form.get("redirect", "/admin/route")
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT route_override FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            if row:
+                new_val = not bool(row[0])
+                cur.execute("UPDATE bookings SET route_override=%s WHERE id=%s", (new_val, booking_id))
+                conn.commit()
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"Route override error: {e}")
+    return redirect(redirect_to)
 
 
 @app.route("/admin/formsite-import", methods=["GET", "POST"])
