@@ -377,16 +377,17 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
         return available
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        # Delivery-date-only: items locked from delivery until picked up.
-        # Use start_date_str (customer's requested delivery) as the cutoff.
+        # Window = setup_date (est. delivery) → event_end_date (est. pickup).
         query = """
             SELECT items_json FROM bookings
             WHERE status IN ('confirmed', 'partial', 'accepted')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
-              AND COALESCE(setup_date, event_start_date) IS NOT NULL
-              AND COALESCE(setup_date, event_start_date) <= %s
+              AND setup_date     IS NOT NULL
+              AND event_end_date IS NOT NULL
+              AND setup_date     <= %s
+              AND event_end_date >= %s
         """
-        params = [start_date_str]
+        params = [end_date_str, start_date_str]
         if exclude_id:
             query += " AND id != %s"
             params.append(exclude_id)
@@ -427,34 +428,36 @@ def get_inventory_conflicts():
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-        # Load all non-cancelled bookings (delivery date only — no event_end_date needed)
+        # Window = setup_date (est. delivery) → event_end_date (est. pickup).
+        # Only bookings with BOTH dates count.
         cur.execute("""
-            SELECT id, full_name, status, delivery_status, setup_date, event_start_date, items_json
+            SELECT id, full_name, status, delivery_status,
+                   setup_date, event_end_date, items_json
             FROM bookings
             WHERE status NOT IN ('cancelled','denied')
               AND (archived IS NULL OR archived = FALSE)
-              AND COALESCE(setup_date, event_start_date) IS NOT NULL
+              AND setup_date     IS NOT NULL
+              AND event_end_date IS NOT NULL
         """)
         all_bookings = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
-        # Confirmed/partial = own their inventory (delivered but not yet picked up)
-        confirmed = [b for b in all_bookings if b.get("status") in ("confirmed", "partial", "delivered")]
-        # Pending/accepted = might be short
+        confirmed   = [b for b in all_bookings if b.get("status") in ("confirmed", "partial", "delivered")]
         unconfirmed = [b for b in all_bookings if b.get("status") in ("pending", "accepted")]
 
         for b in unconfirmed:
-            b_start = str(b.get("setup_date") or b.get("event_start_date") or "")[:10]
-            if not b_start:
+            b_start = str(b.get("setup_date")    or "")[:10]
+            b_end   = str(b.get("event_end_date") or "")[:10]
+            if not b_start or not b_end:
                 continue
 
-            # Count inventory locked by confirmed bookings delivered on or before this
-            # booking's delivery date that haven't been picked up yet
+            # Confirmed bookings whose est. delivery→pickup window overlaps this booking
             confirmed_reserved = {}
             for c in confirmed:
-                c_start = str(c.get("setup_date") or c.get("event_start_date") or "")[:10]
+                c_start  = str(c.get("setup_date")    or "")[:10]
+                c_end    = str(c.get("event_end_date") or "")[:10]
                 c_picked = (c.get("delivery_status") or "") == "picked_up"
-                if c_start and c_start <= b_start and not c_picked:
+                if c_start and c_end and not c_picked and c_start <= b_end and c_end >= b_start:
                     for item in json.loads(c.get("items_json") or "[]"):
                         pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
                         qty = int(item.get("qty") or 0)
@@ -534,18 +537,19 @@ def get_booking_inventory_check(booking_id):
             cur.close(); conn.close()
             return issues  # return absolute issues even without dates
 
-        # Delivery-date-only: items are out from their delivery date until picked up.
-        # Find all confirmed bookings delivered on or before this booking's delivery date
-        # that haven't been returned yet.
+        # Window = setup_date (est. delivery) → event_end_date (est. pickup).
+        # Only bookings with BOTH dates set count against inventory.
         cur.execute("""
-            SELECT id, full_name, items_json, setup_date, event_start_date
+            SELECT id, full_name, items_json, setup_date, event_end_date
             FROM bookings
             WHERE status IN ('confirmed','partial','accepted')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND id != %s
-              AND COALESCE(setup_date, event_start_date) IS NOT NULL
-              AND COALESCE(setup_date, event_start_date) <= %s
-        """, (booking_id, b_start))
+              AND setup_date     IS NOT NULL
+              AND event_end_date IS NOT NULL
+              AND setup_date     <= %s
+              AND event_end_date >= %s
+        """, (booking_id, b_end or b_start, b_start or b_end))
         others = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
@@ -6529,14 +6533,13 @@ def admin_booking(booking_id):
         _name_to_pid    = {p["name"].lower(): p["id"] for p in _products_inv}
         _b_items = json.loads(b.get("items_json") or "[]")
 
-        # Delivery-date-only inventory check:
-        # Items are "out" from their delivery date (setup_date) until marked picked_up.
-        # No event dates used — just find all confirmed bookings delivered on or before
-        # this booking's delivery date that haven't come back yet.
-        _b_out = str(b.get("setup_date") or b.get("event_start_date") or "")[:10]
+        # Inventory window = est. delivery (setup_date) → est. pickup (event_end_date).
+        # Only bookings with BOTH dates set count against inventory.
+        _b_out  = str(b.get("setup_date")    or "")[:10]
+        _b_back = str(b.get("event_end_date") or "")[:10]
 
         _others_reserved = {}
-        if _b_out:
+        if _b_out and _b_back:
             _conn_inv = get_db()
             if _conn_inv:
                 _cur_inv = _conn_inv.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -6545,9 +6548,11 @@ def admin_booking(booking_id):
                     WHERE status IN ('confirmed','accepted','partial')
                       AND (delivery_status IS NULL OR delivery_status != 'picked_up')
                       AND id != %s
-                      AND COALESCE(setup_date, event_start_date) IS NOT NULL
-                      AND COALESCE(setup_date, event_start_date) <= %s
-                """, (booking_id, _b_out))
+                      AND setup_date     IS NOT NULL
+                      AND event_end_date IS NOT NULL
+                      AND setup_date     <= %s
+                      AND event_end_date >= %s
+                """, (booking_id, _b_back, _b_out))
                 for _orow in _cur_inv.fetchall():
                     for _oit in json.loads(_orow["items_json"] or "[]"):
                         _opid = _oit.get("id") or _name_to_pid.get((_oit.get("name") or "").lower())
@@ -10623,21 +10628,24 @@ def debug_inv_check(booking_id):
             return f"<pre>Booking #{booking_id} not found</pre>"
         b = _row(brow)
 
-        b_out  = str(b.get("setup_date") or b.get("event_start_date") or "")[:10]
+        b_out  = str(b.get("setup_date") or "")[:10]
+        b_back = str(b.get("event_end_date") or "")[:10]
         b_items = json.loads(b.get("items_json") or "[]")
 
-        # Delivery-date-only: same logic as the booking detail page
+        # est. delivery (setup_date) → est. pickup (event_end_date)
         cur.execute("""
             SELECT id, full_name, status, delivery_status,
-                   setup_date, event_start_date, items_json
+                   setup_date, event_end_date, items_json
             FROM bookings
             WHERE status IN ('confirmed','accepted','partial')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND id != %s
-              AND COALESCE(setup_date, event_start_date) IS NOT NULL
-              AND COALESCE(setup_date, event_start_date) <= %s
-            ORDER BY COALESCE(setup_date, event_start_date), id
-        """, (booking_id, b_out))
+              AND setup_date     IS NOT NULL
+              AND event_end_date IS NOT NULL
+              AND setup_date     <= %s
+              AND event_end_date >= %s
+            ORDER BY setup_date, id
+        """, (booking_id, b_back or b_out, b_out or b_back))
         overlapping = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
@@ -10652,22 +10660,24 @@ def debug_inv_check(booking_id):
 
         out = ["<pre style='font-family:monospace;padding:1rem;font-size:.83rem;line-height:1.5'>"]
         out.append(f"=== Inventory Debug — Booking #{booking_id} ({b.get('full_name')}) ===\n")
-        out.append(f"  Status:      {b.get('status')}\n")
-        out.append(f"  setup_date:  {b.get('setup_date')}  (delivery date)\n")
-        out.append(f"  Checking: all confirmed/accepted/partial bookings delivered on or before {b_out!r} that are NOT picked up\n")
+        out.append(f"  Status:          {b.get('status')}\n")
+        out.append(f"  Est. Delivery:   {b.get('setup_date')}\n")
+        out.append(f"  Est. Pickup:     {b.get('event_end_date')}\n")
+        out.append(f"  Checking: confirmed bookings where setup_date <= {b_back or b_out!r} AND event_end_date >= {b_out or b_back!r}\n")
         out.append(f"\n--- This booking needs ---\n")
         for it in b_items:
             out.append(f"  {it.get('name')}: {it.get('qty')}\n")
         out.append(f"\n--- Overlapping bookings ({len(overlapping)}) ---\n")
         for o in overlapping:
-            o_start  = str(o.get("setup_date") or o.get("event_start_date") or "")[:10]
+            o_start  = str(o.get("setup_date")    or "")[:10]
+            o_end    = str(o.get("event_end_date") or "")[:10]
             o_status = o.get("delivery_status") or "not_delivered"
             chairs   = sum(int(it.get("qty",0)) for it in json.loads(o.get("items_json") or "[]")
                            if "chair" in (it.get("name") or "").lower())
             tables   = sum(int(it.get("qty",0)) for it in json.loads(o.get("items_json") or "[]")
                            if "table" in (it.get("name") or "").lower())
             out.append(f"  #{o['id']} {o.get('full_name',''):<25} {o.get('status',''):<12} "
-                       f"del:{o_start} pickup_status:{o_status}  chairs:{chairs} tables:{tables}\n")
+                       f"del:{o_start} pickup:{o_end} [{o_status}]  chairs:{chairs} tables:{tables}\n")
         out.append(f"\n--- Reserved totals ---\n")
         for pid, qty in reserved.items():
             total = prod_totals.get(pid, 0)
