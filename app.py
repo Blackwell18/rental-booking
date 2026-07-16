@@ -412,11 +412,11 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
 
 def get_inventory_conflicts():
     """
-    Returns a list of conflicts where a confirmed/accepted booking needs more
-    of an item than the inventory can supply given all other bookings on those dates.
-    Each conflict: {booking_id, customer, event_date, item, needed, available, shortfall}
+    Dashboard alert: flag pending/accepted bookings that can't be fulfilled
+    given what confirmed/partial bookings have already locked up.
+    Confirmed bookings are never flagged — they own their inventory.
     """
-    products   = get_products()
+    products    = get_products()
     prod_totals = {p["id"]: int(p["total"]) for p in products}
     name_to_pid = {p["name"].lower(): p["id"] for p in products}
 
@@ -426,53 +426,55 @@ def get_inventory_conflicts():
     conflicts = []
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+        # Load ALL non-cancelled bookings so pending ones are included
         cur.execute("""
-            SELECT id, full_name, setup_date, event_start_date, event_end_date, items_json
+            SELECT id, full_name, status, setup_date, event_start_date, event_end_date, items_json
             FROM bookings
-            WHERE status IN ('confirmed','partial','accepted')
+            WHERE status NOT IN ('cancelled','denied')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
+              AND (archived IS NULL OR archived = FALSE)
               AND COALESCE(setup_date, event_start_date) IS NOT NULL
               AND event_end_date IS NOT NULL
         """)
-        active = [_row(r) for r in cur.fetchall()]
+        all_bookings = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
-        for b in active:
+        # Confirmed/partial bookings are the ones that "own" inventory
+        confirmed = [b for b in all_bookings if b.get("status") in ("confirmed", "partial", "delivered")]
+        # Pending/accepted bookings are the ones that might be short
+        unconfirmed = [b for b in all_bookings if b.get("status") in ("pending", "accepted")]
+
+        for b in unconfirmed:
             b_start = str(b.get("setup_date") or b.get("event_start_date") or "")[:10]
             b_end   = str(b.get("event_end_date", ""))[:10]
+            if not b_start or not b_end:
+                continue
 
-            # Sum qty reserved by every OTHER confirmed booking whose
-            # drop-off→pickup window overlaps this booking's window
-            others_reserved = {}
-            for o in active:
-                if o["id"] == b["id"]:
-                    continue
-                o_start = str(o.get("setup_date") or o.get("event_start_date") or "")[:10]
-                o_end   = str(o.get("event_end_date", ""))[:10]
-                if o_start <= b_end and o_end >= b_start:  # date overlap
-                    for item in json.loads(o.get("items_json") or "[]"):
+            # Count inventory locked by confirmed bookings overlapping this window
+            confirmed_reserved = {}
+            for c in confirmed:
+                c_start = str(c.get("setup_date") or c.get("event_start_date") or "")[:10]
+                c_end   = str(c.get("event_end_date", ""))[:10]
+                if c_start and c_end and c_start <= b_end and c_end >= b_start:
+                    for item in json.loads(c.get("items_json") or "[]"):
                         pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
                         qty = int(item.get("qty") or 0)
                         if pid and qty > 0:
-                            others_reserved[pid] = others_reserved.get(pid, 0) + qty
+                            confirmed_reserved[pid] = confirmed_reserved.get(pid, 0) + qty
 
-            # Only flag shortages for bookings that aren't fully confirmed/paid.
-            # Confirmed/partial bookings "own" their inventory — alert on pending/accepted instead.
-            if b.get("status") in ("confirmed", "partial", "delivered", "picked_up"):
-                continue
-
-            # Check this booking's items against what's left
+            # Flag if this booking needs more than what's left after confirmed bookings
             for item in json.loads(b.get("items_json") or "[]"):
                 pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
                 qty = int(item.get("qty") or 0)
                 if pid and qty > 0 and pid in prod_totals:
-                    avail = max(0, prod_totals[pid] - others_reserved.get(pid, 0))
+                    avail = max(0, prod_totals[pid] - confirmed_reserved.get(pid, 0))
                     if qty > avail:
                         conflicts.append({
                             "booking_id": b["id"],
-                            "customer":   b.get("full_name","Unknown"),
+                            "customer":   b.get("full_name", "Unknown"),
                             "delivery_date": b_start,
-                            "item":       item.get("name",""),
+                            "item":       item.get("name", ""),
                             "needed":     qty,
                             "available":  avail,
                             "shortfall":  qty - avail,
