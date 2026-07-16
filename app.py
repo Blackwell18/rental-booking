@@ -4111,6 +4111,27 @@ ADMIN_BOOKING_HTML = """
   </div>
   {% endif %}
 
+  {% if booking_inv_status %}
+  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
+    <div style="font-weight:700;font-size:.88rem;color:#374151;margin-bottom:.65rem">📦 Inventory Status for This Booking</div>
+    <div style="display:flex;flex-direction:column;gap:.4rem">
+    {% for s in booking_inv_status %}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem .75rem;border-radius:7px;background:{% if s.ok %}#f0fdf4{% else %}#fef2f2{% endif %};border:1px solid {% if s.ok %}#bbf7d0{% else %}#fca5a5{% endif %}">
+      <span style="font-weight:600;font-size:.88rem;color:{% if s.ok %}#166534{% else %}#991b1b{% endif %}">
+        {% if not s.ok %}🚨{% else %}✅{% endif %} {{ s.item }}
+      </span>
+      <span style="font-size:.82rem;color:#6b7280">
+        Needs <strong style="color:{% if s.ok %}#166534{% else %}#dc2626{% endif %}">{{ s.needed }}</strong>
+        &nbsp;·&nbsp; {{ s.reserved }} reserved by others
+        &nbsp;·&nbsp; <strong>{{ s.available }}</strong> of {{ s.total }} available
+        {% if not s.ok %}<span style="background:#dc2626;color:white;border-radius:4px;padding:.1rem .4rem;font-size:.75rem;font-weight:700;margin-left:.4rem">{{ s.shortfall }} SHORT</span>{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   {% if b.status == 'pending' %}
   <div class="alert">
     This booking is waiting for your review. Click Accept to send the customer their invoice, contract, and Stripe payment link.
@@ -6489,7 +6510,70 @@ def admin_booking(booking_id):
     except Exception:
         pass
 
-    booking_inv_issues = get_booking_inventory_check(booking_id)
+    # Build full inventory status (always, not just on shortage)
+    booking_inv_issues = []
+    booking_inv_status = []   # [{item, needed, available, total, ok}]
+    try:
+        _products_inv   = get_products()
+        _prod_totals_inv = {p["id"]: int(p["total"]) for p in _products_inv}
+        _name_to_pid    = {p["name"].lower(): p["id"] for p in _products_inv}
+        _b_items        = json.loads(b.get("items_json") or "[]")
+        _b_start        = str(b.get("event_start_date") or b.get("setup_date") or "")[:10]
+        _b_end          = str(b.get("event_end_date") or _b_start)[:10]
+
+        # Compute reserved by other non-denied/cancelled bookings on same dates
+        _others_reserved = {}
+        if _b_start:
+            _conn_inv = get_db()
+            if _conn_inv:
+                _cur_inv = _conn_inv.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                _cur_inv.execute("""
+                    SELECT items_json FROM bookings
+                    WHERE status NOT IN ('denied','cancelled')
+                      AND id != %s
+                      AND event_start_date IS NOT NULL
+                      AND event_end_date   IS NOT NULL
+                      AND event_start_date <= %s
+                      AND event_end_date   >= %s
+                """, (booking_id, _b_end or _b_start, _b_start))
+                for _orow in _cur_inv.fetchall():
+                    for _oit in json.loads(_orow["items_json"] or "[]"):
+                        _opid = _oit.get("id") or _name_to_pid.get((_oit.get("name") or "").lower())
+                        _oqty = int(_oit.get("qty") or 0)
+                        if _opid and _oqty > 0:
+                            _others_reserved[_opid] = _others_reserved.get(_opid, 0) + _oqty
+                _cur_inv.close(); _conn_inv.close()
+
+        for _it in _b_items:
+            _iname = (_it.get("name") or "").strip()
+            _pid   = _it.get("id") or _name_to_pid.get(_iname.lower())
+            _qty   = int(_it.get("qty") or 0)
+            if _pid and _qty > 0 and _pid in _prod_totals_inv:
+                _total  = _prod_totals_inv[_pid]
+                _reserved = _others_reserved.get(_pid, 0)
+                _avail  = max(0, _total - _reserved)
+                _ok     = _qty <= _avail
+                booking_inv_status.append({
+                    "item":      _iname,
+                    "needed":    _qty,
+                    "reserved":  _reserved,
+                    "available": _avail,
+                    "total":     _total,
+                    "shortfall": max(0, _qty - _avail),
+                    "ok":        _ok,
+                })
+                if not _ok:
+                    booking_inv_issues.append({
+                        "item":                 _iname,
+                        "needed":               _qty,
+                        "available":            _avail,
+                        "shortfall":            _qty - _avail,
+                        "conflicting_bookings": [],
+                    })
+        log.info(f"[INV] booking #{booking_id}: status={booking_inv_status} issues={booking_inv_issues}")
+    except Exception as _inv_err:
+        log.error(f"Inventory check error for #{booking_id}: {_inv_err}")
+        import traceback as _inv_tb; log.error(_inv_tb.format_exc())
 
     # Fetch all confirmed/accepted booking date ranges for the calendar
     cal_bookings = []
@@ -6523,6 +6607,7 @@ def admin_booking(booking_id):
             products=get_products(), payment_links=get_payment_links(booking_id),
             matched_customer=matched_customer, weekend_residential=weekend_residential,
             booking_inv_issues=booking_inv_issues,
+            booking_inv_status=booking_inv_status,
             cal_bookings=cal_bookings)
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
