@@ -239,6 +239,22 @@ def init_db():
                 note         TEXT,
                 period_label VARCHAR(100)
             )""",
+            # New status/payment system
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT NULL",
+            # Migrate: confirmed → accepted + paid
+            "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='confirmed'",
+            # Migrate: partial → accepted + partial
+            "UPDATE bookings SET status='accepted', payment_status='partial'  WHERE status='partial'",
+            # Migrate: accepted with payment → waiting
+            "UPDATE bookings SET payment_status='waiting' WHERE status='accepted' AND payment_status IS NULL",
+            # Auto-conclude: picked up 2+ days ago
+            """UPDATE bookings SET status='concluded'
+               WHERE delivery_status='picked_up'
+                 AND status NOT IN ('concluded','cancelled','denied')
+                 AND (
+                   (picked_up_at IS NOT NULL AND picked_up_at <= NOW() - INTERVAL '2 days')
+                   OR (picked_up_at IS NULL AND event_end_date IS NOT NULL AND event_end_date <= CURRENT_DATE - 2)
+                 )""",
         ]
         for m in migrations:
             try:
@@ -380,7 +396,8 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
         # Window = setup_date (est. delivery) → event_end_date (est. pickup).
         query = """
             SELECT items_json FROM bookings
-            WHERE status IN ('confirmed', 'partial', 'accepted')
+            WHERE status = 'accepted'
+              AND payment_status IN ('partial','paid')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND setup_date     IS NOT NULL
               AND event_end_date IS NOT NULL
@@ -431,10 +448,10 @@ def get_inventory_conflicts():
         # Window = setup_date (est. delivery) → event_end_date (est. pickup).
         # Only bookings with BOTH dates count.
         cur.execute("""
-            SELECT id, full_name, status, delivery_status,
+            SELECT id, full_name, status, payment_status, delivery_status,
                    setup_date, event_end_date, items_json
             FROM bookings
-            WHERE status NOT IN ('cancelled','denied')
+            WHERE status NOT IN ('cancelled','denied','concluded')
               AND (archived IS NULL OR archived = FALSE)
               AND setup_date     IS NOT NULL
               AND event_end_date IS NOT NULL
@@ -442,8 +459,14 @@ def get_inventory_conflicts():
         all_bookings = [_row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
 
-        confirmed   = [b for b in all_bookings if b.get("status") in ("confirmed", "partial", "delivered")]
-        unconfirmed = [b for b in all_bookings if b.get("status") in ("pending", "accepted")]
+        # Only paid/partial bookings lock inventory
+        confirmed   = [b for b in all_bookings
+                       if b.get("status") == "accepted"
+                       and b.get("payment_status") in ("paid", "partial")]
+        # Waiting/pending bookings might be short
+        unconfirmed = [b for b in all_bookings
+                       if b.get("status") in ("pending",)
+                       or (b.get("status") == "accepted" and b.get("payment_status") == "waiting")]
 
         for b in unconfirmed:
             b_start = str(b.get("setup_date")    or "")[:10]
@@ -457,7 +480,8 @@ def get_inventory_conflicts():
                 c_start  = str(c.get("setup_date")    or "")[:10]
                 c_end    = str(c.get("event_end_date") or "")[:10]
                 c_picked = (c.get("delivery_status") or "") == "picked_up"
-                if c_start and c_end and not c_picked and c_start <= b_end and c_end >= b_start:
+                c_concluded = c.get("status") == "concluded"
+                if c_start and c_end and not c_picked and not c_concluded and c_start <= b_end and c_end >= b_start:
                     for item in json.loads(c.get("items_json") or "[]"):
                         pid = item.get("id") or name_to_pid.get((item.get("name") or "").lower())
                         qty = int(item.get("qty") or 0)
@@ -542,7 +566,8 @@ def get_booking_inventory_check(booking_id):
         cur.execute("""
             SELECT id, full_name, items_json, setup_date, event_end_date
             FROM bookings
-            WHERE status IN ('confirmed','partial','accepted')
+            WHERE status = 'accepted'
+              AND payment_status IN ('partial','paid')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND id != %s
               AND setup_date     IS NOT NULL
@@ -2784,10 +2809,12 @@ ADMIN_DASH_HTML = """
     .badge{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:20px;font-size:.73rem;font-weight:600;white-space:nowrap}
     .badge-pending{background:#fef9c3;color:#854d0e}
     .badge-accepted{background:#dbeafe;color:#1e40af}
-    .badge-confirmed{background:#dcfce7;color:#166534}
-    .badge-partial{background:#ede9fe;color:#7c3aed}
+    .badge-confirmed{background:#dbeafe;color:#1e40af}
+    .badge-partial{background:#dbeafe;color:#1e40af}
     .badge-denied{background:#fee2e2;color:#991b1b}
     .badge-cancelled{background:#f3f4f6;color:#6b7280}
+    .badge-concluded{background:#e5e7eb;color:#374151}
+    .pay-badge.pay-waiting{background:#fef3c7;color:#b45309}
     .pay-badge{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:20px;font-size:.73rem;font-weight:600;white-space:nowrap}
     .pay-paid{background:#dcfce7;color:#166534}
     .pay-due{background:#fef9c3;color:#854d0e}
@@ -2953,9 +2980,9 @@ ADMIN_DASH_HTML = """
       <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.4rem">Payment:</label>
       <select name="pay_filter" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .5rem;font-size:.82rem;color:#374151">
         <option value="" {% if not pay_filter %}selected{% endif %}>All</option>
-        <option value="paid"    {% if pay_filter=='paid'    %}selected{% endif %}>Paid In Full</option>
+        <option value="paid"    {% if pay_filter=='paid'    %}selected{% endif %}>Paid in Full</option>
         <option value="partial" {% if pay_filter=='partial' %}selected{% endif %}>Partially Paid</option>
-        <option value="due"     {% if pay_filter=='due'     %}selected{% endif %}>Payment Due</option>
+        <option value="due"     {% if pay_filter=='due'     %}selected{% endif %}>Waiting</option>
       </select>
       <label style="font-size:.78rem;font-weight:600;color:#6b7280;margin-left:.4rem">Sort:</label>
       <select name="sort" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .5rem;font-size:.82rem;color:#374151">
@@ -3008,7 +3035,21 @@ ADMIN_DASH_HTML = """
                 </div>
               </div>
             </td>
-            <td><span class="badge badge-{{ b.status }}">{{ b.status|capitalize }}</span></td>
+            <td>
+              {% if b.status == 'accepted' %}
+                <span class="badge badge-accepted">Accepted</span>
+              {% elif b.status == 'pending' %}
+                <span class="badge badge-pending">Pending</span>
+              {% elif b.status == 'denied' %}
+                <span class="badge badge-denied">Denied</span>
+              {% elif b.status == 'cancelled' %}
+                <span class="badge badge-cancelled">Cancelled</span>
+              {% elif b.status == 'concluded' %}
+                <span class="badge badge-concluded">Concluded</span>
+              {% else %}
+                <span class="badge badge-{{ b.status }}">{{ b.status|capitalize }}</span>
+              {% endif %}
+            </td>
             <td>
               <div class="date-range">
                 <span>{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else (b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '—') }}</span>
@@ -3248,7 +3289,7 @@ ADMIN_BOOKING_EDIT_HTML = """
         <select name="status">
           <option value="pending"   {% if b.status=='pending'   %}selected{% endif %}>Pending</option>
           <option value="accepted"  {% if b.status=='accepted'  %}selected{% endif %}>Accepted (Awaiting Payment)</option>
-          <option value="confirmed" {% if b.status=='confirmed' %}selected{% endif %}>Confirmed (Paid in Full)</option>
+          <option value="concluded" {% if b.status=='concluded' %}selected{% endif %}>Concluded</option>
           <option value="partial"   {% if b.status=='partial'   %}selected{% endif %}>Confirmed (Partial Payment)</option>
           <option value="denied"    {% if b.status=='denied'    %}selected{% endif %}>Denied</option>
           <option value="cancelled" {% if b.status=='cancelled' %}selected{% endif %}>Cancelled</option>
@@ -3791,7 +3832,7 @@ addRow(); addRow();
 function onStatusChange() {
   const status = document.getElementById('nb_status').value;
   const row = document.getElementById('partial_pay_row');
-  row.style.display = (status === 'partial') ? 'block' : 'none';
+  row.style.display = (status === 'partial' || payment_status === 'partial') ? 'block' : 'none';
   if (status !== 'partial') {
     document.getElementById('amt_paid').value = '0';
     recalc();
@@ -3998,9 +4039,11 @@ ADMIN_BOOKING_HTML = """
     .badge{display:inline-block;padding:.3rem .8rem;border-radius:20px;font-size:.82rem;font-weight:700;text-transform:uppercase;margin-bottom:1rem}
     .badge-pending{background:#fefcbf;color:#975a16}
     .badge-accepted{background:#bee3f8;color:#2c5282}
-    .badge-confirmed{background:#c6f6d5;color:#276749}
+    .badge-confirmed{background:#bee3f8;color:#2c5282}
+    .badge-partial{background:#bee3f8;color:#2c5282}
     .badge-denied{background:#fbd38d;color:#744210}
     .badge-cancelled{background:#fed7d7;color:#9b2c2c}
+    .badge-concluded{background:#e2e8f0;color:#475569}
     table{width:100%;border-collapse:collapse;font-size:.9rem}
     th{padding:8px 10px;text-align:left;color:#718096;font-size:.78rem;text-transform:uppercase;border-bottom:1px solid #e2e8f0}
     td{padding:8px 10px;border-bottom:1px solid #f0f4f8}
@@ -4539,8 +4582,8 @@ ADMIN_BOOKING_HTML = """
             if(bk.id===THIS_ID) return;
             if(bk.start&&bk.end&&inRange(ds,bk.start,bk.end)){
               if(!isThis){
-                bg=bk.status==='confirmed'?'#dcfce7':bk.status==='partial'?'#ede9fe':'#dbeafe';
-                border=bk.status==='confirmed'?'#86efac':bk.status==='partial'?'#c4b5fd':'#93c5fd';
+                bg=bk.payment_status==='paid'?'#dcfce7':bk.payment_status==='partial'?'#ede9fe':'#dbeafe';
+                border=bk.payment_status==='paid'?'#86efac':bk.payment_status==='partial'?'#c4b5fd':'#93c5fd';
               } else {
                 // Overlap — show red ring
                 border='#f87171';
@@ -4617,7 +4660,7 @@ ADMIN_BOOKING_HTML = """
           <td colspan="4" style="color:#276749;font-weight:700;text-align:center">✅ Paid In Full</td>
         </tr>
         {% endif %}
-        {% elif b.status == 'confirmed' %}
+        {% elif b.status == 'accepted' and b.payment_status == 'paid' %}
         <tr style="background:#f0fff4">
           <td colspan="4" style="color:#276749;font-weight:700;text-align:center">✅ Paid In Full</td>
         </tr>
@@ -4922,7 +4965,7 @@ ADMIN_BOOKING_HTML = """
     <h2>Send Custom Payment Link</h2>
     <p style="color:#6b7280;font-size:.88rem;margin-bottom:1rem">Create a Stripe payment link for any amount and email it directly to the customer.</p>
     {% set balance_due = ((b.grand_total or 0)|float - (b.amount_paid or 0)|float) %}
-    {% if balance_due > 0.50 and b.status in ('confirmed', 'accepted', 'pending') %}
+    {% if balance_due > 0.50 and b.status in ('accepted', 'pending') %}
     <div style="margin-bottom:.85rem">
       <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link"
             onsubmit="return confirm('Send a ${{ '%.2f'|format(balance_due) }} payment link to {{ b.email }}?')">
@@ -4985,7 +5028,7 @@ ADMIN_BOOKING_HTML = """
       <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel Booking</button>
     </form>
     {% endif %}
-    {% if b.status in ('confirmed', 'partial') %}
+    {% if b.status == 'accepted' and b.payment_status in ('paid', 'partial') %}
     <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
       <input type="hidden" name="custom_amount" id="final-amount-input">
       <button type="button" class="btn btn-reminder" id="final-btn">
@@ -4993,7 +5036,7 @@ ADMIN_BOOKING_HTML = """
       </button>
     </form>
     {% endif %}
-    {% if b.status not in ('denied', 'cancelled', 'confirmed') %}
+    {% if b.status not in ('denied', 'cancelled', 'concluded') %}
     <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment"
           onsubmit="return confirm('Mark booking #{{ b.id }} as paid in full with cash? This will set status to Confirmed (Paid in Full).')">
       <button class="btn" style="background:#1a7a4a;color:white;font-weight:700">
@@ -5001,7 +5044,7 @@ ADMIN_BOOKING_HTML = """
       </button>
     </form>
     {% endif %}
-    {% if b.status in ('confirmed', 'accepted', 'pending', 'partial') %}
+    {% if b.status in ('accepted', 'pending') %}
 
 Commit and push when done.
     <form method="POST" action="/admin/booking/{{ b.id }}/record-payment"
@@ -5029,7 +5072,7 @@ Commit and push when done.
       </button>
     </form>
     {% endif %}
-    {% if b.status in ('confirmed', 'accepted') %}
+    {% if b.status == 'accepted' %}
     <form method="POST" action="/admin/booking/{{ b.id }}/send-receipt"
           onsubmit="return confirm('Send a payment receipt to {{ b.email }}?')">
       <button class="btn" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;font-weight:700">
@@ -6128,9 +6171,9 @@ def admin_dashboard():
             cur.execute("SELECT COUNT(*) FROM bookings"); stats["total"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='pending'"); stats["pending"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='accepted'"); stats["accepted"] = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM bookings WHERE status='confirmed'"); stats["confirmed"] = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM bookings WHERE status='partial'"); stats["partial"] = cur.fetchone()[0]
-            cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status IN ('confirmed','partial')")
+            cur.execute("SELECT COUNT(*) FROM bookings WHERE status='accepted' AND payment_status='paid'"); stats["confirmed"] = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM bookings WHERE status='accepted' AND payment_status='partial'"); stats["partial"] = cur.fetchone()[0]
+            cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='accepted' AND payment_status IN ('paid','partial')")
             stats["revenue"] = float(cur.fetchone()[0])
             cur.execute("SELECT COALESCE(SUM(grand_total),0) FROM bookings WHERE status='accepted'")
             stats["amount_due"] = float(cur.fetchone()[0])
@@ -6258,45 +6301,32 @@ def admin_dashboard():
                 b = _row(row)
                 items = json.loads(b.get("items_json") or "[]")
                 b["items_summary"] = "  ·  ".join(f"{i['qty']}x" for i in items)
-                # Payment label + class
+                # Payment label + class — driven by payment_status field
+                pmt_st  = b.get("payment_status") or ""
                 paid    = float(b.get("amount_paid") or 0)
                 total   = float(b.get("grand_total") or 0)
-                notes   = (b.get("notes") or "")
+                owed    = round(total - paid, 2) if total > 0 else 0
 
-                # Try to pull paid amount from Booqable notes when amount_paid not set
-                # Notes format: "Paid: $75.11 of $300.44"
-                if paid == 0 and "Paid: $" in notes:
-                    import re as _re
-                    _m = _re.search(r'Paid: \$([0-9]+\.?[0-9]*)', notes)
-                    if _m:
-                        try:
-                            paid = float(_m.group(1))
-                        except Exception:
-                            pass
-
-                owed = round(total - paid, 2) if total > 0 else 0
-
-                if b["status"] == "confirmed":
-                    if "Payment: payment_due" in notes:
-                        b["pay_label"], b["pay_class"] = "Payment Due", "pay-due"
-                    elif paid > 0 and owed > 0.01:
-                        b["pay_label"] = f"Partial — ${owed:,.2f} owed"
-                        b["pay_class"] = "pay-partial"
-                    elif paid > 0 or b.get("final_payment_link") is None:
-                        b["pay_label"], b["pay_class"] = "Paid In Full", "pay-paid"
-                    else:
-                        # final_payment_link set but no amount_paid → estimate 75% remaining
-                        est_owed = round(total * 0.75, 2)
-                        b["pay_label"] = f"Partial — ${est_owed:,.2f} owed"
-                        b["pay_class"] = "pay-partial"
-                elif b["status"] == "accepted":
+                if b["status"] not in ("accepted",):
+                    b["pay_label"], b["pay_class"] = "—", "pay-none"
+                elif pmt_st == "paid":
+                    b["pay_label"], b["pay_class"] = "Paid in Full", "pay-paid"
+                elif pmt_st == "partial":
+                    b["pay_label"] = f"Partial — ${owed:,.2f} owed"
+                    b["pay_class"] = "pay-partial"
+                elif pmt_st == "waiting":
+                    b["pay_label"], b["pay_class"] = "Waiting", "pay-due"
+                else:
+                    # Legacy fallback: infer from amount_paid
                     if paid > 0 and owed > 0.01:
                         b["pay_label"] = f"Partial — ${owed:,.2f} owed"
                         b["pay_class"] = "pay-partial"
+                    elif paid >= total - 0.50 and total > 0:
+                        b["pay_label"], b["pay_class"] = "Paid in Full", "pay-paid"
+                    elif b["status"] == "accepted":
+                        b["pay_label"], b["pay_class"] = "Waiting", "pay-due"
                     else:
-                        b["pay_label"], b["pay_class"] = "Payment Due", "pay-due"
-                else:
-                    b["pay_label"], b["pay_class"] = "—", "pay-none"
+                        b["pay_label"], b["pay_class"] = "—", "pay-none"
                 # Apply pay_filter AFTER labelling
                 if pay_filter:
                     if pay_filter == "paid" and b["pay_class"] != "pay-paid": continue
@@ -6345,7 +6375,7 @@ def admin_dashboard():
                 SET archived = TRUE
                 WHERE (archived IS NULL OR archived = FALSE)
                   AND event_start_date < %s
-                  AND status NOT IN ('denied','cancelled')
+                  AND status NOT IN ('denied','cancelled','concluded')
             """, (two_weeks_ago,))
             # Archive picked-up orders older than 48 hours
             cur_aa.execute("""
@@ -6376,7 +6406,7 @@ def admin_dashboard():
                 SELECT id, full_name, email, setup_time AS event_start_time, items_json, status
                 FROM bookings
                 WHERE setup_date = %s
-                  AND status NOT IN ('denied','cancelled')
+                  AND status NOT IN ('denied','cancelled','concluded')
                   AND (archived IS NULL OR archived = FALSE)
                 ORDER BY setup_time ASC NULLS LAST, id ASC
             """, (today_iso,))
@@ -6394,7 +6424,7 @@ def admin_dashboard():
                 SELECT id, full_name, email, event_start_time, items_json, status
                 FROM bookings
                 WHERE event_end_date = %s
-                  AND status NOT IN ('denied','cancelled')
+                  AND status NOT IN ('denied','cancelled','concluded')
                   AND (archived IS NULL OR archived = FALSE)
                 ORDER BY event_start_time ASC NULLS LAST, id ASC
             """, (today_iso,))
@@ -6545,7 +6575,7 @@ def admin_booking(booking_id):
                 _cur_inv = _conn_inv.cursor(cursor_factory=psycopg2.extras.DictCursor)
                 _cur_inv.execute("""
                     SELECT items_json FROM bookings
-                    WHERE status IN ('confirmed','accepted','partial')
+                    WHERE status = 'accepted' AND payment_status IN ('paid','partial')
                       AND (delivery_status IS NULL OR delivery_status != 'picked_up')
                       AND id != %s
                       AND setup_date     IS NOT NULL
@@ -6589,9 +6619,10 @@ def admin_booking(booking_id):
                     })
         log.info(f"[INV] booking #{booking_id}: status={booking_inv_status} issues={booking_inv_issues}")
 
-        # Confirmed/partial/delivered bookings already have their inventory locked.
-        # Don't show shortage alerts for them — only flag shortages for pending/accepted.
-        if b.get("status") in ("confirmed", "partial", "delivered", "picked_up"):
+        # Paid/partial bookings own their inventory — no shortage alert for them.
+        # Only flag shortages for Waiting payment or Pending bookings.
+        _pmt = b.get("payment_status") or ""
+        if _pmt in ("paid", "partial") or b.get("status") in ("concluded", "delivered"):
             booking_inv_issues = []
             for _s in booking_inv_status:
                 _s["ok"] = True
@@ -6718,19 +6749,19 @@ def accept_booking(booking_id):
         if payment_link:
             save_payment_link(booking_id, product_name, charge_amount, payment_link, plink_id)
 
-        # Update DB: status -> accepted, store payment link
+        # Update DB: status=accepted, payment_status=waiting, store payment link
         conn2 = get_db()
         if conn2:
             try:
                 cur2 = conn2.cursor()
                 cur2.execute(
-                    "UPDATE bookings SET status='accepted', stripe_payment_link=%s WHERE id=%s",
+                    "UPDATE bookings SET status='accepted', payment_status='waiting', stripe_payment_link=%s WHERE id=%s",
                     (payment_link, booking_id)
                 )
                 conn2.commit()
                 cur2.close()
                 conn2.close()
-                log.info(f"Booking #{booking_id} accepted ({payment_type})")
+                log.info(f"Booking #{booking_id} accepted → Waiting Payment ({payment_type})")
             except Exception as e:
                 log.error(f"Accept DB update error: {e}")
 
@@ -6779,7 +6810,8 @@ def deny_booking(booking_id):
 @admin_required
 def confirm_booking(booking_id):
     """Manually confirm a booking — full or partial payment."""
-    new_status = "partial" if request.form.get("partial") == "1" else "confirmed"
+    req_partial = request.form.get("partial") == "1"
+    new_pmt_status_manual = "partial" if req_partial else "paid"
     conn = get_db()
     if conn:
         try:
@@ -6812,11 +6844,11 @@ def cash_payment(booking_id):
                 b = _row(row)
                 grand_total = float(b.get("grand_total") or 0)
                 cur.execute(
-                    "UPDATE bookings SET status='confirmed', amount_paid=%s WHERE id=%s",
+                    "UPDATE bookings SET status='accepted', payment_status='paid', amount_paid=%s WHERE id=%s",
                     (grand_total, booking_id)
                 )
                 conn.commit()
-                b["status"]      = "confirmed"
+                b["payment_status"] = new_pmt_status_manual
                 b["amount_paid"] = grand_total
                 send_receipt_email(b)
                 log.info(f"Booking #{booking_id} marked as cash payment — Paid in Full")
@@ -6849,7 +6881,7 @@ def record_payment(booking_id):
                 grand_total  = round(float(b.get("grand_total") or 0), 2)
                 new_paid     = round(current_paid + amount, 2)
                 balance      = round(grand_total - new_paid, 2)
-                new_status   = "paid" if balance <= 0.50 else "confirmed"
+                new_pmt_status_manual = "paid" if balance <= 0.50 else "partial"
                 cur.execute(
                     "UPDATE bookings SET amount_paid=%s, status=%s WHERE id=%s",
                     (new_paid, new_status, booking_id)
@@ -6887,7 +6919,7 @@ def no_charge(booking_id):
             cur = conn.cursor()
             cur.execute("""
                 UPDATE bookings
-                SET status='confirmed',
+                SET payment_status='paid',
                     grand_total=0, amount_paid=0,
                     items_subtotal=0, delivery_fee=0,
                     late_night_fee=0, tax_amount=0,
@@ -7131,7 +7163,7 @@ def new_booking():
             f.get("event_state","").strip() or None,
             f.get("event_zip","").strip() or None,
             f.get("delivery_location","").strip() or None,
-            f.get("status","confirmed"),
+            f.get("status","pending"),
             json.dumps(items), items_subtotal, delivery_fee,
             float(f.get("late_night_fee") or 0),
             float(f.get("distance_miles") or 0) or None,
@@ -7986,34 +8018,35 @@ def stripe_webhook():
                         row = cur.fetchone()
                         if row:
                             b = _row(row)
-                            current_status = b.get("status", "")
-                            current_paid   = float(b.get("amount_paid") or 0)
-                            grand_total    = float(b.get("grand_total") or 0)
-                            new_paid       = round(current_paid + amount_paid_dollars, 2)
+                            current_status  = b.get("status", "")
+                            current_pmt     = b.get("payment_status") or ""
+                            current_paid    = float(b.get("amount_paid") or 0)
+                            grand_total     = float(b.get("grand_total") or 0)
+                            new_paid        = round(current_paid + amount_paid_dollars, 2)
+                            balance         = round(grand_total - new_paid, 2)
+                            new_pmt_status  = "paid" if balance <= 0.50 else "partial"
 
                             if current_status == "accepted":
-                                # ── Deposit payment: move accepted → confirmed ──
+                                # Payment received — update payment_status, keep status=accepted
                                 cur.execute(
-                                    "UPDATE bookings SET status='confirmed', amount_paid=%s, stripe_session_id=%s WHERE id=%s",
-                                    (new_paid, sess_id, int(booking_id))
+                                    "UPDATE bookings SET payment_status=%s, amount_paid=%s, stripe_session_id=%s WHERE id=%s",
+                                    (new_pmt_status, new_paid, sess_id, int(booking_id))
                                 )
                                 conn.commit()
-                                b["amount_paid"] = new_paid
-                                b["status"] = "confirmed"
+                                b["amount_paid"]     = new_paid
+                                b["payment_status"]  = new_pmt_status
                                 send_receipt_email(b)
-                                log.info(f"Booking #{booking_id} deposit confirmed (${amount_paid_dollars:.2f})")
+                                log.info(f"Booking #{booking_id} payment received → {new_pmt_status} (${amount_paid_dollars:.2f})")
 
-                            elif current_status in ("confirmed", "pending", "partial", "accepted"):
-                                # ── Final / additional payment ──
-                                balance = round(grand_total - new_paid, 2)
-                                new_status = "confirmed" if balance <= 0.50 else "confirmed"
+                            elif current_status in ("pending", "accepted"):
+                                # Additional payment
                                 cur.execute(
-                                    "UPDATE bookings SET amount_paid=%s, status=%s, stripe_session_id=%s WHERE id=%s",
-                                    (new_paid, new_status, sess_id, int(booking_id))
+                                    "UPDATE bookings SET payment_status=%s, amount_paid=%s, stripe_session_id=%s WHERE id=%s",
+                                    (new_pmt_status, new_paid, sess_id, int(booking_id))
                                 )
                                 conn.commit()
-                                b["amount_paid"] = new_paid
-                                b["status"] = new_status
+                                b["amount_paid"]    = new_paid
+                                b["payment_status"] = new_pmt_status
                                 send_receipt_email(b)
                                 _notify_subject = f"{'PAID IN FULL' if balance <= 0.50 else 'Payment Received'} — Booking #{booking_id}"
                                 _notify_body = (
@@ -8021,7 +8054,7 @@ def stripe_webhook():
                                     f"<strong>${amount_paid_dollars:.2f}</strong> on Booking #{booking_id}.</p>"
                                     f"<p>Amount paid to date: <strong>${new_paid:.2f}</strong> / ${grand_total:.2f}</p>"
                                     f"<p>Balance remaining: <strong>${max(balance,0):.2f}</strong></p>"
-                                    f"<p>Status updated to: <strong>{new_status.upper()}</strong></p>"
+                                    f"<p>Payment status: <strong>{new_pmt_status.upper()}</strong></p>"
                                     f'<p><a href="{BASE_URL}/admin/booking/{booking_id}">View Booking</a></p>'
                                 )
                                 _send_email(
@@ -8956,7 +8989,7 @@ def admin_calendar_ics():
             f"DTEND;VALUE=DATE:{ed}",
             f"SUMMARY:Booking #{b['id']} — {b.get('full_name','')}",
             f"DESCRIPTION:Status: {b.get('status','')}",
-            f"STATUS:{'CONFIRMED' if b.get('status')=='confirmed' else 'TENTATIVE'}",
+            f"STATUS:{'CONFIRMED' if b.get('payment_status') in ('paid','partial') else 'TENTATIVE'}",
             "END:VEVENT",
         ]
     lines.append("END:VCALENDAR")
@@ -9091,7 +9124,7 @@ def admin_route():
                            event_end_date AS route_date_field
                     FROM bookings
                     WHERE event_end_date = %s
-                      AND status NOT IN ('denied','cancelled')
+                      AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY event_start_time ASC NULLS LAST, id ASC
                 """, (route_date,))
@@ -9103,7 +9136,7 @@ def admin_route():
                            setup_date AS route_date_field
                     FROM bookings
                     WHERE setup_date = %s
-                      AND status NOT IN ('denied','cancelled')
+                      AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY setup_time ASC NULLS LAST, id ASC
                 """, (route_date,))
@@ -9391,7 +9424,7 @@ ADMIN_CUSTOMERS_HTML = """
               {% for b in c.bookings %}
               <a href="/admin/booking/{{ b.id }}"
                  style="display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .5rem;border-radius:5px;font-size:.75rem;font-weight:600;text-decoration:none;
-                        background:{% if b.status=='confirmed' %}#dcfce7;color:#166534{% elif b.status=='pending' %}#fef9c3;color:#854d0e{% elif b.status=='accepted' %}#dbeafe;color:#1e40af{% else %}#f3f4f6;color:#6b7280{% endif %}">
+                        background:{% if b.status=='accepted' and b.payment_status=='paid' %}#dcfce7;color:#166534{% elif b.status=='accepted' and b.payment_status=='partial' %}#ede9fe;color:#7c3aed{% elif b.status=='accepted' %}#dbeafe;color:#1e40af{% elif b.status=='pending' %}#fef9c3;color:#854d0e{% elif b.status=='concluded' %}#e5e7eb;color:#374151{% else %}#f3f4f6;color:#6b7280{% endif %}">
                 #{{ b.id }}
               </a>
               {% endfor %}
@@ -9771,10 +9804,11 @@ ADMIN_CUSTOMER_EDIT_HTML = """
     .badge{display:inline-flex;padding:.2rem .55rem;border-radius:20px;font-size:.72rem;font-weight:600}
     .badge-pending{background:#fef9c3;color:#854d0e}
     .badge-accepted{background:#dbeafe;color:#1e40af}
-    .badge-confirmed{background:#dcfce7;color:#166534}
-    .badge-partial{background:#ede9fe;color:#7c3aed}
+    .badge-confirmed{background:#dbeafe;color:#1e40af}
+    .badge-partial{background:#dbeafe;color:#1e40af}
     .badge-denied{background:#fee2e2;color:#991b1b}
     .badge-cancelled{background:#f3f4f6;color:#6b7280}
+    .badge-concluded{background:#e5e7eb;color:#374151}
     @media(max-width:600px){.form-grid{grid-template-columns:1fr}.main{padding:1rem}}
   </style>
 <style>
@@ -10637,7 +10671,7 @@ def debug_inv_check(booking_id):
             SELECT id, full_name, status, delivery_status,
                    setup_date, event_end_date, items_json
             FROM bookings
-            WHERE status IN ('confirmed','accepted','partial')
+            WHERE status = 'accepted' AND payment_status IN ('paid','partial')
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND id != %s
               AND setup_date     IS NOT NULL
