@@ -9278,7 +9278,10 @@ def admin_route():
                            event_end_date AS route_date_field, route_override
                     FROM bookings
                     WHERE event_end_date = %s
-                      AND (status = 'accepted' OR route_override = TRUE)
+                      AND (
+                        (status = 'accepted' AND payment_status IN ('paid','partial'))
+                        OR route_override = TRUE
+                      )
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY event_start_time ASC NULLS LAST, id ASC
@@ -9291,7 +9294,10 @@ def admin_route():
                            setup_date AS route_date_field, route_override
                     FROM bookings
                     WHERE setup_date = %s
-                      AND (status = 'accepted' OR route_override = TRUE)
+                      AND (
+                        (status = 'accepted' AND payment_status IN ('paid','partial'))
+                        OR route_override = TRUE
+                      )
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY setup_time ASC NULLS LAST, id ASC
@@ -9327,10 +9333,11 @@ def admin_route():
         try:
             cur_ex = conn_ex.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur_ex.execute(f"""
-                SELECT id, full_name, status, items_json
+                SELECT id, full_name, status, payment_status, items_json
                 FROM bookings
                 WHERE {date_col} = %s
-                  AND status NOT IN ('accepted','denied','cancelled','concluded')
+                  AND NOT (status = 'accepted' AND payment_status IN ('paid','partial'))
+                  AND status NOT IN ('denied','cancelled','concluded')
                   AND (route_override IS NULL OR route_override = FALSE)
                   AND (archived IS NULL OR archived = FALSE)
                 ORDER BY id ASC
@@ -9495,6 +9502,7 @@ def public_delivery_sheet(sheet_date, token):
                 FROM bookings
                 WHERE setup_date = %s
                   AND status = 'accepted'
+                  AND payment_status IN ('paid','partial')
                   AND (archived IS NULL OR archived = FALSE)
                 ORDER BY setup_time ASC NULLS LAST, id ASC
             """, (sheet_date,))
