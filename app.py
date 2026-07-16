@@ -10618,48 +10618,88 @@ def admin_tax_transfer_delete(transfer_id):
 @app.route("/admin/debug/inv/<int:booking_id>")
 @admin_required
 def debug_inv_check(booking_id):
-    """Debug endpoint: show raw inventory check results for a booking."""
-    issues = get_booking_inventory_check(booking_id)
-    products = get_products()
+    """Debug: show exactly which bookings are counted in the inventory overlap query."""
+    products    = get_products()
     prod_totals = {p["id"]: int(p["total"]) for p in products}
+    name_to_pid = {p["name"].lower(): p["id"] for p in products}
 
-    # Also show what's in the booking items_json
     conn = get_db()
-    b_items = []
-    b_dates = {}
-    if conn:
-        try:
-            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            cur.execute("SELECT items_json, event_start_date, event_end_date, setup_date FROM bookings WHERE id=%s", (booking_id,))
-            row = cur.fetchone()
-            if row:
-                b_items = json.loads(row["items_json"] or "[]")
-                b_dates = {
-                    "event_start_date": str(row["event_start_date"]),
-                    "event_end_date": str(row["event_end_date"]),
-                    "setup_date": str(row["setup_date"]),
-                }
-            cur.close(); conn.close()
-        except Exception as e:
-            return f"<pre>DB error: {e}</pre>"
+    if not conn:
+        return "<pre>No DB connection</pre>"
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    out = [f"<pre style='font-family:monospace;padding:1rem;font-size:.85rem'>"]
-    out.append(f"=== Inventory Check Debug — Booking #{booking_id} ===\n")
-    out.append(f"Dates: {b_dates}\n")
-    out.append(f"\nBooking items_json:\n")
-    for it in b_items:
-        out.append(f"  id={it.get('id')!r:20} name={it.get('name')!r:35} qty={it.get('qty')}\n")
-    out.append(f"\nInventory prod_totals:\n")
-    for pid, tot in prod_totals.items():
-        out.append(f"  id={pid!r:20} total={tot}\n")
-    out.append(f"\nIssues found ({len(issues)}):\n")
-    for iss in issues:
-        out.append(f"  {iss}\n")
-    if not issues:
-        out.append("  (none)\n")
-    out.append("</pre>")
-    out.append(f'<a href="/admin/booking/{booking_id}" style="margin:1rem;display:inline-block">← Back to Booking</a>')
-    return "".join(out)
+        # Fetch this booking
+        cur.execute("""SELECT id, full_name, status, items_json,
+                              event_start_date, event_end_date, setup_date, delivery_status
+                       FROM bookings WHERE id=%s""", (booking_id,))
+        brow = cur.fetchone()
+        if not brow:
+            return f"<pre>Booking #{booking_id} not found</pre>"
+        b = _row(brow)
+
+        b_out  = str(b.get("setup_date") or "")[:10]
+        b_back = str(b.get("event_end_date") or "")[:10]
+        b_items = json.loads(b.get("items_json") or "[]")
+
+        # Run the same overlap query as the booking detail page
+        eff_start = b_back or b_out
+        eff_end   = b_out  or b_back
+        cur.execute("""
+            SELECT id, full_name, status, delivery_status,
+                   setup_date, event_start_date, event_end_date, items_json
+            FROM bookings
+            WHERE status IN ('confirmed','accepted','partial')
+              AND (delivery_status IS NULL OR delivery_status != 'picked_up')
+              AND id != %s
+              AND COALESCE(setup_date, event_start_date) IS NOT NULL
+              AND event_end_date IS NOT NULL
+              AND COALESCE(setup_date, event_start_date) <= %s
+              AND event_end_date >= %s
+            ORDER BY id
+        """, (booking_id, eff_start, eff_end))
+        overlapping = [_row(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+
+        # Tally reserved by item
+        reserved = {}
+        for o in overlapping:
+            for it in json.loads(o.get("items_json") or "[]"):
+                pid = it.get("id") or name_to_pid.get((it.get("name") or "").lower())
+                qty = int(it.get("qty") or 0)
+                if pid and qty > 0:
+                    reserved[pid] = reserved.get(pid, 0) + qty
+
+        out = ["<pre style='font-family:monospace;padding:1rem;font-size:.83rem;line-height:1.5'>"]
+        out.append(f"=== Inventory Debug — Booking #{booking_id} ({b.get('full_name')}) ===\n")
+        out.append(f"  Status:     {b.get('status')}\n")
+        out.append(f"  setup_date: {b.get('setup_date')}  (delivery/drop-off)\n")
+        out.append(f"  event_end_date: {b.get('event_end_date')}  (pickup/return)\n")
+        out.append(f"  Query window: COALESCE(setup_date,event_start_date) <= {eff_start!r} AND event_end_date >= {eff_end!r}\n")
+        out.append(f"\n--- This booking needs ---\n")
+        for it in b_items:
+            out.append(f"  {it.get('name')}: {it.get('qty')}\n")
+        out.append(f"\n--- Overlapping bookings ({len(overlapping)}) ---\n")
+        for o in overlapping:
+            o_start = str(o.get("setup_date") or o.get("event_start_date") or "")[:10]
+            o_end   = str(o.get("event_end_date") or "")[:10]
+            chairs  = sum(int(it.get("qty",0)) for it in json.loads(o.get("items_json") or "[]")
+                          if "chair" in (it.get("name") or "").lower())
+            tables  = sum(int(it.get("qty",0)) for it in json.loads(o.get("items_json") or "[]")
+                          if "table" in (it.get("name") or "").lower())
+            out.append(f"  #{o['id']} {o.get('full_name',''):<25} {o.get('status',''):<12} "
+                       f"del:{o_start} ret:{o_end}  chairs:{chairs} tables:{tables}\n")
+        out.append(f"\n--- Reserved totals ---\n")
+        for pid, qty in reserved.items():
+            total = prod_totals.get(pid, 0)
+            avail = max(0, total - qty)
+            out.append(f"  {pid}: {qty} reserved / {total} total → {avail} available\n")
+        out.append("</pre>")
+        out.append(f'<a href="/admin/booking/{booking_id}" style="margin:1rem;display:inline-block">← Back to Booking #{booking_id}</a>')
+        return "".join(out)
+    except Exception as e:
+        import traceback as _tb
+        return f"<pre>Error: {e}\n{_tb.format_exc()}</pre>"
 
 
 if __name__ == "__main__":
