@@ -8616,6 +8616,9 @@ ADMIN_ROUTE_HTML = """
     <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ depot_address|urlencode }}&daddr={{ addrs[-1]|urlencode }}&dirflg=d" target="_blank">
       🗺 Start Route — Apple Maps
     </a>
+    <button onclick="optimizeRoute()" class="btn-launch" style="background:#7c3aed;color:white;border:none;cursor:pointer">
+      ✨ Optimize Route Order
+    </button>
     {% else %}
     <span class="no-addr-note">📍 Add delivery addresses to enable route navigation</span>
     {% endif %}
@@ -8751,6 +8754,16 @@ ADMIN_ROUTE_HTML = """
 </div>
 </div>
 <script>
+function optimizeRoute(){
+  const addrs = STOPS.map(s=>s.addr).filter(Boolean);
+  if(!addrs.length){ alert('No addresses to optimize.'); return; }
+  // Use Google Maps multi-stop URL — Google will suggest optimal order
+  const base = 'https://www.google.com/maps/dir/';
+  const depot = encodeURIComponent(DEPOT);
+  const waypoints = addrs.map(a=>encodeURIComponent(a)).join('/');
+  const url = base + depot + '/' + waypoints;
+  window.open(url, '_blank');
+}
 function copySheetLink(){
   const url = document.getElementById('sheet-url').value;
   navigator.clipboard.writeText(url).then(()=>{
