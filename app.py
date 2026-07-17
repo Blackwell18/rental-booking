@@ -8616,7 +8616,7 @@ ADMIN_ROUTE_HTML = """
     <a class="btn-launch btn-amap" href="https://maps.apple.com/?saddr={{ depot_address|urlencode }}&daddr={{ addrs[-1]|urlencode }}&dirflg=d" target="_blank">
       🗺 Start Route — Apple Maps
     </a>
-    <button onclick="optimizeRoute()" class="btn-launch" style="background:#7c3aed;color:white;border:none;cursor:pointer">
+    <button id="opt-btn" onclick="optimizeRoute()" class="btn-launch" style="background:#7c3aed;color:white;border:none;cursor:pointer">
       ✨ Optimize Route Order
     </button>
     {% else %}
@@ -8754,15 +8754,51 @@ ADMIN_ROUTE_HTML = """
 </div>
 </div>
 <script>
-function optimizeRoute(){
-  const addrs = STOPS.map(s=>s.addr).filter(Boolean);
-  if(!addrs.length){ alert('No addresses to optimize.'); return; }
-  // Use Google Maps multi-stop URL — Google will suggest optimal order
-  const base = 'https://www.google.com/maps/dir/';
-  const depot = encodeURIComponent(DEPOT);
-  const waypoints = addrs.map(a=>encodeURIComponent(a)).join('/');
-  const url = base + depot + '/' + waypoints;
-  window.open(url, '_blank');
+let _cachedCoords = null;
+
+async function optimizeRoute(){
+  const btn = document.getElementById('opt-btn') || document.querySelector('[onclick="optimizeRoute()"]');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Optimizing…'; }
+
+  // Geocode all addresses if not already cached
+  if(!_cachedCoords){
+    const allAddrs = [DEPOT, ...STOPS.map(s=>s.addr).filter(Boolean)];
+    const unique = [...new Set(allAddrs)];
+    const coords = {};
+    for(let i=0; i<unique.length; i++){
+      if(i>0) await new Promise(r=>setTimeout(r,1100));
+      try{ coords[unique[i]] = await geocode(unique[i]); }catch(e){}
+    }
+    _cachedCoords = coords;
+  }
+
+  // Nearest-neighbor from depot
+  const depotCoord = _cachedCoords[DEPOT];
+  if(!depotCoord){ alert('Could not geocode depot address.'); if(btn){btn.disabled=false;btn.innerHTML='✨ Optimize Route Order';} return; }
+
+  const remaining = STOPS.map(s=>({...s, coord: _cachedCoords[s.addr]})).filter(s=>s.coord);
+  const noCoord   = STOPS.filter(s=>!_cachedCoords[s.addr]);
+  const ordered   = [];
+  let current     = depotCoord;
+
+  while(remaining.length){
+    let bestI=0, bestDist=Infinity;
+    remaining.forEach((s,i)=>{
+      const d = Math.hypot(s.coord.lat-current.lat, s.coord.lon-current.lon);
+      if(d<bestDist){ bestDist=d; bestI=i; }
+    });
+    ordered.push(remaining[bestI]);
+    current = remaining[bestI].coord;
+    remaining.splice(bestI,1);
+  }
+  // Append any stops we couldn't geocode at the end
+  ordered.push(...noCoord);
+
+  // Build URL with custom order param and reload
+  const ids = ordered.map(s=>s.id).filter(Boolean).join(',');
+  const url = new URL(window.location.href);
+  url.searchParams.set('order', ids);
+  window.location.href = url.toString();
 }
 function copySheetLink(){
   const url = document.getElementById('sheet-url').value;
@@ -9344,11 +9380,21 @@ def admin_route():
         except Exception as e:
             log.error(f"admin_route error: {e}")
     stops_json = json.dumps([
-        {"addr": b["nav_address"], "name": b.get("full_name", "")}
+        {"addr": b["nav_address"], "name": b.get("full_name", ""), "id": b["id"]}
         for b in route_bookings
     ])
 
     # Bookings on this date that are NOT on the route (pending / waiting / not overridden)
+    # Apply custom stop order if provided in URL
+    custom_order = request.args.get("order", "")
+    if custom_order:
+        try:
+            order_ids = [int(x) for x in custom_order.split(",") if x.strip()]
+            id_to_rank = {bid: i for i, bid in enumerate(order_ids)}
+            route_bookings.sort(key=lambda b: id_to_rank.get(b["id"], 999))
+        except Exception as e:
+            log.error(f"Custom order error: {e}")
+
     excluded_bookings = []
     date_col = "event_end_date" if view == "pickup" else "setup_date"
     conn_ex = get_db()
