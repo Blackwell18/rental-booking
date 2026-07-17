@@ -8581,10 +8581,11 @@ ADMIN_ROUTE_HTML = """
        style="background:#059669;color:white;border:none;border-radius:8px;padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem">
       👁 Preview Sheet
     </a>
-    <a href="sms:?&body={{ ('Deliveries for ' + route_date + ' — tap to open your route: ' + request.host_url + 'sheet/' + route_date + '/' + sheet_token)|urlencode }}"
-       style="background:#0891b2;color:white;border:none;border-radius:8px;padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:.4rem">
-      📱 Text Brother
-    </a>
+    <button onclick="copySheetLink()" id="copy-link-btn"
+       style="background:#0891b2;color:white;border:none;border-radius:8px;padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:.4rem">
+      🔗 Copy Delivery Link
+    </button>
+    <input type="hidden" id="sheet-url" value="{{ request.host_url }}sheet/{{ route_date }}/{{ sheet_token }}">
     {% endif %}
   </form>
 
@@ -8750,6 +8751,15 @@ ADMIN_ROUTE_HTML = """
 </div>
 </div>
 <script>
+function copySheetLink(){
+  const url = document.getElementById('sheet-url').value;
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn = document.getElementById('copy-link-btn');
+    btn.innerHTML = '✓ Link Copied!';
+    btn.style.background = '#059669';
+    setTimeout(()=>{ btn.innerHTML = '🔗 Copy Delivery Link'; btn.style.background = '#0891b2'; }, 2500);
+  }).catch(()=>{ prompt('Copy this link and send it to your brother:', url); });
+}
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 
