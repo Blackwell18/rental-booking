@@ -4183,13 +4183,14 @@ ADMIN_BOOKING_HTML = """
     body{font-family:-apple-system,sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
     header{background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;padding:1.25rem 2rem;display:flex;justify-content:space-between;align-items:center}
     header h1{font-size:1.2rem}
-    .container{max-width:800px;margin:0 auto;padding:1.5rem 1rem}
-    .card{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:1.5rem;margin-bottom:1.5rem}
-    .card h2{font-size:.95rem;font-weight:700;color:#2b6cb0;border-bottom:2px solid #ebf4ff;padding-bottom:.5rem;margin-bottom:1rem;text-transform:uppercase;letter-spacing:.4px}
-    .row{display:grid;grid-template-columns:160px 1fr;gap:.5rem .75rem;font-size:.92rem}
-    .row .k{color:#718096;font-size:.85rem}
-    .row .v{font-weight:500}
-    .badge{display:inline-block;padding:.3rem .8rem;border-radius:20px;font-size:.82rem;font-weight:700;text-transform:uppercase;margin-bottom:1rem}
+    .container{max-width:1100px;margin:0 auto;padding:.85rem 1rem .5rem}
+    .card{background:white;border-radius:12px;box-shadow:0 1px 8px rgba(0,0,0,.06);padding:1.25rem 1.5rem;margin-bottom:0}
+    .card h2{font-size:.82rem;font-weight:700;color:#6b7280;border-bottom:1px solid #f1f5f9;padding-bottom:.45rem;margin-bottom:.85rem;text-transform:uppercase;letter-spacing:.05em}
+    .row{display:grid;grid-template-columns:140px 1fr;gap:.4rem .65rem;font-size:.88rem}
+    .row .k{color:#9ca3af;font-size:.82rem}
+    .row .v{font-weight:500;color:#111827}
+    .badge{display:inline-block;padding:.2rem .7rem;border-radius:20px;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:0}
+    @media(max-width:768px){[style*="grid-template-columns:1fr 360px"]{grid-template-columns:1fr!important}[style*="position:sticky"]{position:relative!important}}
     .badge-pending{background:#fefcbf;color:#975a16}
     .badge-accepted{background:#bee3f8;color:#2c5282}
     .badge-confirmed{background:#bee3f8;color:#2c5282}
@@ -4265,26 +4266,48 @@ ADMIN_BOOKING_HTML = """
   </div>
 </aside>
 <div class="page-content">
-<div class="pg-hdr">
+<div class="pg-hdr" style="flex-wrap:wrap;gap:.5rem;padding:.6rem 1rem">
   <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
-  <h1>Booking #{{ b.id }}</h1>
-  <a href="/admin/booking/{{ b.id }}/edit" class="pg-back">✏️ Edit</a>
-</div>
-<div class="container">
-
-  <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem">
-    <span class="badge badge-{{ b.status }}">{{ b.status|upper }}</span>
-    {% if b.delivery_status == 'delivered' %}
-    <span style="background:#fffbeb;color:#92400e;border:1.5px solid #fcd34d;border-radius:20px;padding:.25rem .85rem;font-size:.78rem;font-weight:700;letter-spacing:.04em">
-      🚚 DELIVERED
-    </span>
-    {% elif b.delivery_status == 'picked_up' %}
-    <span style="background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:20px;padding:.25rem .85rem;font-size:.78rem;font-weight:700;letter-spacing:.04em">
-      ✅ PICKED UP
-    </span>
+  <!-- ── Sticky page header ── -->
+  <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;flex:1">
+    <div>
+      <h1 style="font-size:1.1rem;font-weight:700;color:#111827;margin:0">Booking #{{ b.id }}</h1>
+      <div style="font-size:.75rem;color:#9ca3af;margin-top:.1rem">{{ b.created_at|string|truncate(19,True,'') }}</div>
+    </div>
+    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+      <span class="badge badge-{{ b.status }}" style="margin:0">{{ b.status|upper }}</span>
+      {% if b.delivery_status == 'delivered' %}
+      <span style="background:#fffbeb;color:#92400e;border:1.5px solid #fcd34d;border-radius:20px;padding:.2rem .75rem;font-size:.75rem;font-weight:700">🚚 DELIVERED</span>
+      {% elif b.delivery_status == 'picked_up' %}
+      <span style="background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:20px;padding:.2rem .75rem;font-size:.75rem;font-weight:700">✅ PICKED UP</span>
+      {% endif %}
+    </div>
+    {% if b.status == 'pending' %}
+    <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
+      <form id="accept-form" method="POST" action="/admin/booking/{{ b.id }}/accept">
+        <input type="hidden" name="custom_amount" id="accept-amount-input">
+        <button type="button" id="accept-btn"
+          style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:.45rem 1.1rem;font-size:.88rem;font-weight:700;cursor:pointer;white-space:nowrap">
+          ✅ Accept — Send Invoice
+        </button>
+      </form>
+      <form method="POST" action="/admin/booking/{{ b.id }}/deny">
+        <button onclick="return confirm('Deny this booking? A rejection email will be sent to {{ b.email }}.')"
+          style="background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;padding:.45rem 1rem;font-size:.88rem;font-weight:700;cursor:pointer;white-space:nowrap">
+          ✕ Deny
+        </button>
+      </form>
+    </div>
     {% endif %}
+    <a href="/admin/booking/{{ b.id }}/edit" style="margin-left:{% if b.status != 'pending' %}auto{% else %}0{% endif %};font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap;border:1px solid #e5e7eb;border-radius:6px;padding:.3rem .75rem">✏️ Edit</a>
   </div>
-  <div style="font-size:.8rem;color:#718096;margin-bottom:1rem">Received: {{ b.created_at }}</div>
+</div>
+
+<!-- ── Two-column layout ── -->
+<div style="max-width:1100px;margin:0 auto;padding:1rem 1rem 2rem;display:grid;grid-template-columns:1fr 360px;gap:1.25rem;align-items:start">
+
+<!-- ══ LEFT COLUMN ══ -->
+<div style="display:flex;flex-direction:column;gap:1.1rem">
 
   {% if b.status == 'accepted' %}
   <div class="payment-link-box">
@@ -4971,348 +4994,233 @@ ADMIN_BOOKING_HTML = """
   <div class="card"><h2>Notes</h2><p style="color:#4a5568;line-height:1.6">{{ b.notes }}</p></div>
   {% endif %}
 
-  <!-- ── Discount ── -->
-  <div class="card" style="border:2px solid #bbf7d0;background:#f0fdf4">
-    <h2 style="color:#166534">🏷️ Discount</h2>
-    {% set disc_amt    = (b.discount_amount or 0)|float %}
-    {% set subtotal    = (b.items_subtotal or 0)|float %}
-    {% set del_fee     = (b.delivery_fee or 0)|float %}
-    {% set exact_fee   = 175.0 if b.exact_time_delivery else 0.0 %}
-    {% set tax_amt     = (b.tax_amount or 0)|float %}
-    {% set grand_total = (b.grand_total or 0)|float %}
-    {% set pre_disc    = subtotal + del_fee + exact_fee %}
-    {% if disc_amt > 0 %}
-    <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:.65rem 1rem;margin-bottom:.75rem;font-size:.92rem;color:#166534;font-weight:600">
-      ✅ Discount applied:
-      {% if b.discount_type == 'percent' %}
-        {{ b.discount_value|float|round(1) }}% off
-      {% else %}
-        ${{ "%.2f"|format(b.discount_value|float) }} off
+</div><!-- end left column -->
+
+<!-- ══ RIGHT COLUMN ══ -->
+<div style="display:flex;flex-direction:column;gap:1rem;position:sticky;top:1rem">
+
+  <!-- ── Payment Summary ── -->
+  <div class="card" style="border:none;overflow:hidden">
+    {% set paid = (b.amount_paid or 0)|float %}
+    {% set total = (b.grand_total or 0)|float %}
+    {% set balance = [total - paid, 0]|max %}
+    <!-- Hero -->
+    <div style="background:linear-gradient(135deg,#1e3a5f,#1e40af);padding:1.1rem 1.25rem;margin:-1.5rem -1.5rem 1rem">
+      <div style="font-size:.7rem;color:rgba(255,255,255,.65);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.25rem">Grand Total</div>
+      <div style="font-size:1.8rem;font-weight:700;color:#fff">${{ "%.2f"|format(total) }}</div>
+      {% if b.status == 'accepted' %}
+      {% set dep_pct = 0.25 %}
+      {% set deposit = (total * dep_pct)|round(2) %}
+      <div style="font-size:.8rem;color:rgba(255,255,255,.7);margin-top:.2rem">Deposit due: ${{ "%.2f"|format(deposit) }}</div>
       {% endif %}
-      — saves customer <strong>${{ "%.2f"|format(disc_amt) }}</strong>
+    </div>
+
+    <!-- Line items -->
+    {% set subtotal  = (b.items_subtotal or 0)|float %}
+    {% set del_fee   = (b.delivery_fee or 0)|float %}
+    {% set exact_fee = 175.0 if b.exact_time_delivery else 0.0 %}
+    {% set disc_amt  = (b.discount_amount or 0)|float %}
+    {% set tax_amt   = (b.tax_amount or 0)|float %}
+    <div style="font-size:.86rem">
+      <div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid #f1f5f9;color:#6b7280"><span>Items</span><span>${{ "%.2f"|format(subtotal) }}</span></div>
+      {% if del_fee > 0 %}<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid #f1f5f9;color:#6b7280"><span>Delivery</span><span>${{ "%.2f"|format(del_fee) }}</span></div>{% endif %}
+      {% if b.exact_time_delivery %}<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid #f1f5f9;color:#6b7280"><span>Exact Time Delivery</span><span>$175.00</span></div>{% endif %}
+      {% if disc_amt > 0 %}<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid #f1f5f9;color:#16a34a;font-weight:600"><span>Discount</span><span>- ${{ "%.2f"|format(disc_amt) }}</span></div>{% endif %}
+      <div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid #f1f5f9;color:#6b7280"><span>Tax ({{ "%.2f"|format((b.tax_rate or 0)*100) }}%)</span><span>${{ "%.2f"|format(tax_amt) }}</span></div>
+      {% if paid > 0 %}<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid #f1f5f9;color:#16a34a;font-weight:600"><span>✅ Paid</span><span>- ${{ "%.2f"|format(paid) }}</span></div>{% endif %}
+    </div>
+
+    {% if paid > 0 and balance > 0.01 %}
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:.6rem .85rem;display:flex;justify-content:space-between;align-items:center;margin-top:.75rem">
+      <span style="font-size:.88rem;font-weight:600;color:#c2410c">Balance Due</span>
+      <span style="font-size:1.15rem;font-weight:700;color:#c2410c">${{ "%.2f"|format(balance) }}</span>
+    </div>
+    {% elif b.status == 'accepted' and (b.payment_status == 'paid' or balance <= 0.01) %}
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:.55rem .85rem;text-align:center;font-weight:700;color:#16a34a;margin-top:.75rem">✅ Paid in Full</div>
+    {% elif b.status == 'accepted' %}
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:.6rem .85rem;display:flex;justify-content:space-between;align-items:center;margin-top:.75rem">
+      <span style="font-size:.88rem;font-weight:600;color:#c2410c">Balance Due</span>
+      <span style="font-size:1.15rem;font-weight:700;color:#c2410c">${{ "%.2f"|format(total) }}</span>
     </div>
     {% endif %}
-    <!-- Totals summary -->
-    <div style="background:white;border:1px solid #d1fae5;border-radius:8px;padding:.65rem 1rem;margin-bottom:.85rem;font-size:.88rem">
-      <table style="width:100%;border-collapse:collapse">
-        <tr>
-          <td style="padding:.25rem .4rem;color:#4b5563">Items Subtotal</td>
-          <td style="padding:.25rem .4rem;text-align:right;color:#4b5563">${{ "%.2f"|format(subtotal) }}</td>
-        </tr>
-        {% if del_fee > 0 %}
-        <tr>
-          <td style="padding:.25rem .4rem;color:#4b5563">Delivery Fee</td>
-          <td style="padding:.25rem .4rem;text-align:right;color:#4b5563">${{ "%.2f"|format(del_fee) }}</td>
-        </tr>
-        {% endif %}
-        {% if b.exact_time_delivery %}
-        <tr>
-          <td style="padding:.25rem .4rem;color:#4b5563">Exact Time Delivery</td>
-          <td style="padding:.25rem .4rem;text-align:right;color:#4b5563">$175.00</td>
-        </tr>
-        {% endif %}
-        {% if disc_amt > 0 %}
-        <tr style="border-top:1px dashed #d1d5db">
-          <td style="padding:.35rem .4rem;color:#374151;font-weight:600">Total Before Discount</td>
-          <td style="padding:.35rem .4rem;text-align:right;color:#374151;font-weight:600">${{ "%.2f"|format(subtotal + del_fee + exact_fee) }}</td>
-        </tr>
-        <tr>
-          <td style="padding:.25rem .4rem;color:#16a34a;font-weight:600">Discount</td>
-          <td style="padding:.25rem .4rem;text-align:right;color:#16a34a;font-weight:600">- ${{ "%.2f"|format(disc_amt) }}</td>
-        </tr>
-        <tr>
-          <td style="padding:.25rem .4rem;color:#374151;font-weight:600">Total After Discount</td>
-          <td style="padding:.25rem .4rem;text-align:right;color:#374151;font-weight:600">${{ "%.2f"|format(subtotal + del_fee + exact_fee - disc_amt) }}</td>
-        </tr>
-        {% endif %}
-        <tr>
-          <td style="padding:.25rem .4rem;color:#4b5563">CT Sales Tax (6.35%)</td>
-          <td style="padding:.25rem .4rem;text-align:right;color:#4b5563">${{ "%.2f"|format(tax_amt) }}</td>
-        </tr>
-        <tr style="border-top:2px solid #86efac">
-          <td style="padding:.4rem .4rem 0;font-weight:800;font-size:1rem;color:#166534">Grand Total</td>
-          <td style="padding:.4rem .4rem 0;text-align:right;font-weight:800;font-size:1rem;color:#166534">${{ "%.2f"|format(grand_total) }}</td>
-        </tr>
-      </table>
-      <form method="POST" action="/admin/booking/{{ b.id }}/recalc-total" style="margin-top:.6rem">
-        <button type="submit" style="background:#1e40af;color:white;border:none;border-radius:7px;padding:.4rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">
-          🔄 Recalculate Total from Items
-        </button>
-        <span style="font-size:.78rem;color:#6b7280;margin-left:.5rem">Updates grand total based on current items + delivery fee + tax</span>
+
+    <!-- Discount form -->
+    <div style="margin-top:1rem;padding-top:.85rem;border-top:1px solid #f1f5f9">
+      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🏷️ Discount</div>
+      {% if disc_amt > 0 %}
+      <div style="font-size:.82rem;color:#16a34a;font-weight:600;margin-bottom:.5rem">
+        Applied: {% if b.discount_type == 'percent' %}{{ b.discount_value|float|round(1) }}% off{% else %}${{ "%.2f"|format(b.discount_value|float) }} off{% endif %} → saves ${{ "%.2f"|format(disc_amt) }}
+        <a href="/admin/booking/{{ b.id }}/remove-discount" style="margin-left:.5rem;font-size:.78rem;color:#dc2626;text-decoration:none;border:1px solid #fca5a5;border-radius:5px;padding:.1rem .45rem">Remove</a>
+      </div>
+      {% endif %}
+      <form method="POST" action="/admin/booking/{{ b.id }}/apply-discount">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-end">
+          <select name="discount_type" style="border:1px solid #d1d5db;border-radius:6px;padding:.38rem .5rem;font-size:.84rem;background:#fff;flex:1;min-width:100px">
+            <option value="amount" {% if b.discount_type == 'amount' %}selected{% endif %}>$ Fixed</option>
+            <option value="percent" {% if b.discount_type == 'percent' %}selected{% endif %}>% Percent</option>
+          </select>
+          <input type="number" name="discount_value" min="0" step="0.01" value="{{ b.discount_value|float if b.discount_value else '' }}" placeholder="Value"
+            style="border:1px solid #d1d5db;border-radius:6px;padding:.38rem .5rem;font-size:.84rem;width:75px">
+          <button type="submit" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:.38rem .85rem;font-size:.84rem;font-weight:600;cursor:pointer">Apply</button>
+        </div>
+      </form>
+      <form method="POST" action="/admin/booking/{{ b.id }}/recalc-total" style="margin-top:.5rem">
+        <button type="submit" style="font-size:.78rem;color:#1e40af;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:.25rem .65rem;cursor:pointer">🔄 Recalc Total</button>
       </form>
     </div>
-    <form method="POST" action="/admin/booking/{{ b.id }}/apply-discount">
-      <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end">
-        <div>
-          <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem">Discount Type</label>
-          <select name="discount_type" style="border:1px solid #d1d5db;border-radius:7px;padding:.45rem .7rem;font-size:.9rem;background:white">
-            <option value="amount" {% if b.discount_type == 'amount' %}selected{% endif %}>$ Fixed Amount</option>
-            <option value="percent" {% if b.discount_type == 'percent' %}selected{% endif %}>% Percentage</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem">Value</label>
-          <input type="number" name="discount_value" min="0" step="0.01"
-            value="{{ b.discount_value|float if b.discount_value else '' }}"
-            placeholder="e.g. 25"
-            style="border:1px solid #d1d5db;border-radius:7px;padding:.45rem .7rem;font-size:.9rem;width:110px">
-        </div>
-        <button type="submit" style="background:#16a34a;color:white;border:none;border-radius:7px;padding:.5rem 1.2rem;font-size:.88rem;font-weight:700;cursor:pointer">Apply Discount</button>
-        {% if disc_amt > 0 %}
-        <a href="/admin/booking/{{ b.id }}/remove-discount" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:7px;padding:.5rem 1rem;font-size:.88rem;font-weight:600;text-decoration:none">Remove</a>
-        {% endif %}
-      </div>
-      <p style="font-size:.78rem;color:#6b7280;margin-top:.6rem;margin-bottom:0">Discount is applied to the full pre-tax total (items + delivery fees). Grand total is recalculated automatically.</p>
-    </form>
-  </div>
 
-  <!-- ── Admin Private Notes ── -->
-  <div class="card" style="border:2px solid #fde68a;background:#fffbeb">
-    <h2 style="color:#92400e">🔒 Private Admin Notes</h2>
-    <p style="font-size:.8rem;color:#a16207;margin-bottom:.75rem">Only visible to you — never shown to customers.</p>
-    <form method="POST" action="/admin/booking/{{ b.id }}/admin-notes">
-      <textarea name="admin_notes" rows="5" placeholder="Add your private notes here… follow-up reminders, customer preferences, payment history, anything…" style="width:100%;border:1px solid #fcd34d;border-radius:8px;padding:.65rem .85rem;font-size:.9rem;color:#1a202c;background:white;resize:vertical;line-height:1.6">{{ b.admin_notes or '' }}</textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:.5rem">
-        <button type="submit" style="background:#d97706;color:white;border:none;border-radius:7px;padding:.5rem 1.25rem;font-size:.88rem;font-weight:700;cursor:pointer">💾 Save Notes</button>
-      </div>
-    </form>
-  </div>
-
-  <!-- ── Payment Links History ── -->
-  {% if payment_links %}
-  <div class="card">
-    <h2>Payment Links Sent</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:.88rem">
-      <thead>
-        <tr style="background:#f8fafc;text-align:left">
-          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Label</th>
-          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Amount</th>
-          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Sent</th>
-          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Status</th>
-          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;color:#6b7280;font-weight:600">Link</th>
-          <th style="padding:.5rem .75rem;border-bottom:1px solid #e2e8f0"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for pl in payment_links %}
-        <tr style="border-bottom:1px solid #f1f5f9">
-          <td style="padding:.55rem .75rem;color:#1a202c;font-weight:500">{{ pl.label or '—' }}</td>
-          <td style="padding:.55rem .75rem;font-weight:700;color:#1a202c">${{ "%.2f"|format(pl.amount or 0) }}</td>
-          <td style="padding:.55rem .75rem;color:#6b7280;font-size:.82rem">{{ (pl.created_at or '')|string|truncate(16, True, '') }}</td>
-          <td style="padding:.55rem .75rem">
-            {% if pl.status == 'active' %}
-            <span style="background:#dcfce7;color:#166534;font-size:.78rem;font-weight:700;padding:.2rem .55rem;border-radius:20px">Active</span>
-            {% else %}
-            <span style="background:#fee2e2;color:#991b1b;font-size:.78rem;font-weight:700;padding:.2rem .55rem;border-radius:20px">Cancelled</span>
-            {% endif %}
-          </td>
-          <td style="padding:.55rem .75rem">
-            {% if pl.url and pl.status == 'active' %}
-            <a href="{{ pl.url }}" target="_blank" style="color:#2563eb;font-size:.82rem;word-break:break-all">Open ↗</a>
-            {% else %}
-            <span style="color:#9ca3af;font-size:.82rem">—</span>
-            {% endif %}
-          </td>
-          <td style="padding:.55rem .75rem">
-            {% if pl.status == 'active' %}
-            <form method="POST" action="/admin/payment-link/{{ pl.id }}/cancel" style="margin:0">
-              <button type="submit"
-                      onclick="return confirm('Cancel this payment link? The customer will no longer be able to pay using it.')"
-                      style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">
-                🚫 Cancel Link
-              </button>
-            </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-
-  <!-- ── Custom Stripe Payment Link ── -->
-  {% if request.args.get('custom_link') %}
-  <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
-    <div style="font-weight:700;color:#15803d;margin-bottom:.35rem">✅ Payment link created &amp; emailed to {{ b.email }}</div>
-    <div style="font-size:.82rem;color:#6b7280;margin-bottom:.4rem">Copy this link to share it another way:</div>
-    <div style="display:flex;gap:.5rem;align-items:center">
-      <input id="custom-link-val" type="text" value="{{ request.args.get('custom_link') }}" readonly
-             style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.82rem;background:#f9fafb;color:#374151">
-      <button type="button" onclick="var i=document.getElementById('custom-link-val');i.select();document.execCommand('copy');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
-              style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.4rem .9rem;font-size:.82rem;cursor:pointer;font-weight:600;white-space:nowrap">Copy</button>
-    </div>
-  </div>
-  {% endif %}
-  <div class="card">
-    <h2>Send Custom Payment Link</h2>
-    <p style="color:#6b7280;font-size:.88rem;margin-bottom:1rem">Create a Stripe payment link for any amount and email it directly to the customer.</p>
-    {% set balance_due = ((b.grand_total or 0)|float - (b.amount_paid or 0)|float) %}
-    {% if balance_due > 0.50 and b.status in ('accepted', 'pending') %}
-    <div style="margin-bottom:.85rem">
-      <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link"
+    <!-- Payment link -->
+    <div style="margin-top:.85rem;padding-top:.85rem;border-top:1px solid #f1f5f9">
+      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">💳 Payment Links</div>
+      {% set balance_due = ((b.grand_total or 0)|float - (b.amount_paid or 0)|float) %}
+      {% if balance_due > 0.50 and b.status in ('accepted', 'pending') %}
+      <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" style="margin-bottom:.6rem"
             onsubmit="return confirm('Send a ${{ '%.2f'|format(balance_due) }} payment link to {{ b.email }}?')">
         <input type="hidden" name="amount" value="{{ '%.2f'|format(balance_due) }}">
         <input type="hidden" name="label" value="Balance Due — Booking #{{ b.id }}">
-        <button type="submit"
-                style="background:#15803d;color:white;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.5rem">
-          💳 Send Balance Payment Link — ${{ '%.2f'|format(balance_due) }}
+        <button type="submit" style="width:100%;background:#15803d;color:#fff;border:none;border-radius:7px;padding:.55rem .9rem;font-size:.86rem;font-weight:700;cursor:pointer">
+          💳 Send Balance Link — ${{ '%.2f'|format(balance_due) }}
         </button>
       </form>
+      {% endif %}
+      <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+        <input type="number" name="amount" min="0.50" step="0.01" placeholder="$ Amount" required
+               style="flex:1;min-width:80px;border:1px solid #d1d5db;border-radius:6px;padding:.38rem .5rem;font-size:.9rem">
+        <input type="text" name="label" placeholder="Label (opt)"
+               style="flex:2;min-width:100px;border:1px solid #d1d5db;border-radius:6px;padding:.38rem .5rem;font-size:.84rem">
+        <button type="submit" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.38rem .85rem;font-size:.84rem;font-weight:600;cursor:pointer;white-space:nowrap">Send</button>
+      </form>
+      {% if request.args.get('custom_link') %}
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:7px;padding:.55rem .75rem;margin-top:.5rem">
+        <div style="font-size:.78rem;font-weight:600;color:#15803d;margin-bottom:.3rem">✅ Link sent to {{ b.email }}</div>
+        <div style="display:flex;gap:.4rem">
+          <input id="cl-val" type="text" value="{{ request.args.get('custom_link') }}" readonly
+                 style="flex:1;border:1px solid #d1d5db;border-radius:5px;padding:.3rem .5rem;font-size:.78rem;background:#f9fafb">
+          <button onclick="document.getElementById('cl-val').select();document.execCommand('copy');this.textContent='✓';setTimeout(()=>this.textContent='Copy',1500)"
+                  style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:.3rem .65rem;font-size:.78rem;cursor:pointer">Copy</button>
+        </div>
+      </div>
+      {% endif %}
+      <!-- Stripe payment link if accepted -->
+      {% if b.status == 'accepted' and b.stripe_payment_link %}
+      <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280">
+        Invoice link: <a href="{{ b.stripe_payment_link }}" target="_blank" style="color:#2563eb;word-break:break-all">Open ↗</a>
+      </div>
+      {% endif %}
+      {% if payment_links %}
+      <div style="margin-top:.65rem">
+        {% for pl in payment_links %}
+        <div style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-top:1px solid #f1f5f9;font-size:.8rem">
+          <span style="flex:1;color:#374151;font-weight:500">{{ pl.label or 'Link' }} — ${{ "%.2f"|format(pl.amount or 0) }}</span>
+          {% if pl.status == 'active' %}
+          <a href="{{ pl.url }}" target="_blank" style="color:#2563eb;font-size:.78rem">Open ↗</a>
+          <form method="POST" action="/admin/payment-link/{{ pl.id }}/cancel" style="margin:0">
+            <button type="submit" onclick="return confirm('Cancel this link?')"
+                    style="background:#fee2e2;color:#dc2626;border:none;border-radius:4px;padding:.15rem .45rem;font-size:.75rem;cursor:pointer">✕</button>
+          </form>
+          {% else %}
+          <span style="color:#9ca3af;font-size:.75rem">Cancelled</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap">
-      <div>
-        <label style="display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem">Amount ($)</label>
-        <input type="number" name="amount" min="0.50" step="0.01" placeholder="0.00" required
-               style="width:130px;border:1px solid #d1d5db;border-radius:6px;padding:.45rem .65rem;font-size:1rem;font-weight:600">
-      </div>
-      <div>
-        <label style="display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem">Label (optional)</label>
-        <input type="text" name="label" placeholder="e.g. Deposit, Balance…"
-               style="width:220px;border:1px solid #d1d5db;border-radius:6px;padding:.45rem .65rem;font-size:.9rem">
-      </div>
-      <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.5rem 1.25rem;font-size:.9rem;font-weight:700;cursor:pointer;height:38px">
-        💳 Create &amp; Send Link
-      </button>
-    </form>
   </div>
 
-  <!-- ── BOOKING ACTIONS ── -->
-  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-top:1.5rem">
-
-    {% if b.status == 'pending' %}
-    <!-- Pending: Accept / Deny -->
-    <div style="padding:1rem 1.25rem;display:flex;gap:.75rem;flex-wrap:wrap;border-bottom:1px solid #e5e7eb">
-      <form id="accept-form" method="POST" action="/admin/booking/{{ b.id }}/accept" style="flex:1;min-width:180px">
-        <input type="hidden" name="custom_amount" id="accept-amount-input">
-        <button type="button" id="accept-btn"
-          style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:.65rem 1.1rem;font-size:.92rem;font-weight:700;cursor:pointer">
-          ✅ Accept — Send Invoice
-        </button>
-      </form>
-      <form method="POST" action="/admin/booking/{{ b.id }}/deny" style="flex:1;min-width:180px">
-        <button onclick="return confirm('Deny this booking? A rejection email will be sent to {{ b.email }}.')"
-          style="width:100%;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;padding:.65rem 1.1rem;font-size:.92rem;font-weight:700;cursor:pointer">
-          ✕ Deny — Send Rejection
-        </button>
-      </form>
-    </div>
-    {% endif %}
+  <!-- ── Actions card ── -->
+  <div class="card" style="border:none;padding:1.1rem 1.25rem">
 
     {% if b.status in ('accepted', 'pending') %}
-    <!-- Payment section -->
-    <div style="padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb">
-      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem">💳 Record Payment</div>
+    <!-- Record Payment -->
+    <div style="margin-bottom:1rem">
+      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem">💳 Record Payment</div>
       <form method="POST" action="/admin/booking/{{ b.id }}/record-payment"
-            onsubmit="return confirm('Record this payment for booking #{{ b.id }}?')"
-            style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+            onsubmit="return confirm('Record this payment?')"
+            style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
         <input type="number" name="amount" step="0.01" min="0.01" placeholder="Amount $" required
-               style="width:120px;padding:.45rem .65rem;border:1px solid #d1d5db;border-radius:7px;font-size:.9rem">
-        <select name="method" style="padding:.45rem .65rem;border:1px solid #d1d5db;border-radius:7px;font-size:.9rem;background:#fff">
+               style="width:105px;border:1px solid #d1d5db;border-radius:6px;padding:.38rem .5rem;font-size:.88rem">
+        <select name="method" style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.38rem .5rem;font-size:.84rem;background:#fff">
           <option value="stripe">Stripe</option>
           <option value="cash">Cash</option>
           <option value="check">Check</option>
           <option value="other">Other</option>
         </select>
-        <button type="submit"
-          style="background:#2563eb;color:#fff;border:none;border-radius:7px;padding:.45rem 1.1rem;font-size:.9rem;font-weight:700;cursor:pointer">
-          Record
-        </button>
+        <button type="submit" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.38rem .85rem;font-size:.84rem;font-weight:600;cursor:pointer">Record</button>
       </form>
-
-      <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.75rem">
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
         {% if b.status not in ('denied','cancelled','concluded') %}
-        <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment"
-              onsubmit="return confirm('Mark as paid in full with cash?')">
-          <button style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:7px;padding:.42rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">
-            💵 Cash — Paid in Full
-          </button>
+        <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment" onsubmit="return confirm('Mark as paid in full with cash?')">
+          <button style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">💵 Cash Full</button>
         </form>
         {% endif %}
         {% if b.status not in ('denied','cancelled') %}
-        <form method="POST" action="/admin/booking/{{ b.id }}/no-charge"
-              onsubmit="return confirm('Mark as No Charge? All fees will be zeroed and the booking confirmed.')">
-          <button style="background:#f8fafc;color:#475569;border:1px solid #cbd5e1;border-radius:7px;padding:.42rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">
-            🚫 Not Charging
-          </button>
+        <form method="POST" action="/admin/booking/{{ b.id }}/no-charge" onsubmit="return confirm('Mark as No Charge?')">
+          <button style="background:#f8fafc;color:#475569;border:1px solid #cbd5e1;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">🚫 No Charge</button>
         </form>
         {% endif %}
         {% if b.status == 'accepted' %}
-        <form method="POST" action="/admin/booking/{{ b.id }}/send-receipt"
-              onsubmit="return confirm('Send a receipt to {{ b.email }}?')">
-          <button style="background:#f8fafc;color:#374151;border:1px solid #d1d5db;border-radius:7px;padding:.42rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">
-            📄 Send Receipt
-          </button>
+        <form method="POST" action="/admin/booking/{{ b.id }}/send-receipt" onsubmit="return confirm('Send receipt to {{ b.email }}?')">
+          <button style="background:#f8fafc;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">📄 Receipt</button>
         </form>
         {% endif %}
         {% if b.status == 'accepted' and b.payment_status in ('paid','partial') %}
         <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
           <input type="hidden" name="custom_amount" id="final-amount-input">
-          <button type="button" id="final-btn"
-            style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;border-radius:7px;padding:.42rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">
-            🔔 Send Final Reminder
-          </button>
+          <button type="button" id="final-btn" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">🔔 Remind</button>
         </form>
         {% endif %}
       </div>
     </div>
     {% endif %}
 
-    <!-- Delivery status -->
+    <!-- Delivery -->
     {% if b.status not in ('denied','cancelled') %}
-    <div style="padding:.85rem 1.25rem;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:.75rem">
-      <span style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0">🚚 Delivery</span>
+    <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;margin-bottom:.85rem">
+      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem">🚚 Delivery</div>
       {% if b.delivery_status == 'picked_up' %}
-        <span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:7px;padding:.35rem .85rem;font-size:.85rem;font-weight:600">✔ Picked Up</span>
+        <span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:7px;padding:.35rem .85rem;font-size:.84rem;font-weight:600">✔ Picked Up</span>
       {% elif b.delivery_status == 'delivered' %}
         <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status">
           <button onclick="return confirm('Mark as Picked Up?')"
-            style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd;border-radius:7px;padding:.35rem .85rem;font-size:.85rem;font-weight:600;cursor:pointer">
-            ✅ Mark as Picked Up
-          </button>
+            style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd;border-radius:7px;padding:.38rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">✅ Mark Picked Up</button>
         </form>
       {% else %}
         <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status">
           <button onclick="return confirm('Mark as Delivered?')"
-            style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:7px;padding:.35rem .85rem;font-size:.85rem;font-weight:600;cursor:pointer">
-            🚚 Mark as Delivered
-          </button>
+            style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:7px;padding:.38rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">🚚 Mark Delivered</button>
         </form>
       {% endif %}
     </div>
     {% endif %}
 
-    <!-- Bottom nav: Back / Cancel / Delete -->
-    <div style="padding:.85rem 1.25rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;background:#f9fafb">
-      <a href="/admin/dashboard"
-        style="background:#fff;color:#374151;border:1px solid #d1d5db;border-radius:7px;padding:.42rem 1rem;font-size:.86rem;font-weight:600;text-decoration:none">
-        ← Dashboard
-      </a>
+    <!-- Admin Notes -->
+    <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;margin-bottom:.85rem">
+      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem">🔒 Private Notes</div>
+      <form method="POST" action="/admin/booking/{{ b.id }}/admin-notes">
+        <textarea name="admin_notes" rows="3" placeholder="Follow-up reminders, payment notes…"
+          style="width:100%;border:1px solid #d1d5db;border-radius:7px;padding:.5rem .65rem;font-size:.84rem;color:#1a202c;background:#fff;resize:vertical;line-height:1.5">{{ b.admin_notes or '' }}</textarea>
+        <button type="submit" style="margin-top:.35rem;background:#d97706;color:#fff;border:none;border-radius:6px;padding:.35rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer">Save Notes</button>
+      </form>
+    </div>
+
+    <!-- Cancel / Delete / Back -->
+    <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;display:flex;flex-direction:column;gap:.4rem">
+      <a href="/admin/dashboard" style="display:block;text-align:center;background:#f9fafb;color:#374151;border:1px solid #e5e7eb;border-radius:7px;padding:.42rem .9rem;font-size:.85rem;font-weight:600;text-decoration:none">← Dashboard</a>
       {% if b.status not in ('denied','cancelled') %}
       <form method="POST" action="/admin/booking/{{ b.id }}/cancel">
-        <button onclick="return confirm('Cancel booking #{{ b.id }}?')"
-          style="background:#fff;color:#b45309;border:1px solid #fcd34d;border-radius:7px;padding:.42rem 1rem;font-size:.86rem;font-weight:600;cursor:pointer">
-          Cancel Booking
-        </button>
+        <button onclick="return confirm('Cancel booking #{{ b.id }}?')" style="width:100%;background:#fffbeb;color:#b45309;border:1px solid #fcd34d;border-radius:7px;padding:.42rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer">Cancel Booking</button>
       </form>
       {% endif %}
-      <form method="POST" action="/admin/booking/{{ b.id }}/delete" style="margin-left:auto">
-        <button onclick="return confirm('Permanently DELETE booking #{{ b.id }}? This cannot be undone.')"
-          style="background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:7px;padding:.42rem 1rem;font-size:.86rem;font-weight:600;cursor:pointer">
-          Delete
-        </button>
+      <form method="POST" action="/admin/booking/{{ b.id }}/delete">
+        <button onclick="return confirm('Permanently DELETE booking #{{ b.id }}?')" style="width:100%;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:7px;padding:.42rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer">Delete Booking</button>
       </form>
     </div>
 
   </div>
 
-  {% if b.final_payment_link %}
-  <div style="background:#fff8f3;border:2px solid #dd6b20;border-radius:10px;padding:1.1rem 1.25rem;margin-top:1rem">
-    <div style="font-weight:700;color:#c05621;margin-bottom:.4rem">Final Payment Link Sent</div>
-    <a href="{{ b.final_payment_link }}" target="_blank" style="font-size:.85rem;word-break:break-all">{{ b.final_payment_link }}</a>
-  </div>
-  {% endif %}
+</div><!-- end right column -->
+</div><!-- end two-column grid -->
 </div>
 
 <!-- ── Payment Amount Modal ── -->
