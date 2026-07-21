@@ -4470,6 +4470,7 @@ ADMIN_BOOKING_HTML = """
           <span class="v">
             {% if b.event_end_date %}{{ b.event_end_date.strftime('%m/%d/%Y') }}{% if b.event_end_time %} &nbsp;{{ b.event_end_time }}{% endif %}{% else %}—{% endif %}
           </span>
+          <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
           <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
           <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
           <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
@@ -4518,7 +4519,6 @@ ADMIN_BOOKING_HTML = """
         {% endif %}
 
         <div class="row" style="margin:0">
-          <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
           <span class="k">Est. Delivery</span>
           <span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }}{% if b.setup_time %} &nbsp;{{ b.setup_time }}{% endif %}</span>
           <span class="k">Est. Pickup</span>
