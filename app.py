@@ -4482,20 +4482,38 @@ ADMIN_BOOKING_HTML = """
         <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🚚 Delivery Schedule</div>
 
         {% if weekend_residential %}
-        <div id="weekend-banner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:7px;padding:.7rem .9rem;margin-bottom:.75rem;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem">
-          <div style="flex:1;min-width:180px">
-            <div style="font-weight:700;color:#92400e;font-size:.88rem;margin-bottom:.15rem">🏠 Weekend Residential Event</div>
-            <div style="font-size:.82rem;color:#78350f">
-              {{ weekend_residential.day_label }} detected &nbsp;·&nbsp;
-              <strong>Delivery:</strong> {{ weekend_residential.delivery_label }} &nbsp;|&nbsp; <strong>Pickup:</strong> {{ weekend_residential.pickup_label }}
+        <div id="weekend-banner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:7px;padding:.7rem .9rem;margin-bottom:.75rem">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.6rem">
+            <div style="flex:1;min-width:180px">
+              <div style="font-weight:700;color:#92400e;font-size:.88rem;margin-bottom:.15rem">🏠 Weekend Residential Event</div>
+              <div style="font-size:.82rem;color:#78350f">
+                {{ weekend_residential.day_label }} detected &nbsp;·&nbsp;
+                <strong>Delivery:</strong> {{ weekend_residential.delivery_label }} &nbsp;|&nbsp; <strong>Pickup:</strong> {{ weekend_residential.pickup_label }}
+              </div>
+            </div>
+            <button type="button" id="ws-apply-btn-{{ b.id }}"
+              onclick="showWeekendConfirm('{{ b.id }}')"
+              style="background:#d97706;color:white;border:none;border-radius:6px;padding:.45rem 1rem;font-size:.84rem;font-weight:700;cursor:pointer;white-space:nowrap">
+              📅 Apply Weekend Schedule
+            </button>
+          </div>
+          <!-- inline confirm row, hidden until button clicked -->
+          <div id="ws-confirm-{{ b.id }}" style="display:none;margin-top:.6rem;padding:.55rem .75rem;background:#fff8e1;border:1px solid #f59e0b;border-radius:6px;display:none;align-items:center;gap:.75rem;flex-wrap:wrap">
+            <span style="font-size:.85rem;font-weight:600;color:#92400e;flex:1">
+              ⚠️ This will set Delivery to <strong>{{ weekend_residential.delivery_label }}</strong> and Pickup to <strong>{{ weekend_residential.pickup_label }}</strong>. Confirm?
+            </span>
+            <div style="display:flex;gap:.5rem">
+              <form method="POST" action="/admin/booking/{{ b.id }}/apply-weekend-schedule" style="margin:0">
+                <button type="submit" style="background:#15803d;color:white;border:none;border-radius:6px;padding:.4rem .9rem;font-size:.83rem;font-weight:700;cursor:pointer">
+                  ✓ Yes, Apply
+                </button>
+              </form>
+              <button type="button" onclick="hideWeekendConfirm('{{ b.id }}')"
+                style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .9rem;font-size:.83rem;font-weight:600;cursor:pointer">
+                Cancel
+              </button>
             </div>
           </div>
-          <button type="button"
-            onclick="confirmWeekendSchedule('{{ b.id }}', '{{ weekend_residential.delivery_label }}', '{{ weekend_residential.pickup_label }}')"
-            style="background:#d97706;color:white;border:none;border-radius:6px;padding:.45rem 1rem;font-size:.84rem;font-weight:700;cursor:pointer;white-space:nowrap">
-            📅 Apply Weekend Schedule
-          </button>
-          <form id="weekend-form-{{ b.id }}" method="POST" action="/admin/booking/{{ b.id }}/apply-weekend-schedule" style="display:none"></form>
         </div>
         {% endif %}
 
@@ -4631,22 +4649,15 @@ ADMIN_BOOKING_HTML = """
       document.getElementById('evt-edit-view').style.display = on ? '' : 'none';
       document.getElementById('evt-edit-btn').style.display = on ? 'none' : '';
     }
-    function confirmWeekendSchedule(bookingId, deliveryLabel, pickupLabel) {
-      var msg = 'Apply weekend schedule to this booking?\n\n'
-              + '  Delivery: ' + deliveryLabel + '\n'
-              + '  Pickup:   ' + pickupLabel + '\n\n'
-              + 'This will update the Delivery Schedule above.';
-      if (!confirm(msg)) return;
-      // Hide banner and highlight the card
-      var banner = document.getElementById('weekend-banner');
-      if (banner) banner.style.display = 'none';
-      var card = document.getElementById('delivery-sched-card');
-      if (card) {
-        card.style.background = '#fef9c3';
-        card.style.border = '2px solid #d97706';
-        card.style.boxShadow = '0 0 0 3px #fde68a55';
-      }
-      document.getElementById('weekend-form-' + bookingId).submit();
+    function showWeekendConfirm(bookingId) {
+      document.getElementById('ws-apply-btn-' + bookingId).style.display = 'none';
+      var c = document.getElementById('ws-confirm-' + bookingId);
+      c.style.display = 'flex';
+    }
+    function hideWeekendConfirm(bookingId) {
+      document.getElementById('ws-apply-btn-' + bookingId).style.display = '';
+      var c = document.getElementById('ws-confirm-' + bookingId);
+      c.style.display = 'none';
     }
     </script>
     <div style="background:#f0f9ff;border-left:3px solid #38bdf8;padding:.6rem .9rem;margin-top:.9rem;border-radius:0 6px 6px 0;font-size:.82rem;color:#0c4a6e">
