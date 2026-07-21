@@ -4405,11 +4405,11 @@ ADMIN_BOOKING_HTML = """
   </div>
   {% endif %}
 
-  <div class="card">
-    <h2 style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-      Customer
+  <div class="card" style="background:#EEEDFE;border:1.5px solid #AFA9EC">
+    <h2 style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;color:#26215C">
+      👤 Customer
       <button id="cust-edit-btn" onclick="custEditToggle(true)"
-              style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
+              style="background:#CECBF6;color:#3C3489;border:1px solid #AFA9EC;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
         ✏️ Edit
       </button>
     </h2>
@@ -4497,11 +4497,11 @@ ADMIN_BOOKING_HTML = """
   }
   </script>
 
-  <div class="card">
-    <h2 style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-      Event
+  <div class="card" style="background:#f8fbff;border:1.5px solid #bfdbfe">
+    <h2 style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;color:#1e3a5f">
+      📅 Event
       <button id="evt-edit-btn" onclick="evtEditToggle(true)"
-              style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
+              style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:6px;padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">
         ✏️ Edit
       </button>
     </h2>
@@ -4511,8 +4511,8 @@ ADMIN_BOOKING_HTML = """
     <div id="evt-view">
 
       <!-- Customer's event info — never changed by weekend schedule -->
-      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:.85rem 1rem;margin-bottom:.85rem">
-        <div style="font-size:.7rem;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🗓 Customer Event Info</div>
+      <div style="background:#E6F1FB;border:1.5px solid #85B7EB;border-radius:8px;padding:.85rem 1rem;margin-bottom:.85rem">
+        <div style="font-size:.7rem;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🗓 Customer Event Info</div>
         <div class="row" style="margin:0">
           <span class="k">Event Start</span>
           <span class="v">
@@ -4531,8 +4531,8 @@ ADMIN_BOOKING_HTML = """
       </div>
 
       <!-- Delivery schedule — updated by weekend schedule -->
-      <div id="delivery-sched-card" style="{% if weekend_residential and not b.weekend_schedule_applied %}background:#fafafa;border:1px solid #e5e7eb;{% else %}background:#fafafa;border:1px solid #e5e7eb;{% endif %}border-radius:8px;padding:.85rem 1rem;transition:all .4s ease">
-        <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🚚 Delivery Schedule</div>
+      <div id="delivery-sched-card" style="background:#E1F5EE;border:1.5px solid #5DCAA5;border-radius:8px;padding:.85rem 1rem;transition:all .4s ease">
+        <div style="font-size:.7rem;font-weight:700;color:#085041;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🚚 Delivery Schedule</div>
 
         {% if weekend_residential %}
         <div id="weekend-banner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:7px;padding:.7rem .9rem;margin-bottom:.75rem">
@@ -4991,7 +4991,7 @@ ADMIN_BOOKING_HTML = """
   </script>
 
   {% if b.notes %}
-  <div class="card"><h2>Notes</h2><p style="color:#4a5568;line-height:1.6">{{ b.notes }}</p></div>
+  <div class="card" style="background:#FAEEDA;border:1.5px solid #EF9F27"><h2 style="color:#633806">📝 Notes</h2><p style="color:#412402;line-height:1.6">{{ b.notes }}</p></div>
   {% endif %}
 
 </div><!-- end left column -->
@@ -5134,7 +5134,7 @@ ADMIN_BOOKING_HTML = """
     {% if b.status in ('accepted', 'pending') %}
     <!-- Record Payment -->
     <div style="margin-bottom:1rem">
-      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem">💳 Record Payment</div>
+      <div style="font-size:.7rem;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#E6F1FB;border-radius:6px">💳 Record Payment</div>
       <form method="POST" action="/admin/booking/{{ b.id }}/record-payment"
             onsubmit="return confirm('Record this payment?')"
             style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
@@ -5151,7 +5151,7 @@ ADMIN_BOOKING_HTML = """
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
         {% if b.status not in ('denied','cancelled','concluded') %}
         <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment" onsubmit="return confirm('Mark as paid in full with cash?')">
-          <button style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">💵 Cash Full</button>
+          <button style="background:#E1F5EE;color:#085041;border:1px solid #5DCAA5;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">💵 Cash Full</button>
         </form>
         {% endif %}
         {% if b.status not in ('denied','cancelled') %}
@@ -5177,7 +5177,7 @@ ADMIN_BOOKING_HTML = """
     <!-- Delivery -->
     {% if b.status not in ('denied','cancelled') %}
     <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;margin-bottom:.85rem">
-      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem">🚚 Delivery</div>
+      <div style="font-size:.7rem;font-weight:700;color:#085041;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#E1F5EE;border-radius:6px">🚚 Delivery</div>
       {% if b.delivery_status == 'picked_up' %}
         <span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:7px;padding:.35rem .85rem;font-size:.84rem;font-weight:600">✔ Picked Up</span>
       {% elif b.delivery_status == 'delivered' %}
@@ -5196,11 +5196,11 @@ ADMIN_BOOKING_HTML = """
 
     <!-- Admin Notes -->
     <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;margin-bottom:.85rem">
-      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem">🔒 Private Notes</div>
+      <div style="font-size:.7rem;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#FAEEDA;border-radius:6px">🔒 Private Notes</div>
       <form method="POST" action="/admin/booking/{{ b.id }}/admin-notes">
         <textarea name="admin_notes" rows="3" placeholder="Follow-up reminders, payment notes…"
           style="width:100%;border:1px solid #d1d5db;border-radius:7px;padding:.5rem .65rem;font-size:.84rem;color:#1a202c;background:#fff;resize:vertical;line-height:1.5">{{ b.admin_notes or '' }}</textarea>
-        <button type="submit" style="margin-top:.35rem;background:#d97706;color:#fff;border:none;border-radius:6px;padding:.35rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer">Save Notes</button>
+        <button type="submit" style="margin-top:.35rem;background:#BA7517;color:#fff;border:none;border-radius:6px;padding:.35rem .9rem;font-size:.82rem;font-weight:600;cursor:pointer">Save Notes</button>
       </form>
     </div>
 
@@ -5209,7 +5209,7 @@ ADMIN_BOOKING_HTML = """
       <a href="/admin/dashboard" style="display:block;text-align:center;background:#f9fafb;color:#374151;border:1px solid #e5e7eb;border-radius:7px;padding:.42rem .9rem;font-size:.85rem;font-weight:600;text-decoration:none">← Dashboard</a>
       {% if b.status not in ('denied','cancelled') %}
       <form method="POST" action="/admin/booking/{{ b.id }}/cancel">
-        <button onclick="return confirm('Cancel booking #{{ b.id }}?')" style="width:100%;background:#fffbeb;color:#b45309;border:1px solid #fcd34d;border-radius:7px;padding:.42rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer">Cancel Booking</button>
+        <button onclick="return confirm('Cancel booking #{{ b.id }}?')" style="width:100%;background:#FAECE7;color:#993C1D;border:1px solid #F09575;border-radius:7px;padding:.42rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer">Cancel Booking</button>
       </form>
       {% endif %}
       <form method="POST" action="/admin/booking/{{ b.id }}/delete">
