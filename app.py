@@ -3449,7 +3449,7 @@ ADMIN_DASH_HTML = """
                     style="border:1px solid #d1d5db;border-radius:6px;padding:.25rem .55rem;font-size:.77rem;color:#374151;cursor:pointer;background:#fff;white-space:nowrap">
                     ⚙ More ▾
                   </button>
-                  <div id="more-{{ b.id }}" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;min-width:140px;overflow:hidden">
+                  <div id="more-{{ b.id }}" style="display:none;position:fixed;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;min-width:150px;overflow:hidden">
                     {% if b.archived %}
                     <form method="POST" action="/admin/booking/{{ b.id }}/unarchive" style="margin:0">
                       <button type="submit" style="width:100%;text-align:left;padding:.5rem .85rem;font-size:.82rem;border:none;background:none;cursor:pointer;color:#374151;white-space:nowrap" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='none'">↩ Unarchive</button>
@@ -3482,8 +3482,25 @@ ADMIN_DASH_HTML = """
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('show');}
-function toggleMore(e,id){e.stopPropagation();var m=document.getElementById(id);var isOpen=m.style.display==='block';document.querySelectorAll('.more-wrap div[id^="more-"]').forEach(function(el){el.style.display='none';});m.style.display=isOpen?'none':'block';}
-document.addEventListener('click',function(){document.querySelectorAll('.more-wrap div[id^="more-"]').forEach(function(el){el.style.display='none';});});
+function toggleMore(e,id){
+  e.stopPropagation();
+  var m=document.getElementById(id);
+  var isOpen=m.style.display==='block';
+  document.querySelectorAll('[id^="more-"]').forEach(function(el){el.style.display='none';});
+  if(!isOpen){
+    var rect=e.currentTarget.getBoundingClientRect();
+    var menuW=160;
+    var left=Math.min(rect.right-menuW, window.innerWidth-menuW-8);
+    left=Math.max(8,left);
+    var top=rect.bottom+4;
+    if(top+150>window.innerHeight) top=rect.top-154;
+    m.style.top=top+'px';
+    m.style.left=left+'px';
+    m.style.display='block';
+  }
+}
+document.addEventListener('click',function(){document.querySelectorAll('[id^="more-"]').forEach(function(el){el.style.display='none';});});
+document.addEventListener('scroll',function(){document.querySelectorAll('[id^="more-"]').forEach(function(el){el.style.display='none';});},true);
 function getChecked(){return Array.from(document.querySelectorAll('.row-cb:checked')).map(c=>c.value);}
 function updateBulkBar(){var ids=getChecked();var bar=document.getElementById('bulkBar');if(ids.length>0){bar.style.display='flex';document.getElementById('bulkCount').textContent=ids.length+' selected';}else{bar.style.display='none';}var all=document.querySelectorAll('.row-cb');document.getElementById('selectAll').indeterminate=ids.length>0&&ids.length<all.length;document.getElementById('selectAll').checked=ids.length===all.length&&all.length>0;}
 function toggleAll(cb){document.querySelectorAll('.row-cb').forEach(c=>c.checked=cb.checked);updateBulkBar();}
