@@ -4272,7 +4272,18 @@ ADMIN_BOOKING_HTML = """
 </div>
 <div class="container">
 
-  <span class="badge badge-{{ b.status }}">{{ b.status|upper }}</span>
+  <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem">
+    <span class="badge badge-{{ b.status }}">{{ b.status|upper }}</span>
+    {% if b.delivery_status == 'delivered' %}
+    <span style="background:#fffbeb;color:#92400e;border:1.5px solid #fcd34d;border-radius:20px;padding:.25rem .85rem;font-size:.78rem;font-weight:700;letter-spacing:.04em">
+      🚚 DELIVERED
+    </span>
+    {% elif b.delivery_status == 'picked_up' %}
+    <span style="background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:20px;padding:.25rem .85rem;font-size:.78rem;font-weight:700;letter-spacing:.04em">
+      ✅ PICKED UP
+    </span>
+    {% endif %}
+  </div>
   <div style="font-size:.8rem;color:#718096;margin-bottom:1rem">Received: {{ b.created_at }}</div>
 
   {% if b.status == 'accepted' %}
