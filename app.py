@@ -3444,14 +3444,26 @@ ADMIN_DASH_HTML = """
                 {% else %}
                 <span style="font-size:.74rem;color:#16a34a;font-weight:600;padding:.25rem .5rem;background:#f0fdf4;border:1px solid #86efac;border-radius:6px">✔ Picked Up</span>
                 {% endif %}
-                <form method="POST" id="mgmt-form-{{ b.id }}" action="" style="display:inline">
-                  <select onchange="submitMgmt({{ b.id }},this)" style="border:1px solid #d1d5db;border-radius:6px;padding:.25rem .45rem;font-size:.77rem;color:#374151;cursor:pointer;margin-left:.2rem">
-                    <option value="">⚙ More</option>
-                    {% if b.archived %}<option value="/admin/booking/{{ b.id }}/unarchive">↩ Unarchive</option>
-                    {% else %}<option value="/admin/booking/{{ b.id }}/archive">📦 Archive</option>{% endif %}
-                    <option value="/admin/booking/{{ b.id }}/delete" data-confirm="Permanently delete booking #{{ b.id }}? Cannot be undone.">🗑 Delete</option>
-                  </select>
-                </form>
+                <div class="more-wrap" style="position:relative;display:inline-block;margin-left:.2rem">
+                  <button type="button" onclick="toggleMore(event,'more-{{ b.id }}')"
+                    style="border:1px solid #d1d5db;border-radius:6px;padding:.25rem .55rem;font-size:.77rem;color:#374151;cursor:pointer;background:#fff;white-space:nowrap">
+                    ⚙ More ▾
+                  </button>
+                  <div id="more-{{ b.id }}" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;min-width:140px;overflow:hidden">
+                    {% if b.archived %}
+                    <form method="POST" action="/admin/booking/{{ b.id }}/unarchive" style="margin:0">
+                      <button type="submit" style="width:100%;text-align:left;padding:.5rem .85rem;font-size:.82rem;border:none;background:none;cursor:pointer;color:#374151;white-space:nowrap" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='none'">↩ Unarchive</button>
+                    </form>
+                    {% else %}
+                    <form method="POST" action="/admin/booking/{{ b.id }}/archive" style="margin:0">
+                      <button type="submit" style="width:100%;text-align:left;padding:.5rem .85rem;font-size:.82rem;border:none;background:none;cursor:pointer;color:#374151;white-space:nowrap" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='none'">📦 Archive</button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="/admin/booking/{{ b.id }}/delete" style="margin:0" onsubmit="return confirm('Permanently delete booking #{{ b.id }}? Cannot be undone.')">
+                      <button type="submit" style="width:100%;text-align:left;padding:.5rem .85rem;font-size:.82rem;border:none;background:none;cursor:pointer;color:#dc2626;white-space:nowrap;border-top:1px solid #f3f4f6" onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background='none'">🗑 Delete</button>
+                    </form>
+                  </div>
+                </div>
               </div>
             </td>
           </tr>
@@ -3470,7 +3482,8 @@ ADMIN_DASH_HTML = """
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('show');}
-function submitMgmt(id,sel){var url=sel.value;if(!url)return;var opt=sel.options[sel.selectedIndex];var msg=opt.getAttribute('data-confirm')||'Are you sure?';if(!confirm(msg)){sel.selectedIndex=0;return;}var f=document.getElementById('mgmt-form-'+id);f.action=url;f.submit();}
+function toggleMore(e,id){e.stopPropagation();var m=document.getElementById(id);var isOpen=m.style.display==='block';document.querySelectorAll('.more-wrap div[id^="more-"]').forEach(function(el){el.style.display='none';});m.style.display=isOpen?'none':'block';}
+document.addEventListener('click',function(){document.querySelectorAll('.more-wrap div[id^="more-"]').forEach(function(el){el.style.display='none';});});
 function getChecked(){return Array.from(document.querySelectorAll('.row-cb:checked')).map(c=>c.value);}
 function updateBulkBar(){var ids=getChecked();var bar=document.getElementById('bulkBar');if(ids.length>0){bar.style.display='flex';document.getElementById('bulkCount').textContent=ids.length+' selected';}else{bar.style.display='none';}var all=document.querySelectorAll('.row-cb');document.getElementById('selectAll').indeterminate=ids.length>0&&ids.length<all.length;document.getElementById('selectAll').checked=ids.length===all.length&&all.length>0;}
 function toggleAll(cb){document.querySelectorAll('.row-cb').forEach(c=>c.checked=cb.checked);updateBulkBar();}
