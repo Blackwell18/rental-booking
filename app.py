@@ -3191,9 +3191,9 @@ ADMIN_DASH_HTML = """
     <a href="/admin/tax-report" class="sb-link"><span class="sb-icon">💰</span> Tax Report</a>
   </nav>
   <div class="sb-bottom">
-    <a href="/admin/setup-biometric" class="sb-link"><span class="sb-icon">🔐</span> Biometric</a>
     <a href="/admin/download-backup" class="sb-link"><span class="sb-icon">💾</span> Backup</a>
     <a href="/admin/logout" class="sb-link"><span class="sb-icon">🚪</span> Sign Out</a>
+    <a href="/admin/setup-biometric" style="display:block;padding:.35rem 1rem;font-size:.72rem;color:rgba(255,255,255,.25);text-decoration:none;text-align:center" title="Set up Face ID / Touch ID">🔐 Biometric setup</a>
   </div>
 </aside>
 
