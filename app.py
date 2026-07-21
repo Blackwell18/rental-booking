@@ -5200,109 +5200,133 @@ ADMIN_BOOKING_HTML = """
     </form>
   </div>
 
-  <div class="actions">
-    <a href="/admin/dashboard" class="btn btn-back">Back to Dashboard</a>
-    {% if b.status == 'pending' %}
-    <form id="accept-form" method="POST" action="/admin/booking/{{ b.id }}/accept">
-      <input type="hidden" name="custom_amount" id="accept-amount-input">
-      <button type="button" class="btn btn-accept" id="accept-btn">
-        Accept — Send Invoice & Payment Link
-      </button>
-    </form>
-    <form method="POST" action="/admin/booking/{{ b.id }}/deny">
-      <button class="btn btn-deny" onclick="return confirm('Deny this booking? This will send {{ b.email }} a rejection email.')">
-        Deny — Send Rejection Email
-      </button>
-    </form>
-    {% endif %}
-    {% if b.status == 'accepted' %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/confirm">
-      <button class="btn btn-confirm" onclick="return confirm('Mark as Paid in Full?')">
-        Mark as Paid in Full
-      </button>
-    </form>
-    <form method="POST" action="/admin/booking/{{ b.id }}/confirm" style="display:inline">
-      <input type="hidden" name="partial" value="1">
-      <button class="btn" style="background:#7c3aed;color:white" onclick="return confirm('Mark as Partial Payment received?')">
-        Mark as Partial Payment
-      </button>
-    </form>
-    {% endif %}
-    {% if b.status not in ('denied', 'cancelled') %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/cancel">
-      <button class="btn btn-cancel" onclick="return confirm('Cancel booking #{{ b.id }}?')">Cancel Booking</button>
-    </form>
-    {% endif %}
-    {% if b.status == 'accepted' and b.payment_status in ('paid', 'partial') %}
-    <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
-      <input type="hidden" name="custom_amount" id="final-amount-input">
-      <button type="button" class="btn btn-reminder" id="final-btn">
-        Send Final Payment Reminder
-      </button>
-    </form>
-    {% endif %}
-    {% if b.status not in ('denied', 'cancelled', 'concluded') %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment"
-          onsubmit="return confirm('Mark booking #{{ b.id }} as paid in full with cash? This will set status to Confirmed (Paid in Full).')">
-      <button class="btn" style="background:#1a7a4a;color:white;font-weight:700">
-        💵 Mark as Cash — Paid in Full
-      </button>
-    </form>
-    {% endif %}
-    {% if b.status in ('accepted', 'pending') %}
+  <!-- ── BOOKING ACTIONS ── -->
+  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-top:1.5rem">
 
-Commit and push when done.
-    <form method="POST" action="/admin/booking/{{ b.id }}/record-payment"
-          onsubmit="return confirm('Record this payment for booking #{{ b.id }}?')"
-          style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-      <span style="font-weight:600;font-size:.9rem;color:#374151">💳 Record Payment:</span>
-      <input type="number" name="amount" step="0.01" min="0.01" placeholder="Amount $"
-             required style="width:110px;padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem">
-      <select name="method" style="padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem">
-        <option value="stripe">Stripe</option>
-        <option value="cash">Cash</option>
-        <option value="check">Check</option>
-        <option value="other">Other</option>
-      </select>
-      <button type="submit" class="btn" style="background:#1a7a4a;color:white;font-weight:700;padding:.35rem .9rem">
-        Record
-      </button>
-    </form>
+    {% if b.status == 'pending' %}
+    <!-- Pending: Accept / Deny -->
+    <div style="padding:1rem 1.25rem;display:flex;gap:.75rem;flex-wrap:wrap;border-bottom:1px solid #e5e7eb">
+      <form id="accept-form" method="POST" action="/admin/booking/{{ b.id }}/accept" style="flex:1;min-width:180px">
+        <input type="hidden" name="custom_amount" id="accept-amount-input">
+        <button type="button" id="accept-btn"
+          style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:.65rem 1.1rem;font-size:.92rem;font-weight:700;cursor:pointer">
+          ✅ Accept — Send Invoice
+        </button>
+      </form>
+      <form method="POST" action="/admin/booking/{{ b.id }}/deny" style="flex:1;min-width:180px">
+        <button onclick="return confirm('Deny this booking? A rejection email will be sent to {{ b.email }}.')"
+          style="width:100%;background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;padding:.65rem 1.1rem;font-size:.92rem;font-weight:700;cursor:pointer">
+          ✕ Deny — Send Rejection
+        </button>
+      </form>
+    </div>
     {% endif %}
-    {% if b.status not in ('denied', 'cancelled') %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/no-charge"
-          onsubmit="return confirm('Mark booking #{{ b.id }} as No Charge? This will zero out all fees and confirm the booking.')">
-      <button class="btn" style="background:#475569;color:white;font-weight:700">
-        🚫 Not Charging
-      </button>
-    </form>
+
+    {% if b.status in ('accepted', 'pending') %}
+    <!-- Payment section -->
+    <div style="padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb">
+      <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem">💳 Record Payment</div>
+      <form method="POST" action="/admin/booking/{{ b.id }}/record-payment"
+            onsubmit="return confirm('Record this payment for booking #{{ b.id }}?')"
+            style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <input type="number" name="amount" step="0.01" min="0.01" placeholder="Amount $" required
+               style="width:120px;padding:.45rem .65rem;border:1px solid #d1d5db;border-radius:7px;font-size:.9rem">
+        <select name="method" style="padding:.45rem .65rem;border:1px solid #d1d5db;border-radius:7px;font-size:.9rem;background:#fff">
+          <option value="stripe">Stripe</option>
+          <option value="cash">Cash</option>
+          <option value="check">Check</option>
+          <option value="other">Other</option>
+        </select>
+        <button type="submit"
+          style="background:#2563eb;color:#fff;border:none;border-radius:7px;padding:.45rem 1.1rem;font-size:.9rem;font-weight:700;cursor:pointer">
+          Record
+        </button>
+      </form>
+
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.75rem">
+        {% if b.status not in ('denied','cancelled','concluded') %}
+        <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment"
+              onsubmit="return confirm('Mark as paid in full with cash?')">
+          <button style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:7px;padding:.42rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">
+            💵 Cash — Paid in Full
+          </button>
+        </form>
+        {% endif %}
+        {% if b.status not in ('denied','cancelled') %}
+        <form method="POST" action="/admin/booking/{{ b.id }}/no-charge"
+              onsubmit="return confirm('Mark as No Charge? All fees will be zeroed and the booking confirmed.')">
+          <button style="background:#f8fafc;color:#475569;border:1px solid #cbd5e1;border-radius:7px;padding:.42rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">
+            🚫 Not Charging
+          </button>
+        </form>
+        {% endif %}
+        {% if b.status == 'accepted' %}
+        <form method="POST" action="/admin/booking/{{ b.id }}/send-receipt"
+              onsubmit="return confirm('Send a receipt to {{ b.email }}?')">
+          <button style="background:#f8fafc;color:#374151;border:1px solid #d1d5db;border-radius:7px;padding:.42rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">
+            📄 Send Receipt
+          </button>
+        </form>
+        {% endif %}
+        {% if b.status == 'accepted' and b.payment_status in ('paid','partial') %}
+        <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
+          <input type="hidden" name="custom_amount" id="final-amount-input">
+          <button type="button" id="final-btn"
+            style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;border-radius:7px;padding:.42rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">
+            🔔 Send Final Reminder
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
     {% endif %}
-    {% if b.status == 'accepted' %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/send-receipt"
-          onsubmit="return confirm('Send a payment receipt to {{ b.email }}?')">
-      <button class="btn" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;font-weight:700">
-        📄 Send Receipt to Customer
-      </button>
-    </form>
-    {% endif %}
-    {% if b.delivery_status != 'picked_up' %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status">
-      {% if not b.delivery_status %}
-      <button class="btn" style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d"
-        onclick="return confirm('Mark this booking as DELIVERED?')">🚚 Mark as Delivered</button>
+
+    <!-- Delivery status -->
+    {% if b.status not in ('denied','cancelled') %}
+    <div style="padding:.85rem 1.25rem;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:.75rem">
+      <span style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0">🚚 Delivery</span>
+      {% if b.delivery_status == 'picked_up' %}
+        <span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:7px;padding:.35rem .85rem;font-size:.85rem;font-weight:600">✔ Picked Up</span>
       {% elif b.delivery_status == 'delivered' %}
-      <button class="btn" style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd"
-        onclick="return confirm('Mark this booking as PICKED UP?')">✅ Mark as Picked Up</button>
+        <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status">
+          <button onclick="return confirm('Mark as Picked Up?')"
+            style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd;border-radius:7px;padding:.35rem .85rem;font-size:.85rem;font-weight:600;cursor:pointer">
+            ✅ Mark as Picked Up
+          </button>
+        </form>
+      {% else %}
+        <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status">
+          <button onclick="return confirm('Mark as Delivered?')"
+            style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:7px;padding:.35rem .85rem;font-size:.85rem;font-weight:600;cursor:pointer">
+            🚚 Mark as Delivered
+          </button>
+        </form>
       {% endif %}
-    </form>
-    {% else %}
-    <span style="padding:.5rem 1rem;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:8px;font-weight:600">✔ Picked Up</span>
+    </div>
     {% endif %}
-    <form method="POST" action="/admin/booking/{{ b.id }}/delete" style="margin-left:auto">
-      <button class="btn" style="background:#1f2937;color:white" onclick="return confirm('Permanently DELETE booking #{{ b.id }}? This cannot be undone. Customer info will be kept.')">
-        Delete Booking
-      </button>
-    </form>
+
+    <!-- Bottom nav: Back / Cancel / Delete -->
+    <div style="padding:.85rem 1.25rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;background:#f9fafb">
+      <a href="/admin/dashboard"
+        style="background:#fff;color:#374151;border:1px solid #d1d5db;border-radius:7px;padding:.42rem 1rem;font-size:.86rem;font-weight:600;text-decoration:none">
+        ← Dashboard
+      </a>
+      {% if b.status not in ('denied','cancelled') %}
+      <form method="POST" action="/admin/booking/{{ b.id }}/cancel">
+        <button onclick="return confirm('Cancel booking #{{ b.id }}?')"
+          style="background:#fff;color:#b45309;border:1px solid #fcd34d;border-radius:7px;padding:.42rem 1rem;font-size:.86rem;font-weight:600;cursor:pointer">
+          Cancel Booking
+        </button>
+      </form>
+      {% endif %}
+      <form method="POST" action="/admin/booking/{{ b.id }}/delete" style="margin-left:auto">
+        <button onclick="return confirm('Permanently DELETE booking #{{ b.id }}? This cannot be undone.')"
+          style="background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:7px;padding:.42rem 1rem;font-size:.86rem;font-weight:600;cursor:pointer">
+          Delete
+        </button>
+      </form>
+    </div>
+
   </div>
 
   {% if b.final_payment_link %}
