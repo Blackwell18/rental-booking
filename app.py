@@ -1968,13 +1968,35 @@ FORM_HTML = r"""
       </div>
     </div>
     <div class="row">
-      <div class="field"><label>Setup / Delivery Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl"></div>
+      <div class="field"><label>Setup / Delivery Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl" onchange="checkDeliveryBeforeEvent()"></div>
       <div class="field"><label>Setup / Delivery Time <span class="required">*</span></label>
         <select name="setup_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
           {{ time_opts }}
         </select>
       </div>
     </div>
+
+    <!-- Early delivery acknowledgment — shown only when delivery date is before event date -->
+    <div id="early-delivery-notice" style="display:none;background:#fff7ed;border:2px solid #f97316;border-radius:10px;padding:1rem 1.15rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:flex-start;gap:.75rem">
+        <span style="font-size:1.5rem;line-height:1">📦</span>
+        <div style="flex:1">
+          <div style="font-weight:700;color:#c2410c;font-size:1rem;margin-bottom:.35rem">Your delivery is scheduled BEFORE your event date</div>
+          <div style="font-size:.9rem;color:#7c2d12;line-height:1.5;margin-bottom:.75rem">
+            Your event starts on <strong id="notice-event-date"></strong>, but you requested delivery on <strong id="notice-delivery-date"></strong>.
+          </div>
+          <label style="display:flex;align-items:flex-start;gap:.6rem;cursor:pointer;background:#ffedd5;border:1px solid #fb923c;border-radius:7px;padding:.65rem .85rem">
+            <input type="checkbox" id="early_delivery_ack" name="early_delivery_ack" value="1"
+              onchange="checkDeliveryAck()"
+              style="width:20px;height:20px;margin-top:.1rem;accent-color:#ea580c;flex-shrink:0;cursor:pointer">
+            <span style="font-size:.88rem;font-weight:600;color:#9a3412;line-height:1.45">
+              I understand that my rental items will be delivered on <strong id="notice-ack-date"></strong> — before my event — and I approve this early delivery.
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+
     <div class="field">
       <label>Venue Type <span class="required">*</span></label>
       <div class="type-toggle">
@@ -2449,7 +2471,30 @@ function updateTotals(){
 document.addEventListener('DOMContentLoaded', buildDropdowns);
 function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
 setVenue('venue');
-function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{ALL_PRODUCTS.forEach(p=>{if(data[p.id]!==undefined){p.max=data[p.id];}});updateTotals();}).catch(()=>{});}
+function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{ALL_PRODUCTS.forEach(p=>{if(data[p.id]!==undefined){p.max=data[p.id];}});updateTotals();}).catch(()=>{});checkDeliveryBeforeEvent();}
+function fmtDateNice(d){if(!d)return'';const p=d.split('-');if(p.length!==3)return d;const months=['January','February','March','April','May','June','July','August','September','October','November','December'];return months[parseInt(p[1],10)-1]+' '+parseInt(p[2],10)+', '+p[0];}
+function checkDeliveryBeforeEvent(){
+  const ed=document.getElementById('event_start_date').value;
+  const sd=document.getElementById('setupDateEl').value;
+  const notice=document.getElementById('early-delivery-notice');
+  const ack=document.getElementById('early_delivery_ack');
+  if(!notice)return;
+  if(sd&&ed&&sd<ed){
+    document.getElementById('notice-event-date').textContent=fmtDateNice(ed);
+    document.getElementById('notice-delivery-date').textContent=fmtDateNice(sd);
+    document.getElementById('notice-ack-date').textContent=fmtDateNice(sd);
+    // Calculate days before
+    const diff=Math.round((new Date(ed)-new Date(sd))/(1000*60*60*24));
+    document.getElementById('notice-days-before').textContent=diff===1?'1 day':diff+' days';
+    notice.style.display='';
+  } else {
+    notice.style.display='none';
+    if(ack)ack.checked=false;
+  }
+}
+function checkDeliveryAck(){
+  // no-op, submit handler checks state
+}
 let distTimer;
 let _calcDeliveryFee=0;
 function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';_calcDeliveryFee=d.fee;updateTotals();}).catch(()=>{});}},800);}
@@ -2540,6 +2585,12 @@ document.getElementById('bookingForm').addEventListener('submit', function(e) {
   const setupDateEl = document.getElementById('setupDateEl');
   const setupSameDay = setupDateEl && setupDateEl.value && sd && setupDateEl.value === sd;
   if (setupSameDay && sut && st && sut >= st) errors.push('Setup / delivery time must be before the event start time when delivery is on the same day.');
+  // Block if early delivery not acknowledged
+  const earlyNotice = document.getElementById('early-delivery-notice');
+  const earlyAck = document.getElementById('early_delivery_ack');
+  if (earlyNotice && earlyNotice.style.display !== 'none' && earlyAck && !earlyAck.checked) {
+    errors.push('Please check the box acknowledging your early delivery date before submitting.');
+  }
 
   if (errors.length) {
     e.preventDefault();
