@@ -3445,7 +3445,7 @@ ADMIN_DASH_HTML = """
                 <span style="font-size:.74rem;color:#16a34a;font-weight:600;padding:.25rem .5rem;background:#f0fdf4;border:1px solid #86efac;border-radius:6px">✔ Picked Up</span>
                 {% endif %}
                 <div class="more-wrap" style="position:relative;display:inline-block;margin-left:.2rem">
-                  <button type="button" onclick="toggleMore(event,'more-{{ b.id }}')"
+                  <button type="button" onclick="toggleMore(event,this,'more-{{ b.id }}')"
                     style="border:1px solid #d1d5db;border-radius:6px;padding:.25rem .55rem;font-size:.77rem;color:#374151;cursor:pointer;background:#fff;white-space:nowrap">
                     ⚙ More ▾
                   </button>
@@ -3482,24 +3482,29 @@ ADMIN_DASH_HTML = """
 <script>
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('show');}
-function toggleMore(e,id){
+function toggleMore(e,btn,id){
   e.stopPropagation();
+  e.preventDefault();
   var m=document.getElementById(id);
   var isOpen=m.style.display==='block';
   document.querySelectorAll('[id^="more-"]').forEach(function(el){el.style.display='none';});
   if(!isOpen){
-    var rect=e.currentTarget.getBoundingClientRect();
+    var rect=btn.getBoundingClientRect();
     var menuW=160;
     var left=Math.min(rect.right-menuW, window.innerWidth-menuW-8);
     left=Math.max(8,left);
     var top=rect.bottom+4;
-    if(top+150>window.innerHeight) top=rect.top-154;
+    if(top+160>window.innerHeight) top=rect.top-164;
     m.style.top=top+'px';
     m.style.left=left+'px';
     m.style.display='block';
   }
 }
-document.addEventListener('click',function(){document.querySelectorAll('[id^="more-"]').forEach(function(el){el.style.display='none';});});
+document.addEventListener('mousedown',function(e){
+  if(!e.target.closest('[id^="more-"]')&&!e.target.closest('.more-wrap')){
+    document.querySelectorAll('[id^="more-"]').forEach(function(el){el.style.display='none';});
+  }
+});
 document.addEventListener('scroll',function(){document.querySelectorAll('[id^="more-"]').forEach(function(el){el.style.display='none';});},true);
 function getChecked(){return Array.from(document.querySelectorAll('.row-cb:checked')).map(c=>c.value);}
 function updateBulkBar(){var ids=getChecked();var bar=document.getElementById('bulkBar');if(ids.length>0){bar.style.display='flex';document.getElementById('bulkCount').textContent=ids.length+' selected';}else{bar.style.display='none';}var all=document.querySelectorAll('.row-cb');document.getElementById('selectAll').indeterminate=ids.length>0&&ids.length<all.length;document.getElementById('selectAll').checked=ids.length===all.length&&all.length>0;}
@@ -12699,3 +12704,4 @@ def cron_daily_backup():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host="0.0.0.0", port=port)
+    
