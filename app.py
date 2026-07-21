@@ -258,6 +258,7 @@ def init_db():
             )""",
             # New status/payment system
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30) DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS route_override BOOLEAN DEFAULT FALSE",
             # Migrate: confirmed → accepted + paid
             "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='confirmed'",
@@ -429,8 +430,10 @@ def get_available(start_date_str, end_date_str, exclude_id=None):
         # Window = setup_date (est. delivery) → event_end_date (est. pickup).
         query = """
             SELECT items_json FROM bookings
-            WHERE status = 'accepted'
-              AND payment_status IN ('partial','paid')
+            WHERE (
+              (status = 'accepted' AND payment_status IN ('partial','paid'))
+              OR status = 'agree_to_pay'
+            )
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND setup_date     IS NOT NULL
               AND event_end_date IS NOT NULL
@@ -599,8 +602,10 @@ def get_booking_inventory_check(booking_id):
         cur.execute("""
             SELECT id, full_name, items_json, setup_date, event_end_date
             FROM bookings
-            WHERE status = 'accepted'
-              AND payment_status IN ('partial','paid')
+            WHERE (
+              (status = 'accepted' AND payment_status IN ('partial','paid'))
+              OR status = 'agree_to_pay'
+            )
               AND (delivery_status IS NULL OR delivery_status != 'picked_up')
               AND id != %s
               AND setup_date     IS NOT NULL
@@ -3126,6 +3131,7 @@ ADMIN_DASH_HTML = """
     .client-email{font-size:.74rem;color:#9ca3af;margin-top:.05rem}
     .badge{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:20px;font-size:.73rem;font-weight:600;white-space:nowrap}
     .badge-pending{background:#fef9c3;color:#854d0e}
+    .badge-agree_to_pay{background:#d1fae5;color:#065f46}
     .badge-accepted{background:#dbeafe;color:#1e40af}
     .badge-confirmed{background:#dbeafe;color:#1e40af}
     .badge-partial{background:#dbeafe;color:#1e40af}
@@ -3374,7 +3380,7 @@ ADMIN_DASH_HTML = """
           {% for b in bookings %}
           {% set _bc = conflict_map.get(b.id, []) %}
           <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '')|lower }} {{ (b.email or '')|lower }} {{ (b.phone or '')|lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '')|lower }}"
-            class="{% if _bc %}row-conflict{% elif b.status == 'pending' %}row-pending{% elif b.delivery_status == 'picked_up' %}row-picked-up{% elif b.delivery_status == 'delivered' %}row-delivered{% elif b.status == 'accepted' %}row-accepted{% elif b.status == 'denied' %}row-denied{% elif b.status == 'cancelled' %}row-cancelled{% endif %}"
+            class="{% if _bc %}row-conflict{% elif b.status == 'pending' %}row-pending{% elif b.status == 'agree_to_pay' %}row-accepted{% elif b.delivery_status == 'picked_up' %}row-picked-up{% elif b.delivery_status == 'delivered' %}row-delivered{% elif b.status == 'accepted' %}row-accepted{% elif b.status == 'denied' %}row-denied{% elif b.status == 'cancelled' %}row-cancelled{% endif %}"
             {% if _bc %}style="background:#fff5f5;border-left:4px solid #e53e3e;"{% endif %}>
             <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
             <td style="font-weight:700;color:#2563eb;font-size:.83rem"><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;text-decoration:none">#{{ b.id }}</a></td>
@@ -3400,6 +3406,8 @@ ADMIN_DASH_HTML = """
             <td>
               {% if b.status == 'accepted' %}
                 <span class="badge badge-accepted">Accepted</span>
+              {% elif b.status == 'agree_to_pay' %}
+                <span class="badge badge-agree_to_pay">Agree to Pay</span>
               {% elif b.status == 'pending' %}
                 <span class="badge badge-pending">Pending</span>
               {% elif b.status == 'denied' %}
@@ -3426,7 +3434,7 @@ ADMIN_DASH_HTML = """
             <td>
               <div class="action-btns">
                 <a href="/admin/booking/{{ b.id }}" class="btn btn-view">View</a>
-                {% if b.status == 'pending' %}
+                {% if b.status in ('pending', 'agree_to_pay') %}
                 <form method="POST" action="/admin/booking/{{ b.id }}/accept" style="display:inline"><button class="btn btn-accept" onclick="return confirm('Accept #{{ b.id }}? This emails {{ b.email }} their invoice + Stripe payment link.')">Accept</button></form>
                 <form method="POST" action="/admin/booking/{{ b.id }}/deny" style="display:inline"><button class="btn btn-deny" onclick="return confirm('Deny booking #{{ b.id }}?')">Deny</button></form>
                 {% endif %}
@@ -3750,7 +3758,8 @@ ADMIN_BOOKING_EDIT_HTML = """
     <div class="field-grid">
       <div><label>Status</label>
         <select name="status">
-          <option value="pending"   {% if b.status=='pending'   %}selected{% endif %}>Pending</option>
+          <option value="pending"       {% if b.status=='pending'       %}selected{% endif %}>Pending</option>
+          <option value="agree_to_pay" {% if b.status=='agree_to_pay' %}selected{% endif %}>Agree to Pay (Cash/Check at Delivery)</option>
           <option value="accepted"  {% if b.status=='accepted'  %}selected{% endif %}>Accepted (Awaiting Payment)</option>
           <option value="concluded" {% if b.status=='concluded' %}selected{% endif %}>Concluded</option>
           <option value="partial"   {% if b.status=='partial'   %}selected{% endif %}>Confirmed (Partial Payment)</option>
@@ -4717,13 +4726,30 @@ ADMIN_BOOKING_HTML = """
       <div style="font-size:.75rem;color:#9ca3af;margin-top:.1rem">{{ b.created_at|string|truncate(19,True,'') }}</div>
     </div>
     <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
-      <span class="badge badge-{{ b.status }}" style="margin:0">{{ b.status|upper }}</span>
+      <span class="badge badge-{{ b.status }}" style="margin:0">{% if b.status == "agree_to_pay" %}AGREE TO PAY{% else %}{{ b.status|upper }}{% endif %}</span>
       {% if b.delivery_status == 'delivered' %}
       <span style="background:#fffbeb;color:#92400e;border:1.5px solid #fcd34d;border-radius:20px;padding:.2rem .75rem;font-size:.75rem;font-weight:700">🚚 DELIVERED</span>
       {% elif b.delivery_status == 'picked_up' %}
       <span style="background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:20px;padding:.2rem .75rem;font-size:.75rem;font-weight:700">✅ PICKED UP</span>
       {% endif %}
     </div>
+    {% if b.status == 'agree_to_pay' %}
+    <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <span style="background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7;border-radius:20px;padding:.25rem .9rem;font-size:.8rem;font-weight:700">💵 Agree to Pay at Delivery</span>
+      <form method="POST" action="/admin/booking/{{ b.id }}/accept">
+        <button type="submit"
+          style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:.45rem 1rem;font-size:.84rem;font-weight:700;cursor:pointer;white-space:nowrap">
+          ✅ Convert to Stripe
+        </button>
+      </form>
+      <form method="POST" action="/admin/booking/{{ b.id }}/deny">
+        <button onclick="return confirm('Deny this booking?')"
+          style="background:#fff;color:#dc2626;border:1.5px solid #dc2626;border-radius:8px;padding:.45rem .85rem;font-size:.84rem;font-weight:700;cursor:pointer;white-space:nowrap">
+          ✕ Deny
+        </button>
+      </form>
+    </div>
+    {% endif %}
     {% if b.status == 'pending' %}
     <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
       <form id="accept-form" method="POST" action="/admin/booking/{{ b.id }}/accept">
@@ -5441,6 +5467,38 @@ ADMIN_BOOKING_HTML = """
 <!-- ══ RIGHT COLUMN ══ -->
 <div style="display:flex;flex-direction:column;gap:1rem;position:sticky;top:1rem">
 
+  <!-- ── Agree to Pay card (pending only) ── -->
+  {% if b.status == 'pending' %}
+  <div class="card" style="border:1.5px solid #6ee7b7;background:#f0fdf4;padding:1rem 1.1rem">
+    <div style="font-size:.72rem;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.65rem">💵 Cash / Check at Delivery</div>
+    <p style="font-size:.84rem;color:#374151;margin:0 0 .75rem">Customer will pay in full with cash or check at delivery. Inventory reserved immediately — no Stripe link needed.</p>
+    <form method="POST" action="/admin/booking/{{ b.id }}/agree-to-pay">
+      <div style="display:flex;gap:.5rem;margin-bottom:.6rem">
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.88rem;font-weight:600;cursor:pointer;flex:1;background:#fff;border:1.5px solid #6ee7b7;border-radius:7px;padding:.45rem .7rem">
+          <input type="radio" name="pay_method" value="cash" checked> 💵 Cash
+        </label>
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.88rem;font-weight:600;cursor:pointer;flex:1;background:#fff;border:1.5px solid #6ee7b7;border-radius:7px;padding:.45rem .7rem">
+          <input type="radio" name="pay_method" value="check"> 📝 Check
+        </label>
+      </div>
+      <button type="submit"
+        onclick="return confirm('Mark booking as Agree to Pay at delivery? Inventory will be reserved now.')"
+        style="width:100%;background:#059669;color:#fff;border:none;border-radius:7px;padding:.55rem .9rem;font-size:.88rem;font-weight:700;cursor:pointer">
+        ✅ Confirm — Agree to Pay at Delivery
+      </button>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- ── agree_to_pay summary banner ── -->
+  {% if b.status == 'agree_to_pay' %}
+  <div class="card" style="border:1.5px solid #6ee7b7;background:#f0fdf4;padding:.85rem 1.1rem">
+    <div style="font-weight:700;color:#065f46;font-size:.95rem;margin-bottom:.3rem">💵 Agreed to Pay at Delivery</div>
+    <div style="font-size:.84rem;color:#374151">Payment method: <strong>{{ (b.payment_method or 'cash/check')|title }}</strong></div>
+    <div style="margin-top:.5rem;font-size:.82rem;color:#065f46;font-weight:600">✅ Inventory reserved · Treated as paid in full</div>
+  </div>
+  {% endif %}
+
   <!-- ── Payment Summary ── -->
   <div class="card" style="border:none;overflow:hidden">
     {% set paid = (b.amount_paid or 0)|float %}
@@ -5573,7 +5631,7 @@ ADMIN_BOOKING_HTML = """
   <!-- ── Actions card ── -->
   <div class="card" style="border:none;padding:1.1rem 1.25rem">
 
-    {% if b.status in ('accepted', 'pending') %}
+    {% if b.status in ('accepted', 'pending', 'agree_to_pay') %}
     <!-- Record Payment -->
     <div style="margin-bottom:1rem">
       <div style="font-size:.7rem;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#E6F1FB;border-radius:6px">💳 Record Payment</div>
@@ -7145,7 +7203,7 @@ def admin_dashboard():
         try:
             cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur.execute("SELECT COUNT(*) FROM bookings"); stats["total"] = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM bookings WHERE status='pending'"); stats["pending"] = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM bookings WHERE status IN ('pending','agree_to_pay')"); stats["pending"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='accepted'"); stats["accepted"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='accepted' AND payment_status='paid'"); stats["confirmed"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM bookings WHERE status='accepted' AND payment_status='partial'"); stats["partial"] = cur.fetchone()[0]
@@ -7757,6 +7815,28 @@ def accept_booking(booking_id):
         _trace = _tb.format_exc()
         log.error(f"ACCEPT BOOKING #{booking_id} UNHANDLED ERROR: {_top_err}\n{_trace}")
         return f"<pre style='color:red;padding:2rem'>Accept booking error — please report this:\n\n{_trace}</pre>", 500
+
+
+@app.route("/admin/booking/<int:booking_id>/agree-to-pay", methods=["POST"])
+@admin_required
+def agree_to_pay_booking(booking_id):
+    """Mark booking as Agree to Pay (cash/check at delivery). Reserves inventory immediately."""
+    pay_method = request.form.get("pay_method", "cash")
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE bookings SET status='agree_to_pay', payment_method=%s WHERE id=%s",
+                (pay_method, booking_id)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            log.info(f"Booking #{booking_id} set to agree_to_pay ({pay_method})")
+        except Exception as e:
+            log.error(f"agree_to_pay error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
 @app.route("/admin/booking/<int:booking_id>/deny", methods=["POST"])
@@ -11438,6 +11518,7 @@ ADMIN_CUSTOMER_EDIT_HTML = """
     .bookings-mini tr:last-child td{border-bottom:none}
     .badge{display:inline-flex;padding:.2rem .55rem;border-radius:20px;font-size:.72rem;font-weight:600}
     .badge-pending{background:#fef9c3;color:#854d0e}
+    .badge-agree_to_pay{background:#d1fae5;color:#065f46}
     .badge-accepted{background:#dbeafe;color:#1e40af}
     .badge-confirmed{background:#dbeafe;color:#1e40af}
     .badge-partial{background:#dbeafe;color:#1e40af}
@@ -12704,4 +12785,3 @@ def cron_daily_backup():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host="0.0.0.0", port=port)
-    
