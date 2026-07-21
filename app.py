@@ -4471,31 +4471,47 @@ ADMIN_BOOKING_HTML = """
     {% endif %}
 
     <!-- READ-ONLY VIEW -->
-    <div id="evt-view" class="row">
-      <span class="k">Event Start</span>
-      <span class="v">
-        {% if b.event_start_date %}{{ b.event_start_date.strftime('%m/%d/%Y') if b.event_start_date else '—' }}{% if b.event_start_time %} &nbsp;{{ b.event_start_time }}{% endif %}{% else %}—{% endif %}
-      </span>
-      <span class="k">Event End</span>
-      <span class="v">
-        {% if b.event_end_date %}{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }}{% if b.event_end_time %} &nbsp;{{ b.event_end_time }}{% endif %}{% else %}—{% endif %}
-      </span>
-      <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
-      <span class="k">Est. Delivery</span>
-      <span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }}{% if b.setup_time %} &nbsp;{{ b.setup_time }}{% endif %}</span>
-      <span class="k">Est. Pickup</span>
-      <span class="v">{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }}{% if b.event_end_time %} &nbsp;{{ b.event_end_time }}{% endif %}</span>
-      <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
-      {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
-      <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
-      <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
+    <div id="evt-view">
+
+      <!-- Customer's event info — never changed by weekend schedule -->
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:.85rem 1rem;margin-bottom:.85rem">
+        <div style="font-size:.7rem;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🗓 Customer Event Info</div>
+        <div class="row" style="margin:0">
+          <span class="k">Event Start</span>
+          <span class="v">
+            {% if b.event_start_date %}{{ b.event_start_date.strftime('%m/%d/%Y') }}{% if b.event_start_time %} &nbsp;{{ b.event_start_time }}{% endif %}{% else %}—{% endif %}
+          </span>
+          <span class="k">Event End</span>
+          <span class="v">
+            {% if b.event_end_date %}{{ b.event_end_date.strftime('%m/%d/%Y') }}{% if b.event_end_time %} &nbsp;{{ b.event_end_time }}{% endif %}{% else %}—{% endif %}
+          </span>
+          <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
+          <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
+          <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
+          {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
+        </div>
+      </div>
+
+      <!-- Delivery schedule — updated by weekend schedule -->
+      <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:.85rem 1rem">
+        <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🚚 Delivery Schedule</div>
+        <div class="row" style="margin:0">
+          <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
+          <span class="k">Est. Delivery</span>
+          <span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }}{% if b.setup_time %} &nbsp;{{ b.setup_time }}{% endif %}</span>
+          <span class="k">Est. Pickup</span>
+          <span class="v">{{ b.event_end_date.strftime('%m/%d/%Y') if b.event_end_date else '—' }}{% if b.event_end_time %} &nbsp;{{ b.event_end_time }}{% endif %}</span>
+        </div>
+      </div>
+
     </div>
 
     <!-- EDIT VIEW (hidden by default) -->
     <div id="evt-edit-view" style="display:none">
-      <div class="row">
-        <span class="k">Event Dates</span>
-        <span class="v">
+
+      <!-- Customer Event Info — edit section -->
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:.85rem 1rem;margin-bottom:.85rem">
+        <div style="font-size:.7rem;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🗓 Customer Event Info</div>
         <form method="POST" action="/admin/booking/{{ b.id }}/update-event-dates" style="margin:0">
           {%- set tsel -%}
           <option value="">-- Select --</option>
@@ -4541,31 +4557,39 @@ ADMIN_BOOKING_HTML = """
           {%- endset -%}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem .75rem;margin-bottom:.6rem">
             <div>
-              <div style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Event Start</div>
+              <div style="font-size:.72rem;font-weight:600;color:#0369a1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Event Start</div>
               <div style="display:flex;gap:.35rem">
                 <input type="date" name="event_start_date" value="{{ b.event_start_date.strftime('%Y-%m-%d') if b.event_start_date else '' }}"
-                  style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;min-width:0">
-                <select name="event_start_time" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .35rem;font-size:.82rem;color:#111827;width:105px;background:#fff">
+                  style="flex:1;border:1px solid #bae6fd;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;min-width:0">
+                <select name="event_start_time" style="border:1px solid #bae6fd;border-radius:6px;padding:.3rem .35rem;font-size:.82rem;color:#111827;width:105px;background:#fff">
                   {{ tsel }}
                 </select>
               </div>
             </div>
             <div>
-              <div style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Event End</div>
+              <div style="font-size:.72rem;font-weight:600;color:#0369a1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Event End</div>
               <div style="display:flex;gap:.35rem">
                 <input type="date" name="event_end_date" value="{{ b.event_end_date.strftime('%Y-%m-%d') if b.event_end_date else '' }}"
-                  style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;min-width:0">
-                <select name="event_end_time" style="border:1px solid #d1d5db;border-radius:6px;padding:.3rem .35rem;font-size:.82rem;color:#111827;width:105px;background:#fff">
+                  style="flex:1;border:1px solid #bae6fd;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;color:#111827;min-width:0">
+                <select name="event_end_time" style="border:1px solid #bae6fd;border-radius:6px;padding:.3rem .35rem;font-size:.82rem;color:#111827;width:105px;background:#fff">
                   {{ tsel2 }}
                 </select>
               </div>
             </div>
           </div>
-          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
+          <button type="submit" style="background:#0369a1;color:white;border:none;border-radius:6px;padding:.35rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">Save Event Dates</button>
         </form>
-        </span>
-        <span class="k">Delivery</span>
-        <span class="v">
+        <div class="row" style="margin:.65rem 0 0">
+          <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
+          <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
+          <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
+          {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
+        </div>
+      </div>
+
+      <!-- Delivery Schedule — edit section -->
+      <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:.85rem 1rem;margin-bottom:.75rem">
+        <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">🚚 Delivery Schedule</div>
         <form method="POST" action="/admin/booking/{{ b.id }}/update-times" style="margin:0">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem .75rem;margin-bottom:.6rem">
             <div>
@@ -4587,15 +4611,11 @@ ADMIN_BOOKING_HTML = """
               </div>
             </div>
           </div>
-          <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">Save</button>
+          <button type="submit" style="background:#374151;color:white;border:none;border-radius:6px;padding:.35rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer">Save Schedule</button>
         </form>
-        </span>
-        <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
-        {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
-        <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
-        <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
       </div>
-      <div style="margin-top:.75rem">
+
+      <div>
         <button onclick="evtEditToggle(false)" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer">
           Cancel
         </button>
