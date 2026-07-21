@@ -4362,56 +4362,23 @@ ADMIN_BOOKING_HTML = """
 
   {% if matched_customer %}
   {% set mc = matched_customer %}
-  <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem">
-    <div style="font-weight:700;color:#1e40af;margin-bottom:.4rem">🔗 Existing Customer Profile Found</div>
-    <div style="font-size:.88rem;color:#1e3a8a;margin-bottom:.75rem">
-      A customer profile matches this booking's name: <strong>{{ mc.full_name }}</strong><br>
-      Profile email: {{ mc.email or '—' }} &nbsp;|&nbsp; Profile phone: {{ mc.phone or '—' }}
-      {% if mc.street or mc.city %}
-      <br>Profile address: {{ mc.street or '' }}{% if mc.street2 %} {{ mc.street2 }}{% endif %}{% if mc.city %}, {{ mc.city }}{% endif %}{% if mc.state %} {{ mc.state }}{% endif %}{% if mc.zip %} {{ mc.zip }}{% endif %}
-      {% else %}
-      <br><span style="color:#ef4444;font-size:.82rem">⚠ No address saved in profile yet — go to View Profile to add one.</span>
-      {% endif %}
+  <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:.85rem 1.1rem;margin-bottom:1rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <div style="font-weight:700;color:#92400e;font-size:.88rem;margin-bottom:.15rem">⚠️ Existing account found for <strong>{{ mc.full_name }}</strong></div>
+      <div style="font-size:.82rem;color:#78350f">{{ mc.email or '—' }} &nbsp;·&nbsp; {{ mc.phone or '—' }}</div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:.5rem">
-      <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
-        <input type="hidden" name="action" value="update_profile">
-        <button style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer"
-                title="Push this booking's phone, email and address into the customer profile">
-          ↑ Update Profile with Booking Info
-        </button>
-      </form>
-      <form id="fill-from-profile-form" method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
-        <input type="hidden" name="action" value="update_booking">
-        <button type="button"
-                style="background:#16a34a;color:white;border:none;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:700;cursor:pointer"
-                onclick="fillBookingFromProfile()"
-                title="Copy address, phone and email from the customer profile into this booking">
-          ↓ Copy Profile Info to Booking
-        </button>
-      </form>
-      <script>
-      var _mc_street = {{ mc.street | tojson if mc.street else '""'}};
-      var _mc_city   = {{ mc.city   | tojson if mc.city   else '""'}};
-      var _mc_state  = {{ mc.state  | tojson if mc.state  else '""'}};
-      var _mc_zip    = {{ mc.zip    | tojson if mc.zip    else '""'}};
-      function fillBookingFromProfile() {
-        var s = document.getElementById("bk_renter_street");
-        var c = document.getElementById("bk_renter_city");
-        var st= document.getElementById("bk_renter_state");
-        var z = document.getElementById("bk_renter_zip");
-        if (s && _mc_street) s.value = _mc_street;
-        if (c && _mc_city)   c.value = _mc_city;
-        if (st&& _mc_state)  st.value= _mc_state;
-        if (z && _mc_zip)    z.value = _mc_zip;
-        // Also save to DB
-        document.getElementById("fill-from-profile-form").submit();
-      }
-      </script>
-      <a href="/admin/customers/{{ mc.id }}" style="background:white;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.35rem .85rem;font-size:.82rem;font-weight:600;text-decoration:none">
-        View Profile →
-      </a>
-    </div>
+    <form method="POST" action="/admin/booking/{{ b.id }}/sync-customer-profile">
+      <input type="hidden" name="action" value="link">
+      <button type="submit"
+        style="background:#d97706;color:white;border:none;border-radius:7px;padding:.45rem 1rem;font-size:.84rem;font-weight:700;cursor:pointer;white-space:nowrap"
+        onclick="return confirm('Link this booking to {{ mc.full_name }}'s existing account?')">
+        🔗 Link to Existing Account
+      </button>
+    </form>
+    <a href="/admin/customers/{{ mc.id }}"
+      style="font-size:.82rem;color:#92400e;text-decoration:underline;white-space:nowrap">
+      View account →
+    </a>
   </div>
   {% endif %}
 
@@ -7575,6 +7542,25 @@ def sync_customer_profile(booking_id):
                     booking_id))
                 conn.commit(); cur2.close()
                 log.info(f"Booking #{booking_id} updated from customer profile {mc['id']}")
+            elif action == "link":
+                # Link booking to existing customer: copy profile info into booking
+                cur2 = conn.cursor()
+                cur2.execute("""
+                    UPDATE bookings SET
+                      email         = COALESCE(NULLIF(%s,''), email),
+                      phone         = COALESCE(NULLIF(%s,''), phone),
+                      renter_street = COALESCE(NULLIF(%s,''), renter_street),
+                      renter_city   = COALESCE(NULLIF(%s,''), renter_city),
+                      renter_state  = COALESCE(NULLIF(%s,''), renter_state),
+                      renter_zip    = COALESCE(NULLIF(%s,''), renter_zip)
+                    WHERE id=%s
+                """, (
+                    mc.get("email") or "", mc.get("phone") or "",
+                    mc.get("street") or "", mc.get("city") or "",
+                    mc.get("state") or "", mc.get("zip") or "",
+                    booking_id))
+                conn.commit(); cur2.close()
+                log.info(f"Booking #{booking_id} linked to customer profile {mc['id']}")
         cur.close(); conn.close()
     except Exception as e:
         log.error(f"Sync customer profile error: {e}")
