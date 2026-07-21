@@ -2890,29 +2890,43 @@ ADMIN_DASH_HTML = """
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:#f0f2f5;color:#111827;min-height:100vh;display:flex}
-    .sidebar{width:200px;min-height:100vh;background:white;border-right:1px solid #e5e7eb;display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;transition:transform .2s}
-    .sb-brand{padding:1.1rem 1rem .9rem;display:flex;align-items:center;gap:.55rem;border-bottom:1px solid #f3f4f6}
+    .sidebar{width:200px;min-height:100vh;background:#1e1e2e;border-right:none;display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;transition:transform .2s}
+    .sb-brand{padding:1.1rem 1rem .9rem;display:flex;align-items:center;gap:.55rem;border-bottom:1px solid rgba(255,255,255,.08)}
     .sb-brand img{height:1.8rem;width:auto;object-fit:contain}
-    .sb-brand-name{font-size:.82rem;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+    .sb-brand-name{font-size:.82rem;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
     .sb-new-btn{display:block;margin:.85rem .85rem .5rem;padding:.55rem .75rem;background:#16a34a;color:white;border-radius:8px;font-size:.84rem;font-weight:700;text-decoration:none;text-align:center;transition:background .15s}
     .sb-new-btn:hover{background:#15803d}
     .sb-nav{display:flex;flex-direction:column;padding:.25rem 0;flex:1}
-    .sb-link{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.84rem;font-weight:500;color:#4b5563;text-decoration:none;transition:all .1s;border-left:3px solid transparent}
-    .sb-link:hover{background:#f9fafb;color:#111827}
-    .sb-link.active{background:#eff6ff;color:#2563eb;font-weight:600;border-left-color:#2563eb}
+    .sb-link{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.84rem;font-weight:500;color:rgba(255,255,255,.55);text-decoration:none;transition:all .1s;border-left:3px solid transparent}
+    .sb-link:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.9)}
+    .sb-link.active{background:rgba(99,102,241,.25);color:#a5b4fc;font-weight:600;border-left-color:#6366f1}
     .sb-icon{width:1.1rem;text-align:center;font-size:.95rem}
-    .sb-divider{height:1px;background:#f3f4f6;margin:.4rem 0}
-    .sb-bottom{border-top:1px solid #f3f4f6;padding:.5rem 0}
+    .sb-divider{height:1px;background:rgba(255,255,255,.07);margin:.4rem 0}
+    .sb-bottom{border-top:1px solid rgba(255,255,255,.08);padding:.5rem 0}
     .page-content{margin-left:200px;flex:1;min-height:100vh;display:flex;flex-direction:column}
     .page-header{background:white;border-bottom:1px solid #e5e7eb;padding:.85rem 1.5rem;display:flex;align-items:center;gap:1rem;position:sticky;top:0;z-index:50}
     .page-header h1{font-size:1.3rem;font-weight:700;color:#111827;flex:1}
     .mobile-menu-btn{display:none;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#374151;padding:.25rem;line-height:1}
     .page-body{padding:1.5rem;flex:1}
+    .stat-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:.85rem;margin-bottom:1.25rem}
+    .stat-card{border-radius:12px;padding:.9rem 1.1rem;color:#fff}
+    .stat-card-label{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;opacity:.75;margin-bottom:.25rem}
+    .stat-card-value{font-size:1.65rem;font-weight:700;line-height:1}
+    .stat-card-sub{font-size:.7rem;opacity:.6;margin-top:.25rem}
+    @media(max-width:768px){.stat-cards{grid-template-columns:repeat(2,1fr)}}
     .day-panels{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem}
-    .day-panel{background:white;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
-    .panel-hdr{display:flex;justify-content:space-between;align-items:center;padding:.85rem 1.1rem .65rem;border-bottom:1px solid #f3f4f6}
-    .panel-hdr-title{font-size:.95rem;font-weight:700;color:#111827}
-    .panel-hdr-date{background:white;border:1px solid #d1d5db;color:#374151;padding:.25rem .65rem;border-radius:6px;font-size:.78rem;font-weight:500}
+    .day-panel{background:white;border-radius:12px;overflow:hidden}
+    .day-panel-delivery{border:1.5px solid #5DCAA5}
+    .day-panel-pickup{border:1.5px solid #AFA9EC}
+    .panel-hdr{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1.1rem .6rem;border-bottom:1px solid #f3f4f6}
+    .panel-hdr-delivery{background:#E1F5EE;border-bottom-color:#9FE1CB}
+    .panel-hdr-pickup{background:#EEEDFE;border-bottom-color:#CECBF6}
+    .panel-hdr-title{font-size:.9rem;font-weight:700;color:#111827}
+    .panel-hdr-title-delivery{color:#085041}
+    .panel-hdr-title-pickup{color:#26215C}
+    .panel-hdr-date{color:#fff;padding:.2rem .6rem;border-radius:20px;font-size:.72rem;font-weight:700;border:none}
+    .panel-hdr-date-delivery{background:#085041}
+    .panel-hdr-date-pickup{background:#3C3489}
     .booking-row{display:flex;align-items:center;gap:.75rem;padding:.75rem 1.1rem;border-bottom:1px solid #f9fafb;text-decoration:none;color:inherit;transition:background .1s}
     .booking-row:hover{background:#fafafa}
     .bk-time{font-size:.78rem;font-weight:600;color:#374151;width:3.5rem;flex-shrink:0}
@@ -2926,6 +2940,8 @@ ADMIN_DASH_HTML = """
     .panel-footer{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1.1rem;border-top:1px solid #f3f4f6}
     .panel-footer a{font-size:.78rem;color:#2563eb;text-decoration:none;font-weight:500}
     .panel-footer a:hover{text-decoration:underline}
+    .panel-footer-delivery a{color:#0F6E56}
+    .panel-footer-pickup a{color:#534AB7}
     .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem}
     .section-title-lg{font-size:1.05rem;font-weight:700;color:#111827}
     .search-wrap{position:relative}
@@ -2976,9 +2992,15 @@ ADMIN_DASH_HTML = """
     .btn-confirm:hover{background:#dbeafe}
     .btn-cancel{background:#f9fafb;color:#6b7280;border-color:#d1d5db}
     .empty-state{padding:3rem;text-align:center;color:#9ca3af;font-size:.95rem}
+    .row-pending{border-left:4px solid #8b5cf6 !important}
+    .row-accepted{border-left:4px solid #0ea5e9 !important}
+    .row-delivered{border-left:4px solid #f97316 !important}
+    .row-picked-up{border-left:4px solid #16a34a !important}
+    .row-denied{border-left:4px solid #ef4444 !important}
+    .row-cancelled{border-left:4px solid #9ca3af !important}
     @media(max-width:768px){
       .sidebar{transform:translateX(-100%)}
-      .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+      .sidebar.open{transform:translateX(0);box-shadow:6px 0 30px rgba(0,0,0,.4)}
       .page-content{margin-left:0}
       .mobile-menu-btn{display:block}
       .day-panels{grid-template-columns:1fr}
@@ -3039,11 +3061,35 @@ ADMIN_DASH_HTML = """
     </div>
     {% endif %}
 
+    <!-- Stat cards -->
+    <div class="stat-cards">
+      <a href="/admin/dashboard?tab=all&status=pending" class="stat-card" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);text-decoration:none">
+        <div class="stat-card-label">Pending</div>
+        <div class="stat-card-value">{{ stats.pending }}</div>
+        <div class="stat-card-sub">need review</div>
+      </a>
+      <a href="/admin/dashboard?tab=upcoming" class="stat-card" style="background:linear-gradient(135deg,#0ea5e9,#06b6d4);text-decoration:none">
+        <div class="stat-card-label">Upcoming</div>
+        <div class="stat-card-value">{{ stats.upcoming }}</div>
+        <div class="stat-card-sub">within 8 days</div>
+      </a>
+      <a href="/admin/dashboard?tab=delivered" class="stat-card" style="background:linear-gradient(135deg,#f97316,#ef4444);text-decoration:none">
+        <div class="stat-card-label">Still Out</div>
+        <div class="stat-card-value">{{ stats.delivered }}</div>
+        <div class="stat-card-sub">awaiting pickup</div>
+      </a>
+      <div class="stat-card" style="background:linear-gradient(135deg,#16a34a,#059669)">
+        <div class="stat-card-label">Revenue</div>
+        <div class="stat-card-value">${{ "{:,.0f}".format(stats.revenue) }}</div>
+        <div class="stat-card-sub">paid bookings</div>
+      </div>
+    </div>
+
     <div class="day-panels">
-      <div class="day-panel">
-        <div class="panel-hdr">
-          <a href="/admin/dashboard?tab=going_out" class="panel-hdr-title" style="color:inherit;text-decoration:none">🚚 Deliveries Today</a>
-          <span class="panel-hdr-date">{{ today_label }}</span>
+      <div class="day-panel day-panel-delivery">
+        <div class="panel-hdr panel-hdr-delivery">
+          <a href="/admin/dashboard?tab=going_out" class="panel-hdr-title panel-hdr-title-delivery" style="text-decoration:none">🚚 Deliveries Today</a>
+          <span class="panel-hdr-date panel-hdr-date-delivery">{{ today_label }}</span>
         </div>
         {% if going_out %}
         {% for b in going_out %}
@@ -3061,16 +3107,16 @@ ADMIN_DASH_HTML = """
         {% else %}
         <div class="panel-empty">No deliveries scheduled today</div>
         {% endif %}
-        <div class="panel-footer">
+        <div class="panel-footer panel-footer-delivery">
           <a href="/admin/dashboard?past=1">View late ({{ stats.past }})</a>
           <a href="/admin/dashboard">View all</a>
         </div>
       </div>
 
-      <div class="day-panel">
-        <div class="panel-hdr">
-          <a href="/admin/dashboard?tab=coming_back" class="panel-hdr-title" style="color:inherit;text-decoration:none">🔄 Pickups Today</a>
-          <span class="panel-hdr-date">{{ today_label }}</span>
+      <div class="day-panel day-panel-pickup">
+        <div class="panel-hdr panel-hdr-pickup">
+          <a href="/admin/dashboard?tab=coming_back" class="panel-hdr-title panel-hdr-title-pickup" style="text-decoration:none">🔄 Pickups Today</a>
+          <span class="panel-hdr-date panel-hdr-date-pickup">{{ today_label }}</span>
         </div>
         {% if coming_back %}
         {% for b in coming_back %}
@@ -3088,7 +3134,7 @@ ADMIN_DASH_HTML = """
         {% else %}
         <div class="panel-empty">No results</div>
         {% endif %}
-        <div class="panel-footer">
+        <div class="panel-footer panel-footer-pickup">
           <a href="/admin/dashboard">View late (0)</a>
           <a href="/admin/dashboard">View all</a>
         </div>
@@ -3166,6 +3212,7 @@ ADMIN_DASH_HTML = """
           {% for b in bookings %}
           {% set _bc = conflict_map.get(b.id, []) %}
           <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '')|lower }} {{ (b.email or '')|lower }} {{ (b.phone or '')|lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '')|lower }}"
+            class="{% if _bc %}row-conflict{% elif b.status == 'pending' %}row-pending{% elif b.delivery_status == 'picked_up' %}row-picked-up{% elif b.delivery_status == 'delivered' %}row-delivered{% elif b.status == 'accepted' %}row-accepted{% elif b.status == 'denied' %}row-denied{% elif b.status == 'cancelled' %}row-cancelled{% endif %}"
             {% if _bc %}style="background:#fff5f5;border-left:4px solid #e53e3e;"{% endif %}>
             <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
             <td style="font-weight:700;color:#2563eb;font-size:.83rem"><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;text-decoration:none">#{{ b.id }}</a></td>
