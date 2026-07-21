@@ -16,6 +16,8 @@ import urllib.parse
 from datetime import datetime, timezone, date, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders as _email_encoders
 from functools import wraps
 from difflib import SequenceMatcher
 
@@ -23,6 +25,20 @@ import requests
 import psycopg2
 import psycopg2.extras
 import stripe
+try:
+    from webauthn import (
+        generate_registration_options, verify_registration_response,
+        generate_authentication_options, verify_authentication_response,
+        options_to_json, base64url_to_bytes,
+    )
+    from webauthn import parse_registration_credential_json, parse_authentication_credential_json
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria, UserVerificationRequirement,
+        ResidentKeyRequirement, PublicKeyCredentialDescriptor,
+    )
+    WEBAUTHN_AVAILABLE = True
+except ImportError:
+    WEBAUTHN_AVAILABLE = False
 from flask import (Flask, request, render_template_string,
                    redirect, url_for, jsonify, session, Response, send_file)
 from dotenv import load_dotenv
@@ -110,6 +126,7 @@ STRIPE_SECRET_KEY     = os.getenv("STRIPE_SECRET_KEY",     "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 BASE_URL              = os.getenv("BASE_URL", "").rstrip("/")
 CRON_SECRET           = os.getenv("CRON_SECRET", "")
+WEBAUTHN_RP_ID        = os.getenv("WEBAUTHN_RP_ID", "")
 
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
@@ -321,6 +338,15 @@ def init_db():
             log.warning(f"Customer import warning: {ie}")
 
         # Create inventory table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS webauthn_credentials (
+                id            SERIAL PRIMARY KEY,
+                credential_id TEXT UNIQUE NOT NULL,
+                public_key    BYTEA NOT NULL,
+                sign_count    INT NOT NULL DEFAULT 0,
+                created_at    TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS inventory (
                 id         VARCHAR(100) PRIMARY KEY,
@@ -2812,34 +2838,168 @@ ADMIN_LOGIN_HTML = """
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="manifest" href="/admin-manifest.json">
-  <meta name="theme-color" content="#2563eb">
+  <meta name="theme-color" content="#1e1e2e">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Rent a Party">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
   <title>Admin Login — {{ business_name }}</title>
   <style>
-    body{font-family:-apple-system,sans-serif;background:#f0f4f8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
-    .box{background:white;border-radius:12px;padding:2.5rem;max-width:360px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.1)}
-    h1{color:#1a365d;font-size:1.4rem;margin-bottom:1.5rem;text-align:center}
-    label{display:block;font-size:.85rem;font-weight:600;color:#4a5568;margin-bottom:.3rem}
-    input{width:100%;padding:.65rem .85rem;border:1.5px solid #cbd5e0;border-radius:8px;font-size:.97rem;margin-bottom:1rem}
-    input:focus{outline:none;border-color:#2b6cb0}
-    button{width:100%;padding:.85rem;background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer}
-    .err{background:#fff5f5;border:1px solid #feb2b2;color:#c53030;padding:.7rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem;text-align:center}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#1e1e2e 0%,#1e3a5f 100%);padding:1.5rem}
+    .card{background:rgba(255,255,255,.06);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:2.25rem 2rem;width:100%;max-width:340px;text-align:center}
+    .logo{width:62px;height:62px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px;margin:0 auto 1rem;display:flex;align-items:center;justify-content:center;font-size:1.6rem}
+    .brand{font-size:1.2rem;font-weight:700;color:#fff;margin-bottom:.2rem}
+    .subtitle{font-size:.78rem;color:rgba(255,255,255,.4);margin-bottom:2rem}
+    .bio-btn{width:100%;padding:.95rem;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:12px;font-size:.93rem;font-weight:700;cursor:pointer;margin-bottom:.85rem;display:flex;align-items:center;justify-content:center;gap:.65rem;transition:opacity .15s}
+    .bio-btn:hover{opacity:.9}
+    .bio-btn:disabled{opacity:.6;cursor:default}
+    .divider{display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem}
+    .divider-line{flex:1;height:1px;background:rgba(255,255,255,.1)}
+    .divider-text{font-size:.7rem;color:rgba(255,255,255,.3)}
+    .field{width:100%;padding:.7rem 1rem;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:#fff;font-size:.9rem;margin-bottom:.65rem;outline:none;transition:border .15s}
+    .field:focus{border-color:rgba(99,102,241,.7)}
+    .field::placeholder{color:rgba(255,255,255,.3)}
+    .remember{display:flex;align-items:center;gap:.55rem;cursor:pointer;margin-bottom:.85rem;text-align:left}
+    .chk{width:18px;height:18px;border-radius:5px;border:1.5px solid rgba(255,255,255,.3);background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+    .chk.on{background:rgba(99,102,241,.8);border-color:#6366f1}
+    .remember-lbl{font-size:.8rem;color:rgba(255,255,255,.55)}
+    .pw-btn{width:100%;padding:.75rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:10px;font-size:.88rem;font-weight:600;cursor:pointer;transition:background .15s}
+    .pw-btn:hover{background:rgba(255,255,255,.16)}
+    .msg{border-radius:10px;padding:.75rem;margin-bottom:.85rem;font-size:.85rem;font-weight:600}
+    .msg-err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);color:#fca5a5}
+    .msg-ok{background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:#4ade80}
+    .footer{margin-top:1.25rem;font-size:.68rem;color:rgba(255,255,255,.2)}
+    .setup-link{display:inline-block;margin-top:.85rem;font-size:.75rem;color:rgba(255,255,255,.35);text-decoration:none}
+    .setup-link:hover{color:rgba(255,255,255,.65)}
   </style>
 </head>
 <body>
-  <div class="box">
-    <h1>Admin Login</h1>
-    {% if error %}<div class="err">{{ error }}</div>{% endif %}
-    <form method="POST">
-      <label>Password</label>
-      <input type="password" name="password" autofocus required>
-      <button type="submit">Sign In</button>
+  <div class="card">
+    <div class="logo">🎪</div>
+    <div class="brand">{{ business_name }}</div>
+    <div class="subtitle">Admin Portal</div>
+
+    <div id="msg-area">
+      {% if error %}<div class="msg msg-err">{{ error }}</div>{% endif %}
+    </div>
+
+    {% if has_biometric %}
+    <button class="bio-btn" id="bio-btn" onclick="doBiometric()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662A8 8 0 0 1 12 18c1.75 0 3.37.56 4.69 1.5"/></svg>
+      Sign in with Face ID / Touch ID
+    </button>
+    <div class="divider"><div class="divider-line"></div><span class="divider-text">or use password</span><div class="divider-line"></div></div>
+    {% endif %}
+
+    <form method="POST" id="pw-form">
+      <input class="field" type="password" name="password" placeholder="Password"
+             {% if not has_biometric %}autofocus{% endif %} required>
+      <label class="remember" onclick="toggleRemember()">
+        <div class="chk" id="chk-box"></div>
+        <span class="remember-lbl">Remember this device</span>
+      </label>
+      <button class="pw-btn" type="submit">Sign In</button>
     </form>
+
+    {% if not has_biometric %}
+    <a href="#" class="setup-link" onclick="showSetupHint();return false">
+      Set up Face ID / Touch ID →
+    </a>
+    {% endif %}
+
+    <div class="footer">Secured with WebAuthn · {{ business_name }}</div>
   </div>
+
+  <script>
+  var rememberChecked = false;
+  function toggleRemember() {
+    rememberChecked = !rememberChecked;
+    var b = document.getElementById('chk-box');
+    if (rememberChecked) {
+      b.classList.add('on');
+      b.innerHTML = '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,6 5,10 11,2"/></svg>';
+    } else {
+      b.classList.remove('on');
+      b.innerHTML = '';
+    }
+  }
+
+  function showMsg(text, type) {
+    var el = document.getElementById('msg-area');
+    el.innerHTML = '<div class="msg msg-' + type + '">' + text + '</div>';
+  }
+
+  function showSetupHint() {
+    showMsg('Sign in with your password first, then go to Settings to set up biometric login.', 'ok');
+  }
+
+  function b64u_to_buf(b64u) {
+    var b64 = b64u.replace(/-/g,'+').replace(/_/g,'/');
+    var pad = b64.length % 4;
+    if (pad) b64 += '===='.slice(pad);
+    var bin = atob(b64), arr = new Uint8Array(bin.length);
+    for (var i=0; i<bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr.buffer;
+  }
+
+  function buf_to_b64u(buf) {
+    var arr = new Uint8Array(buf), str = '';
+    for (var i=0; i<arr.length; i++) str += String.fromCharCode(arr[i]);
+    return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  }
+
+  async function doBiometric() {
+    var btn = document.getElementById('bio-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><circle cx="12" cy="12" r="10" stroke-dasharray="40 20"/></svg>&nbsp; Verifying…';
+    try {
+      var r = await fetch('/admin/webauthn/authenticate/begin', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+      if (!r.ok) throw new Error('Server error');
+      var opts = await r.json();
+
+      opts.challenge = b64u_to_buf(opts.challenge);
+      if (opts.allowCredentials) {
+        opts.allowCredentials = opts.allowCredentials.map(function(c) {
+          return {id: b64u_to_buf(c.id), type: c.type};
+        });
+      }
+
+      var assertion = await navigator.credentials.get({publicKey: opts});
+      var payload = {
+        id: assertion.id,
+        rawId: buf_to_b64u(assertion.rawId),
+        type: assertion.type,
+        response: {
+          clientDataJSON: buf_to_b64u(assertion.response.clientDataJSON),
+          authenticatorData: buf_to_b64u(assertion.response.authenticatorData),
+          signature: buf_to_b64u(assertion.response.signature),
+          userHandle: assertion.response.userHandle ? buf_to_b64u(assertion.response.userHandle) : null
+        }
+      };
+
+      var r2 = await fetch('/admin/webauthn/authenticate/complete', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      var result = await r2.json();
+      if (result.ok) {
+        showMsg('✓ Verified — signing you in…', 'ok');
+        setTimeout(function(){ window.location.href = '/admin/dashboard'; }, 600);
+      } else {
+        throw new Error(result.error || 'Verification failed');
+      }
+    } catch(e) {
+      showMsg(e.message.indexOf('cancelled') > -1 || e.name === 'NotAllowedError' ? 'Biometric cancelled.' : ('Error: ' + e.message), 'err');
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662A8 8 0 0 1 12 18c1.75 0 3.37.56 4.69 1.5"/></svg> Sign in with Face ID / Touch ID';
+    }
+  }
+  </script>
+  <style>@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}</style>
+  <div class="card" style="display:none"></div>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -3031,6 +3191,8 @@ ADMIN_DASH_HTML = """
     <a href="/admin/tax-report" class="sb-link"><span class="sb-icon">💰</span> Tax Report</a>
   </nav>
   <div class="sb-bottom">
+    <a href="/admin/setup-biometric" class="sb-link"><span class="sb-icon">🔐</span> Biometric</a>
+    <a href="/admin/download-backup" class="sb-link"><span class="sb-icon">💾</span> Backup</a>
     <a href="/admin/logout" class="sb-link"><span class="sb-icon">🚪</span> Sign Out</a>
   </div>
 </aside>
@@ -3317,7 +3479,73 @@ function filterDash(q){const term=q.toLowerCase().trim();const rows=document.que
 function bulkAction(type){var ids=getChecked();if(ids.length===0)return;var msg=type==='delete'?'Permanently delete '+ids.length+' booking(s)?':'Archive '+ids.length+' booking(s)?';if(!confirm(msg))return;var idStr=ids.join(',');if(type==='delete'){document.getElementById('bulkDeleteIds').value=idStr;document.getElementById('bulkDeleteForm').submit();}else{document.getElementById('bulkArchiveIds').value=idStr;document.getElementById('bulkArchiveForm').submit();}}
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -3604,7 +3832,73 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -4177,7 +4471,73 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -5378,7 +5738,73 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -6082,7 +6508,73 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -6289,6 +6781,290 @@ def customer_booking_view(token):
 #  ROUTES — ADMIN
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ── WebAuthn helpers ─────────────────────────────────────────────────────────
+
+def _wau_rp_id():
+    if WEBAUTHN_RP_ID:
+        return WEBAUTHN_RP_ID
+    if BASE_URL:
+        from urllib.parse import urlparse
+        return urlparse(BASE_URL).hostname or "localhost"
+    return request.host.split(":")[0]
+
+def _wau_origin():
+    if BASE_URL:
+        return BASE_URL.rstrip("/")
+    return request.url_root.rstrip("/")
+
+def _wau_creds():
+    """Return list of stored webauthn credentials."""
+    creds = []
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT credential_id, public_key, sign_count FROM webauthn_credentials")
+            creds = [dict(r) for r in cur.fetchall()]
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"wau_creds error: {e}")
+    return creds
+
+def _wau_has_creds():
+    return len(_wau_creds()) > 0
+
+
+# ── WebAuthn registration (requires existing password login) ─────────────────
+
+@app.route("/admin/webauthn/register/begin", methods=["POST"])
+@admin_required
+def webauthn_register_begin():
+    if not WEBAUTHN_AVAILABLE:
+        return jsonify({"error": "WebAuthn library not installed"}), 503
+    try:
+        opts = generate_registration_options(
+            rp_id=_wau_rp_id(),
+            rp_name=BUSINESS_NAME,
+            user_id=b"admin",
+            user_name="admin",
+            user_display_name="Admin",
+            authenticator_selection=AuthenticatorSelectionCriteria(
+                resident_key=ResidentKeyRequirement.PREFERRED,
+                user_verification=UserVerificationRequirement.REQUIRED,
+            ),
+        )
+        session["wau_reg_challenge"] = opts.challenge
+        return options_to_json(opts), 200, {"Content-Type": "application/json"}
+    except Exception as e:
+        log.error(f"webauthn_register_begin: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/webauthn/register/complete", methods=["POST"])
+@admin_required
+def webauthn_register_complete():
+    if not WEBAUTHN_AVAILABLE:
+        return jsonify({"error": "WebAuthn library not installed"}), 503
+    challenge = session.pop("wau_reg_challenge", None)
+    if not challenge:
+        return jsonify({"error": "No challenge in session"}), 400
+    try:
+        credential = parse_registration_credential_json(request.get_data(as_text=True))
+        verified = verify_registration_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=_wau_rp_id(),
+            expected_origin=_wau_origin(),
+        )
+        import base64
+        cred_id_b64 = base64.urlsafe_b64encode(verified.credential_id).rstrip(b"=").decode()
+        conn = get_db()
+        if conn:
+            cur = conn.cursor()
+            cur.execute(
+                """INSERT INTO webauthn_credentials (credential_id, public_key, sign_count)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (credential_id) DO UPDATE SET sign_count=%s""",
+                (cred_id_b64, bytes(verified.credential_public_key),
+                 verified.sign_count, verified.sign_count)
+            )
+            conn.commit(); cur.close(); conn.close()
+        return jsonify({"ok": True})
+    except Exception as e:
+        log.error(f"webauthn_register_complete: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+# ── WebAuthn authentication ───────────────────────────────────────────────────
+
+@app.route("/admin/webauthn/authenticate/begin", methods=["POST"])
+def webauthn_authenticate_begin():
+    if not WEBAUTHN_AVAILABLE:
+        return jsonify({"error": "WebAuthn not available"}), 503
+    try:
+        import base64
+        creds = _wau_creds()
+        if not creds:
+            return jsonify({"error": "No biometric registered"}), 400
+        allow_creds = [
+            PublicKeyCredentialDescriptor(
+                id=base64.urlsafe_b64decode(row["credential_id"] + "==")
+            )
+            for row in creds
+        ]
+        opts = generate_authentication_options(
+            rp_id=_wau_rp_id(),
+            allow_credentials=allow_creds,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        )
+        session["wau_auth_challenge"] = opts.challenge
+        return options_to_json(opts), 200, {"Content-Type": "application/json"}
+    except Exception as e:
+        log.error(f"webauthn_authenticate_begin: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/webauthn/authenticate/complete", methods=["POST"])
+def webauthn_authenticate_complete():
+    if not WEBAUTHN_AVAILABLE:
+        return jsonify({"error": "WebAuthn not available"}), 503
+    challenge = session.pop("wau_auth_challenge", None)
+    if not challenge:
+        return jsonify({"error": "No challenge"}), 400
+    try:
+        import base64
+        credential = parse_authentication_credential_json(request.get_data(as_text=True))
+        cred_id_b64 = base64.urlsafe_b64encode(credential.raw_id).rstrip(b"=").decode()
+        # Look up stored credential
+        conn = get_db(); row = None
+        if conn:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT * FROM webauthn_credentials WHERE credential_id=%s", (cred_id_b64,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+        if not row:
+            return jsonify({"error": "Credential not recognised"}), 400
+        verified = verify_authentication_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=_wau_rp_id(),
+            expected_origin=_wau_origin(),
+            credential_public_key=bytes(row["public_key"]),
+            credential_current_sign_count=row["sign_count"],
+        )
+        # Update sign count
+        conn2 = get_db()
+        if conn2:
+            cur2 = conn2.cursor()
+            cur2.execute("UPDATE webauthn_credentials SET sign_count=%s WHERE credential_id=%s",
+                         (verified.new_sign_count, cred_id_b64))
+            conn2.commit(); cur2.close(); conn2.close()
+        session.permanent = True
+        session["admin_logged_in"] = True
+        return jsonify({"ok": True})
+    except Exception as e:
+        log.error(f"webauthn_authenticate_complete: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+# ── Setup biometric page (requires password login) ───────────────────────────
+
+BIOMETRIC_SETUP_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Set Up Biometric — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#1e1e2e 0%,#1e3a5f 100%);padding:1.5rem}
+    .card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:2.25rem 2rem;width:100%;max-width:360px;text-align:center;color:#fff}
+    h1{font-size:1.15rem;font-weight:700;margin-bottom:.4rem}
+    p{font-size:.84rem;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:1.5rem}
+    .btn{width:100%;padding:.9rem;border:none;border-radius:12px;font-size:.93rem;font-weight:700;cursor:pointer;margin-bottom:.65rem}
+    .btn-bio{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
+    .btn-back{background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.12)}
+    .msg{border-radius:10px;padding:.75rem;margin-bottom:.85rem;font-size:.85rem;font-weight:600}
+    .msg-err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);color:#fca5a5}
+    .msg-ok{background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.4);color:#4ade80}
+    .existing{background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:.75rem;margin-bottom:1rem;font-size:.82rem;color:rgba(255,255,255,.65)}
+    @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+<div class="card">
+  <div style="font-size:2.5rem;margin-bottom:.75rem">🔐</div>
+  <h1>Set Up Biometric Login</h1>
+  <p>Register your Face ID or fingerprint so you can sign in without a password next time.</p>
+
+  {% if cred_count > 0 %}
+  <div class="existing">✓ {{ cred_count }} device{{ 's' if cred_count > 1 else '' }} already registered. You can add another below.</div>
+  {% endif %}
+
+  <div id="msg-area"></div>
+
+  <button class="btn btn-bio" id="reg-btn" onclick="doRegister()">
+    📲 Register This Device
+  </button>
+  {% if cred_count > 0 %}
+  <form method="POST" action="/admin/webauthn/delete-all" onsubmit="return confirm('Remove all biometric credentials?')">
+    <button class="btn" style="background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3)">🗑 Remove All Biometrics</button>
+  </form>
+  {% endif %}
+  <br>
+  <a href="/admin/dashboard" class="btn btn-back" style="display:block;text-decoration:none;padding:.7rem">← Back to Dashboard</a>
+</div>
+<script>
+function showMsg(text, type) {
+  document.getElementById('msg-area').innerHTML = '<div class="msg msg-' + type + '">' + text + '</div>';
+}
+function b64u_to_buf(b64u) {
+  var b64 = b64u.replace(/-/g,'+').replace(/_/g,'/');
+  var pad = b64.length % 4; if (pad) b64 += '===='.slice(pad);
+  var bin = atob(b64), arr = new Uint8Array(bin.length);
+  for (var i=0; i<bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr.buffer;
+}
+function buf_to_b64u(buf) {
+  var arr = new Uint8Array(buf), str = '';
+  for (var i=0; i<arr.length; i++) str += String.fromCharCode(arr[i]);
+  return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function doRegister() {
+  var btn = document.getElementById('reg-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;vertical-align:middle"><circle cx="12" cy="12" r="10" stroke-dasharray="40 20"/></svg>  Waiting for biometric…';
+  try {
+    var r = await fetch('/admin/webauthn/register/begin', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    if (!r.ok) { var e=await r.json(); throw new Error(e.error||'Server error'); }
+    var opts = await r.json();
+    opts.challenge = b64u_to_buf(opts.challenge);
+    opts.user.id = b64u_to_buf(opts.user.id);
+    if (opts.excludeCredentials) opts.excludeCredentials = opts.excludeCredentials.map(function(c){ return {id:b64u_to_buf(c.id),type:c.type}; });
+    var cred = await navigator.credentials.create({publicKey: opts});
+    var payload = {
+      id: cred.id, rawId: buf_to_b64u(cred.rawId), type: cred.type,
+      response: {
+        attestationObject: buf_to_b64u(cred.response.attestationObject),
+        clientDataJSON: buf_to_b64u(cred.response.clientDataJSON)
+      }
+    };
+    var r2 = await fetch('/admin/webauthn/register/complete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    var result = await r2.json();
+    if (result.ok) {
+      showMsg('✓ Biometric registered! You can now sign in with Face ID / Touch ID.', 'ok');
+      btn.innerHTML = '✓ Registered';
+    } else { throw new Error(result.error || 'Registration failed'); }
+  } catch(e) {
+    showMsg(e.name === 'NotAllowedError' ? 'Registration cancelled.' : ('Error: ' + e.message), 'err');
+    btn.disabled = false;
+    btn.innerHTML = '📲 Register This Device';
+  }
+}
+</script>
+</body></html>
+"""
+
+
+@app.route("/admin/setup-biometric")
+@admin_required
+def setup_biometric():
+    cred_count = len(_wau_creds())
+    return render_template_string(BIOMETRIC_SETUP_HTML, business_name=BUSINESS_NAME, cred_count=cred_count)
+
+
+@app.route("/admin/webauthn/delete-all", methods=["POST"])
+@admin_required
+def webauthn_delete_all():
+    conn = get_db()
+    if conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM webauthn_credentials")
+        conn.commit(); cur.close(); conn.close()
+    return redirect(url_for("setup_biometric"))
+
+
+# ── Login / Logout ────────────────────────────────────────────────────────────
+
 @app.route("/admin", methods=["GET", "POST"])
 def admin_login():
     if session.get("admin_logged_in"):
@@ -6300,8 +7076,11 @@ def admin_login():
             session["admin_logged_in"] = True
             return redirect(url_for("admin_dashboard"))
         error = "Incorrect password."
+    has_biometric = WEBAUTHN_AVAILABLE and _wau_has_creds()
     return render_template_string(ADMIN_LOGIN_HTML,
-                                  business_name=BUSINESS_NAME, error=error)
+                                  business_name=BUSINESS_NAME,
+                                  error=error,
+                                  has_biometric=has_biometric)
 
 
 @app.route("/admin/logout")
@@ -8504,7 +9283,73 @@ function closePopup(){
 
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -9017,7 +9862,73 @@ if(STOPS.length>0) loadDistances();
 .leg-spin{display:inline-block;animation:spin 1s linear infinite}
 </style>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -10028,7 +10939,73 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -10276,7 +11253,73 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -10552,7 +11595,73 @@ function openSidebar(){document.getElementById('sidebar').classList.add('open');
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
 
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -11060,7 +12169,73 @@ ADMIN_TAX_HTML = """
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
-<button onclick="history.back()" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:42px;height:42px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3)" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#1e40af'">&#8592;</button>
+<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
+<script>
+(function(){
+  var btn = document.getElementById('back-fab');
+  if(!btn) return;
+  var SK = 'back_fab_pos';
+  var dragging = false, didDrag = false;
+  var startX, startY, origLeft, origBottom;
+
+  // Restore saved position
+  try {
+    var saved = JSON.parse(localStorage.getItem(SK));
+    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
+  } catch(e){}
+
+  function savePos() {
+    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
+  }
+
+  function startDrag(cx, cy) {
+    dragging = true; didDrag = false;
+    var rect = btn.getBoundingClientRect();
+    startX = cx; startY = cy;
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    btn.style.cursor = 'grabbing';
+    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
+    btn.style.transition = 'none';
+  }
+
+  function moveDrag(cx, cy) {
+    if(!dragging) return;
+    var dx = cx - startX, dy = cy - startY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
+    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
+    btn.style.left = newLeft + 'px';
+    btn.style.bottom = newBottom + 'px';
+    btn.style.top = '';
+  }
+
+  function endDrag() {
+    if(!dragging) return;
+    dragging = false;
+    btn.style.cursor = 'grab';
+    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
+    btn.style.transition = 'box-shadow .15s';
+    savePos();
+  }
+
+  // Mouse
+  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', function(e){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+
+  // Touch
+  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
+  document.addEventListener('touchend', function(){
+    var wasDrag = didDrag; endDrag();
+    if(!wasDrag) history.back();
+  });
+})();
+</script>
 </body></html>
 """
 
@@ -11317,6 +12492,178 @@ def debug_inv_check(booking_id):
     except Exception as e:
         import traceback as _tb
         return f"<pre>Error: {e}\n{_tb.format_exc()}</pre>"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  DATA BACKUP
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _build_backup_excel():
+    """Return a BytesIO Excel workbook with bookings + customers + inventory."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb = openpyxl.Workbook()
+
+    # ── Bookings sheet ────────────────────────────────────────────────────────
+    ws_b = wb.active
+    ws_b.title = "Bookings"
+    b_cols = ["id","full_name","email","phone","status","payment_status",
+              "grand_total","amount_paid","event_start_date","event_end_date",
+              "setup_date","setup_time","event_street","event_city","event_state",
+              "event_zip","venue_type","delivery_location","delivery_status",
+              "items_summary","admin_notes","created_at"]
+    hdr_fill = PatternFill("solid", fgColor="1e3a5f")
+    hdr_font = Font(color="FFFFFF", bold=True, size=10)
+    for ci, col in enumerate(b_cols, 1):
+        cell = ws_b.cell(row=1, column=ci, value=col.replace("_"," ").title())
+        cell.fill = hdr_fill; cell.font = hdr_font
+        cell.alignment = Alignment(horizontal="center")
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("""SELECT """ + ",".join(b_cols) + """ FROM bookings ORDER BY id DESC""")
+            for ri, row in enumerate(cur.fetchall(), 2):
+                for ci, col in enumerate(b_cols, 1):
+                    val = row[col]
+                    if hasattr(val, 'isoformat'):
+                        val = str(val)
+                    ws_b.cell(row=ri, column=ci, value=val)
+            cur.close()
+        except Exception as e:
+            log.error(f"backup bookings: {e}")
+
+    # ── Customers sheet ───────────────────────────────────────────────────────
+    ws_c = wb.create_sheet("Customers")
+    c_cols = ["id","full_name","email","phone","street","city","state","zip",
+              "notes","booking_count","created_at"]
+    for ci, col in enumerate(c_cols, 1):
+        cell = ws_c.cell(row=1, column=ci, value=col.replace("_"," ").title())
+        cell.fill = PatternFill("solid", fgColor="085041")
+        cell.font = Font(color="FFFFFF", bold=True, size=10)
+        cell.alignment = Alignment(horizontal="center")
+    if conn:
+        try:
+            cur2 = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur2.execute("SELECT " + ",".join(c_cols) + " FROM customers ORDER BY id DESC")
+            for ri, row in enumerate(cur2.fetchall(), 2):
+                for ci, col in enumerate(c_cols, 1):
+                    val = row[col]
+                    if hasattr(val, 'isoformat'): val = str(val)
+                    ws_c.cell(row=ri, column=ci, value=val)
+            cur2.close()
+        except Exception as e:
+            log.error(f"backup customers: {e}")
+
+    # ── Inventory sheet ───────────────────────────────────────────────────────
+    ws_i = wb.create_sheet("Inventory")
+    i_cols = ["id","name","price","total","sort_order"]
+    for ci, col in enumerate(i_cols, 1):
+        cell = ws_i.cell(row=1, column=ci, value=col.replace("_"," ").title())
+        cell.fill = PatternFill("solid", fgColor="26215C")
+        cell.font = Font(color="FFFFFF", bold=True, size=10)
+    if conn:
+        try:
+            cur3 = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur3.execute("SELECT " + ",".join(i_cols) + " FROM inventory ORDER BY sort_order")
+            for ri, row in enumerate(cur3.fetchall(), 2):
+                for ci, col in enumerate(i_cols, 1):
+                    ws_i.cell(row=ri, column=ci, value=row[col])
+            cur3.close(); conn.close()
+        except Exception as e:
+            log.error(f"backup inventory: {e}")
+
+    # Auto-size columns
+    for ws in [ws_b, ws_c, ws_i]:
+        for col_cells in ws.columns:
+            max_len = max((len(str(cell.value or "")) for cell in col_cells), default=8)
+            ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 2, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def _send_backup_email(buf, filename):
+    """Email the backup Excel file to OWNER_EMAIL."""
+    if not all([GMAIL_USER, GMAIL_APP_PASSWORD, OWNER_EMAIL]):
+        log.warning("Backup email skipped — Gmail or OWNER_EMAIL not configured")
+        return False
+    try:
+        msg = MIMEMultipart()
+        msg["From"]    = f"{BUSINESS_NAME} <{GMAIL_USER}>"
+        msg["To"]      = OWNER_EMAIL
+        msg["Subject"] = f"📦 {BUSINESS_NAME} — Daily Backup {date.today().strftime('%B %d, %Y')}"
+        body = (f"Automated daily backup for {BUSINESS_NAME}.\n\n"
+                f"Attached: {filename}\n"
+                f"Generated: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}\n\n"
+                "This email is sent automatically every day to protect your data.")
+        msg.attach(MIMEText(body, "plain"))
+        part = MIMEBase("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        part.set_payload(buf.read())
+        _email_encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+        msg.attach(part)
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+            s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            s.send_message(msg)
+        log.info(f"Backup email sent to {OWNER_EMAIL}")
+        return True
+    except Exception as e:
+        log.error(f"Backup email error: {e}")
+        return False
+
+
+@app.route("/admin/download-backup")
+@admin_required
+def admin_download_backup():
+    """Download a full Excel backup right now."""
+    try:
+        buf = _build_backup_excel()
+        filename = f"rentaparty_backup_{date.today().isoformat()}.xlsx"
+        return send_file(
+            buf,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        log.error(f"download_backup error: {e}")
+        return f"Backup error: {e}", 500
+
+
+@app.route("/admin/email-backup", methods=["POST"])
+@admin_required
+def admin_email_backup():
+    """Manually trigger a backup email to OWNER_EMAIL."""
+    try:
+        filename = f"rentaparty_backup_{date.today().isoformat()}.xlsx"
+        buf = _build_backup_excel()
+        ok = _send_backup_email(buf, filename)
+        if ok:
+            return redirect(url_for("admin_dashboard") + "?backup_sent=1")
+        else:
+            return redirect(url_for("admin_dashboard") + "?backup_err=1")
+    except Exception as e:
+        log.error(f"email_backup error: {e}")
+        return redirect(url_for("admin_dashboard") + "?backup_err=1")
+
+
+@app.route("/cron/daily-backup")
+def cron_daily_backup():
+    """Called by external cron (cron-job.org) every day. Emails backup to owner."""
+    secret = request.args.get("secret", "")
+    if CRON_SECRET and secret != CRON_SECRET:
+        return "Unauthorized", 401
+    try:
+        filename = f"rentaparty_backup_{date.today().isoformat()}.xlsx"
+        buf = _build_backup_excel()
+        ok = _send_backup_email(buf, filename)
+        return jsonify({"ok": ok, "date": date.today().isoformat()})
+    except Exception as e:
+        log.error(f"cron_daily_backup error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
