@@ -5467,28 +5467,7 @@ ADMIN_BOOKING_HTML = """
 <!-- ══ RIGHT COLUMN ══ -->
 <div style="display:flex;flex-direction:column;gap:1rem;position:sticky;top:1rem">
 
-  <!-- ── Agree to Pay card (pending + accepted) ── -->
-  {% if b.status in ('pending', 'accepted') %}
-  <div class="card" style="border:1.5px solid #6ee7b7;background:#f0fdf4;padding:1rem 1.1rem">
-    <div style="font-size:.72rem;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.65rem">💵 Cash / Check at Delivery</div>
-    <p style="font-size:.84rem;color:#374151;margin:0 0 .75rem">Customer will pay in full with cash or check at delivery. Inventory reserved immediately — no Stripe link needed.</p>
-    <form method="POST" action="/admin/booking/{{ b.id }}/agree-to-pay">
-      <div style="display:flex;gap:.5rem;margin-bottom:.6rem">
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.88rem;font-weight:600;cursor:pointer;flex:1;background:#fff;border:1.5px solid #6ee7b7;border-radius:7px;padding:.45rem .7rem">
-          <input type="radio" name="pay_method" value="cash" checked> 💵 Cash
-        </label>
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.88rem;font-weight:600;cursor:pointer;flex:1;background:#fff;border:1.5px solid #6ee7b7;border-radius:7px;padding:.45rem .7rem">
-          <input type="radio" name="pay_method" value="check"> 📝 Check
-        </label>
-      </div>
-      <button type="submit"
-        onclick="return confirm('Mark booking as Agree to Pay at delivery? Inventory will be reserved now.')"
-        style="width:100%;background:#059669;color:#fff;border:none;border-radius:7px;padding:.55rem .9rem;font-size:.88rem;font-weight:700;cursor:pointer">
-        ✅ Confirm — Agree to Pay at Delivery
-      </button>
-    </form>
-  </div>
-  {% endif %}
+
 
   <!-- ── agree_to_pay summary banner ── -->
   {% if b.status == 'agree_to_pay' %}
@@ -5653,6 +5632,15 @@ ADMIN_BOOKING_HTML = """
         <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment" onsubmit="return confirm('Mark as paid in full with cash?')">
           <button style="background:#E1F5EE;color:#085041;border:1px solid #5DCAA5;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">💵 Cash Full</button>
         </form>
+        {% endif %}
+        {% if b.status not in ('denied','cancelled','concluded','agree_to_pay') %}
+        <form method="POST" action="/admin/booking/{{ b.id }}/agree-to-pay" onsubmit="return confirm('Mark as Agree to Pay at delivery? Inventory will be reserved and booking treated as paid in full.')">
+          <input type="hidden" name="pay_method" value="cash">
+          <button style="background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:700;cursor:pointer">🤝 Agree to Pay</button>
+        </form>
+        {% endif %}
+        {% if b.status == 'agree_to_pay' %}
+        <span style="background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:700">✅ Agree to Pay</span>
         {% endif %}
         {% if b.status not in ('denied','cancelled') %}
         <form method="POST" action="/admin/booking/{{ b.id }}/no-charge" onsubmit="return confirm('Mark as No Charge?')">
