@@ -6151,10 +6151,28 @@ def _submit_inner():
     tax_amount  = round(pre_tax_total * applied_tax_rate, 2)
     grand_total = round(pre_tax_total + tax_amount, 2)
 
-    # Save to DB
+    # Save to DB — guard against duplicate submissions (same email+date within 3 min)
     booking_id = None
     conn = get_db()
     if conn:
+        try:
+            dup_cur = conn.cursor()
+            dup_cur.execute("""
+                SELECT id FROM bookings
+                WHERE email=%s
+                  AND event_start_date=%s
+                  AND created_at >= NOW() - INTERVAL '3 minutes'
+                ORDER BY id DESC LIMIT 1
+            """, (email, event_start_date or None))
+            dup_row = dup_cur.fetchone()
+            dup_cur.close()
+            if dup_row:
+                log.warning(f"Duplicate submission blocked for {email} on {event_start_date} — returning existing #{dup_row[0]}")
+                conn.close()
+                return redirect(url_for("booking_success", booking_id=dup_row[0]))
+        except Exception as _dup_err:
+            log.error(f"Duplicate check error: {_dup_err}")
+
         try:
             cur = conn.cursor()
             cur.execute("""
@@ -6278,11 +6296,40 @@ def _submit_inner():
         except Exception as e:
             log.error(f"Customer upsert error: {e}")
 
+    # PRG: redirect so browser refresh doesn't re-POST
+    if booking_id:
+        return redirect(url_for("booking_success", booking_id=booking_id))
     return render_template_string(SUCCESS_HTML,
         business_name=BUSINESS_NAME,
         business_phone=BUSINESS_PHONE,
         name=full_name.split()[0],
         email=email,
+        booking_id=booking_id,
+    )
+
+
+@app.route("/booking/success/<int:booking_id>")
+def booking_success(booking_id):
+    """Success page after booking — GET-only so refresh is safe."""
+    b = None
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur.execute("SELECT full_name, email FROM bookings WHERE id=%s", (booking_id,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row:
+                b = dict(row)
+        except Exception as e:
+            log.error(f"booking_success fetch error: {e}")
+    if not b:
+        return redirect(url_for("index"))
+    return render_template_string(SUCCESS_HTML,
+        business_name=BUSINESS_NAME,
+        business_phone=BUSINESS_PHONE,
+        name=(b["full_name"] or "").split()[0],
+        email=b["email"] or "",
         booking_id=booking_id,
     )
 
