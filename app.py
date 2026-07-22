@@ -4775,7 +4775,18 @@ ADMIN_BOOKING_HTML = """
       </form>
     </div>
     {% endif %}
-    <a href="/admin/booking/{{ b.id }}/edit" style="margin-left:{% if b.status != 'pending' %}auto{% else %}0{% endif %};font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap;border:1px solid #e5e7eb;border-radius:6px;padding:.3rem .75rem">✏️ Edit</a>
+    {% if b.status in ('accepted', 'confirmed') and b.payment_status in ('waiting', None, '') %}
+    <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <form id="accept-form" method="POST" action="/admin/booking/{{ b.id }}/accept">
+        <input type="hidden" name="custom_amount" id="accept-amount-input">
+        <button type="button" id="accept-btn"
+          style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:.45rem 1.1rem;font-size:.88rem;font-weight:700;cursor:pointer;white-space:nowrap">
+          📧 Send Invoice + Payment Link
+        </button>
+      </form>
+    </div>
+    {% endif %}
+    <a href="/admin/booking/{{ b.id }}/edit" style="margin-left:{% if b.status not in ('pending', 'accepted', 'confirmed') or b.payment_status not in ('waiting', None, '') %}auto{% else %}0{% endif %};font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap;border:1px solid #e5e7eb;border-radius:6px;padding:.3rem .75rem">✏️ Edit</a>
   </div>
 </div>
 
