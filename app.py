@@ -5471,10 +5471,8 @@ ADMIN_BOOKING_HTML = """
 
   <!-- ── agree_to_pay summary banner ── -->
   {% if b.status == 'agree_to_pay' %}
-  <div class="card" style="border:1.5px solid #6ee7b7;background:#f0fdf4;padding:.85rem 1.1rem">
-    <div style="font-weight:700;color:#065f46;font-size:.95rem;margin-bottom:.3rem">💵 Agreed to Pay at Delivery</div>
-    <div style="font-size:.84rem;color:#374151">Payment method: <strong>{{ (b.payment_method or 'cash/check')|title }}</strong></div>
-    <div style="margin-top:.5rem;font-size:.82rem;color:#065f46;font-weight:600">✅ Inventory reserved · Treated as paid in full</div>
+  <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:7px;padding:.4rem .75rem;font-size:.8rem;color:#065f46;font-weight:600;display:flex;align-items:center;gap:.4rem">
+    ✅ Agree to Pay &mdash; {{ (b.payment_method or 'cash')|title }} at delivery &nbsp;·&nbsp; Inventory reserved
   </div>
   {% endif %}
 
@@ -5640,7 +5638,9 @@ ADMIN_BOOKING_HTML = """
         </form>
         {% endif %}
         {% if b.status == 'agree_to_pay' %}
-        <span style="background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:700">✅ Agree to Pay</span>
+        <form method="POST" action="/admin/booking/{{ b.id }}/revert-agree-to-pay" onsubmit="return confirm('Revert Agree to Pay back to Accepted?')">
+          <button style="background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:700;cursor:pointer">✅ Agree to Pay ↩</button>
+        </form>
         {% endif %}
         {% if b.status not in ('denied','cancelled') %}
         <form method="POST" action="/admin/booking/{{ b.id }}/no-charge" onsubmit="return confirm('Mark as No Charge?')">
@@ -7824,6 +7824,21 @@ def agree_to_pay_booking(booking_id):
             log.info(f"Booking #{booking_id} set to agree_to_pay ({pay_method})")
         except Exception as e:
             log.error(f"agree_to_pay error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/revert-agree-to-pay", methods=["POST"])
+@admin_required
+def revert_agree_to_pay(booking_id):
+    """Revert agree_to_pay back to accepted."""
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE bookings SET status='accepted', payment_method=NULL WHERE id=%s", (booking_id,))
+            conn.commit(); cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"revert_agree_to_pay error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
