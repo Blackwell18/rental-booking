@@ -4207,9 +4207,10 @@ ADMIN_NEW_BOOKING_HTML = """
       <div>
         <label>Status</label>
         <select name="status" id="nb_status" onchange="onStatusChange()">
-          <option value="confirmed">Confirmed (Paid in Full)</option>
-          <option value="partial">Confirmed (Partial Payment)</option>
-          <option value="accepted">Accepted (Awaiting Payment)</option>
+          <option value="accepted">Accepted — Awaiting Payment</option>
+          <option value="accepted_paid">Accepted — Paid in Full</option>
+          <option value="partial">Accepted — Partial Payment</option>
+          <option value="agree_to_pay">Agree to Pay (Cash/Check at Delivery)</option>
           <option value="pending">Pending Review</option>
         </select>
       </div>
@@ -5556,7 +5557,7 @@ ADMIN_BOOKING_HTML = """
     <div style="margin-top:.85rem;padding-top:.85rem;border-top:1px solid #f1f5f9">
       <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">💳 Payment Links</div>
       {% set balance_due = ((b.grand_total or 0)|float - (b.amount_paid or 0)|float) %}
-      {% if balance_due > 0.50 and b.status in ('accepted', 'pending') %}
+      {% if balance_due > 0.50 and b.status in ('accepted', 'pending', 'confirmed', 'agree_to_pay') %}
       <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" style="margin-bottom:.6rem"
             onsubmit="return confirm('Send a ${{ '%.2f'|format(balance_due) }} payment link to {{ b.email }}?')">
         <input type="hidden" name="amount" value="{{ '%.2f'|format(balance_due) }}">
@@ -5614,7 +5615,7 @@ ADMIN_BOOKING_HTML = """
   <!-- ── Actions card ── -->
   <div class="card" style="border:none;padding:1.1rem 1.25rem">
 
-    {% if b.status in ('accepted', 'pending', 'agree_to_pay') %}
+    {% if b.status in ('accepted', 'pending', 'agree_to_pay', 'confirmed') %}
     <!-- Record Payment -->
     <div style="margin-bottom:1rem">
       <div style="font-size:.7rem;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#E6F1FB;border-radius:6px">💳 Record Payment</div>
@@ -8299,15 +8300,23 @@ def new_booking():
             f.get("event_state","").strip() or None,
             f.get("event_zip","").strip() or None,
             f.get("delivery_location","").strip() or None,
-            f.get("status","pending"),
+            "accepted" if f.get("status","pending") == "accepted_paid" else f.get("status","pending"),
             json.dumps(items), items_subtotal, delivery_fee,
             float(f.get("late_night_fee") or 0),
             float(f.get("distance_miles") or 0) or None,
             tax_rate, tax_amount, tax_exempt,
-            grand_total, amount_paid,
+            grand_total,
+            grand_total if f.get("status") == "accepted_paid" else amount_paid,
             f.get("notes","").strip() or None,
         ))
         new_id = cur.fetchone()[0]
+        # Set payment_status for paid/partial admin bookings
+        _st = f.get("status","pending")
+        if _st in ("accepted_paid", "accepted"):
+            _pst = "paid" if _st == "accepted_paid" else "waiting"
+            cur.execute("UPDATE bookings SET payment_status=%s WHERE id=%s", (_pst, new_id))
+        elif _st == "partial":
+            cur.execute("UPDATE bookings SET payment_status='partial' WHERE id=%s", (new_id,))
         conn.commit()
         cur.close(); conn.close()
         return redirect(url_for("admin_booking", booking_id=new_id))
