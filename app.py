@@ -5632,9 +5632,12 @@ ADMIN_BOOKING_HTML = """
         </form>
         {% endif %}
         {% if b.status not in ('denied','cancelled','concluded','agree_to_pay') %}
-        <form method="POST" action="/admin/booking/{{ b.id }}/agree-to-pay" onsubmit="return confirm('Mark as Agree to Pay at delivery? Inventory will be reserved and booking treated as paid in full.')">
-          <input type="hidden" name="pay_method" value="cash">
-          <button style="background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:700;cursor:pointer">🤝 Agree to Pay</button>
+        <form method="POST" action="/admin/booking/{{ b.id }}/agree-to-pay" onsubmit="return confirm('Mark as Agree to Pay at delivery?')" style="display:flex;gap:.3rem;align-items:center">
+          <select name="pay_method" style="border:1px solid #6ee7b7;border-radius:6px;padding:.28rem .4rem;font-size:.78rem;background:#f0fdf4;color:#065f46;height:28px">
+            <option value="cash">💵 Cash</option>
+            <option value="check">📝 Check</option>
+          </select>
+          <button style="background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7;border-radius:6px;padding:.3rem .65rem;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">🤝 Agree to Pay</button>
         </form>
         {% endif %}
         {% if b.status == 'agree_to_pay' %}
