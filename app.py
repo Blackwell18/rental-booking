@@ -5467,8 +5467,8 @@ ADMIN_BOOKING_HTML = """
 <!-- ══ RIGHT COLUMN ══ -->
 <div style="display:flex;flex-direction:column;gap:1rem;position:sticky;top:1rem">
 
-  <!-- ── Agree to Pay card (pending only) ── -->
-  {% if b.status == 'pending' %}
+  <!-- ── Agree to Pay card (pending + accepted) ── -->
+  {% if b.status in ('pending', 'accepted') %}
   <div class="card" style="border:1.5px solid #6ee7b7;background:#f0fdf4;padding:1rem 1.1rem">
     <div style="font-size:.72rem;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.65rem">💵 Cash / Check at Delivery</div>
     <p style="font-size:.84rem;color:#374151;margin:0 0 .75rem">Customer will pay in full with cash or check at delivery. Inventory reserved immediately — no Stripe link needed.</p>
