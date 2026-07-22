@@ -261,7 +261,8 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30) DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS route_override BOOLEAN DEFAULT FALSE",
             # Migrate: confirmed → accepted + paid
-            "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='confirmed'",
+            "UPDATE bookings SET status='accepted', payment_status='paid' WHERE status='confirmed' AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid >= grand_total - 0.50",
+            "UPDATE bookings SET status='accepted', payment_status='waiting' WHERE status='confirmed' AND (amount_paid IS NULL OR amount_paid < 0.50)",
             "UPDATE bookings SET status='accepted', payment_status='paid'     WHERE status='paid'",
             # Migrate: partial → accepted + partial
             "UPDATE bookings SET status='accepted', payment_status='partial'  WHERE status='partial'",
@@ -5520,7 +5521,18 @@ ADMIN_BOOKING_HTML = """
       <span style="font-size:1.15rem;font-weight:700;color:#c2410c">${{ "%.2f"|format(balance) }}</span>
     </div>
     {% elif b.status == 'accepted' and (b.payment_status == 'paid' or balance <= 0.01) %}
+    {% if (b.amount_paid or 0)|float < 0.50 %}
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:.55rem .85rem;margin-top:.75rem">
+      <div style="font-size:.8rem;color:#c2410c;font-weight:600;margin-bottom:.4rem">⚠️ Marked paid but $0 collected</div>
+      <form method="POST" action="/admin/booking/{{ b.id }}/reset-payment-status">
+        <button type="submit" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.4rem .8rem;font-size:.83rem;font-weight:700;cursor:pointer">
+          🔄 Reset to Awaiting Payment
+        </button>
+      </form>
+    </div>
+    {% else %}
     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:.55rem .85rem;text-align:center;font-weight:700;color:#16a34a;margin-top:.75rem">✅ Paid in Full</div>
+    {% endif %}
     {% elif b.status == 'accepted' %}
     <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:.6rem .85rem;display:flex;justify-content:space-between;align-items:center;margin-top:.75rem">
       <span style="font-size:.88rem;font-weight:600;color:#c2410c">Balance Due</span>
@@ -7890,6 +7902,22 @@ def agree_to_pay_booking(booking_id):
             log.info(f"Booking #{booking_id} set to agree_to_pay ({pay_method})")
         except Exception as e:
             log.error(f"agree_to_pay error: {e}")
+    return redirect(url_for("admin_booking", booking_id=booking_id))
+
+
+@app.route("/admin/booking/<int:booking_id>/reset-payment-status", methods=["POST"])
+@admin_required
+def reset_payment_status(booking_id):
+    """Reset payment_status to waiting and amount_paid to 0 for incorrectly marked bookings."""
+    conn = get_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE bookings SET payment_status='waiting', amount_paid=0 WHERE id=%s", (booking_id,))
+            conn.commit(); cur.close(); conn.close()
+            log.info(f"Booking #{booking_id} payment status reset to waiting")
+        except Exception as e:
+            log.error(f"reset_payment_status error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
