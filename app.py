@@ -3576,6 +3576,7 @@ function bulkAction(type){var ids=getChecked();if(ids.length===0)return;var msg=
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -3584,6 +3585,7 @@ function bulkAction(type){var ids=getChecked();if(ids.length===0)return;var msg=
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -3930,6 +3932,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -3938,6 +3941,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -4569,6 +4573,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -4577,6 +4582,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -5876,6 +5882,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -5884,6 +5891,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -6646,6 +6654,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -6654,6 +6663,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -7284,7 +7294,10 @@ def admin_dashboard():
                 # All tab — no date restriction, newest first
                 wheres.append("(archived IS NULL OR archived = FALSE)")
                 if status_filter:
-                    wheres.append("status=%s"); params.append(status_filter)
+                    if status_filter == "pending":
+                        wheres.append("status IN ('pending','agree_to_pay')")
+                    else:
+                        wheres.append("status=%s"); params.append(status_filter)
                 if date_from:
                     wheres.append("event_start_date >= %s"); params.append(date_from)
                 if date_to:
@@ -7332,7 +7345,9 @@ def admin_dashboard():
                 total   = float(b.get("grand_total") or 0)
                 owed    = round(total - paid, 2) if total > 0 else 0
 
-                if b["status"] not in ("accepted",):
+                if b["status"] == "agree_to_pay":
+                    b["pay_label"], b["pay_class"] = "Cash/Check at Delivery", "pay-paid"
+                elif b["status"] not in ("accepted",):
                     b["pay_label"], b["pay_class"] = "—", "pay-none"
                 elif pmt_st == "paid":
                     b["pay_label"], b["pay_class"] = "Paid in Full", "pay-paid"
@@ -9458,6 +9473,7 @@ function closePopup(){
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -9466,6 +9482,7 @@ function closePopup(){
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -10037,6 +10054,7 @@ if(STOPS.length>0) loadDistances();
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -10045,6 +10063,7 @@ if(STOPS.length>0) loadDistances();
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -11114,6 +11133,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -11122,6 +11142,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -11428,6 +11449,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -11436,6 +11458,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -11771,6 +11794,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -11779,6 +11803,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -12345,6 +12370,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
   document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
   document.addEventListener('mouseup', function(e){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
@@ -12353,6 +12379,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
   btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
   document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
   document.addEventListener('touchend', function(){
+    if(!dragging) return;
     var wasDrag = didDrag; endDrag();
     if(!wasDrag) history.back();
   });
