@@ -10097,51 +10097,57 @@ ADMIN_ROUTE_HTML = """
 </div>
 </div>
 <script>
-let _cachedCoords = null;
+// ── Google Maps DirectionsService optimizer ───────────────────────────────
+// Called automatically on load (when no custom order yet) and by the button
+function optimizeRoute(isAuto){
+  if(STOPS.length < 2) return;
+  const btn = document.getElementById('opt-btn');
+  if(btn){ btn.disabled=true; btn.innerHTML='⏳ Optimizing…'; }
 
-async function optimizeRoute(){
-  const btn = document.getElementById('opt-btn') || document.querySelector('[onclick="optimizeRoute()"]');
-  if(btn){ btn.disabled=true; btn.textContent='⏳ Optimizing…'; }
+  // Show a subtle banner while optimizing
+  if(isAuto){
+    const banner = document.createElement('div');
+    banner.id = 'opt-banner';
+    banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#1d4ed8;color:#fff;padding:.5rem 1.25rem;border-radius:8px;font-size:.85rem;font-weight:600;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.25)';
+    banner.textContent = '✨ Finding fastest route…';
+    document.body.appendChild(banner);
+  }
 
-  // Geocode all addresses if not already cached
-  if(!_cachedCoords){
-    const allAddrs = [DEPOT, ...STOPS.map(s=>s.addr).filter(Boolean)];
-    const unique = [...new Set(allAddrs)];
-    const coords = {};
-    for(let i=0; i<unique.length; i++){
-      if(i>0) await new Promise(r=>setTimeout(r,1100));
-      try{ coords[unique[i]] = await geocode(unique[i]); }catch(e){}
+  const svc = new google.maps.DirectionsService();
+  const validStops = STOPS.filter(s => s.addr);
+  const noAddr     = STOPS.filter(s => !s.addr);
+
+  const waypoints = validStops.slice(0, -1).map(s => ({
+    location: s.addr,
+    stopover: true,
+  }));
+  const destination = validStops[validStops.length - 1].addr;
+
+  svc.route({
+    origin: DEPOT,
+    destination: destination,
+    waypoints: waypoints,
+    optimizeWaypoints: true,   // ← Google solves TSP for us
+    travelMode: google.maps.TravelMode.DRIVING,
+  }, function(result, status){
+    const banner = document.getElementById('opt-banner');
+    if(banner) banner.remove();
+    if(btn){ btn.disabled=false; btn.innerHTML='✨ Re-optimize Route'; }
+
+    if(status !== 'OK'){
+      if(!isAuto) alert('Could not optimize route: ' + status);
+      return;
     }
-    _cachedCoords = coords;
-  }
-
-  // Nearest-neighbor from depot
-  const depotCoord = _cachedCoords[DEPOT];
-  if(!depotCoord){ alert('Could not geocode depot address.'); if(btn){btn.disabled=false;btn.innerHTML='✨ Optimize Route Order';} return; }
-
-  const remaining = STOPS.map(s=>({...s, coord: _cachedCoords[s.addr]})).filter(s=>s.coord);
-  const noCoord   = STOPS.filter(s=>!_cachedCoords[s.addr]);
-  const ordered   = [];
-  let current     = depotCoord;
-
-  while(remaining.length){
-    let bestI=0, bestDist=Infinity;
-    remaining.forEach((s,i)=>{
-      const d = Math.hypot(s.coord.lat-current.lat, s.coord.lon-current.lon);
-      if(d<bestDist){ bestDist=d; bestI=i; }
-    });
-    ordered.push(remaining[bestI]);
-    current = remaining[bestI].coord;
-    remaining.splice(bestI,1);
-  }
-  // Append any stops we couldn't geocode at the end
-  ordered.push(...noCoord);
-
-  // Build URL with custom order param and reload
-  const ids = ordered.map(s=>s.id).filter(Boolean).join(',');
-  const url = new URL(window.location.href);
-  url.searchParams.set('order', ids);
-  window.location.href = url.toString();
+    // result.routes[0].waypoint_order is the reordered indices into validStops[0..-2]
+    const order = result.routes[0].waypoint_order;
+    const reordered = order.map(i => validStops[i]).concat([validStops[validStops.length - 1]]);
+    // Add stops with no address at the end
+    const all = [...reordered, ...noAddr];
+    const ids = all.map(s => s.id).filter(Boolean).join(',');
+    const url = new URL(window.location.href);
+    url.searchParams.set('order', ids);
+    window.location.href = url.toString();
+  });
 }
 function copySheetLink(){
   const url = document.getElementById('sheet-url').value;
@@ -10155,30 +10161,10 @@ function copySheetLink(){
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 
-/* ── Distance/time between stops via Nominatim + OSRM ── */
+/* ── Route data ── */
 const STOPS = {{ stops_json|safe }};
 const DEPOT = {{ depot_address|tojson }};
-
-async function geocode(addr){
-  const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(addr)+'&format=json&limit=1&countrycodes=us';
-  const r=await fetch(url,{headers:{'Accept-Language':'en','User-Agent':'RentAParty-Admin/1.0'}});
-  const d=await r.json();
-  if(!d.length) return null;
-  return {lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon)};
-}
-
-async function getDrivingInfo(from,to){
-  const url=`https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`;
-  const r=await fetch(url);
-  const d=await r.json();
-  if(d.code!=='Ok'||!d.routes.length) return null;
-  const route=d.routes[0];
-  const miles=(route.distance*0.000621371).toFixed(1);
-  const mins=Math.round(route.duration/60);
-  const hrs=Math.floor(mins/60), rem=mins%60;
-  const timeStr=hrs>0?`${hrs}h ${rem}m`:`${mins} min`;
-  return {miles,timeStr,rawSecs:route.duration};
-}
+const HAS_CUSTOM_ORDER = {{ 'true' if has_custom_order else 'false' }};
 
 function fmtTime(d){
   let h=d.getHours(),m=d.getMinutes(),a=h>=12?'PM':'AM';
@@ -10201,80 +10187,58 @@ function getCurrentPos(){
     );
   });
 }
+{% if google_maps_key %}
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=mapsReady&loading=async" defer></script>
+<script>
+// Fallback: if Google Maps fails to load, still show the optimize button as non-functional
+window.mapsReady = window.mapsReady || function(){};
+{% else %}
+// No Google Maps key — optimize button disabled
+document.addEventListener('DOMContentLoaded', function(){
+  var btn=document.getElementById('opt-btn');
+  if(btn){btn.disabled=true;btn.title='Set GOOGLE_MAPS_KEY to enable route optimization';}
+});
+{% endif %}
 
-async function loadDistances(){
-  const startTime=new Date();
-  // Geocode depot + all stop addresses
-  const allAddrs=[DEPOT,...STOPS.map(s=>s.addr).filter(Boolean)];
-  const unique=[...new Set(allAddrs)];
-  const coords={};
-  for(let i=0;i<unique.length;i++){
-    if(i>0) await new Promise(r=>setTimeout(r,1100));
-    try{ coords[unique[i]]=await geocode(unique[i]); }catch(e){}
-  }
+function loadDistances(){
+  if(!STOPS.length || !window.google) return;
+  const startTime = new Date();
+  const svc = new google.maps.DistanceMatrixService();
+  const addrs = [DEPOT, ...STOPS.map(s=>s.addr).filter(Boolean)];
 
-  let cumSecs=0;
-  let chainStart=coords[DEPOT]; // default: start chain from depot
-
-  // Try geolocation → current → depot leg
-  try{
-    const geoPos=await getCurrentPos();
-    // Show current location card
-    document.getElementById('curr-loc-card').style.display='flex';
-    document.getElementById('curr-loc-label').textContent=`${geoPos.lat.toFixed(4)}, ${geoPos.lon.toFixed(4)}`;
-    document.getElementById('curr-to-depot-leg').style.display='flex';
-    const depotCoord=coords[DEPOT];
-    if(depotCoord){
-      const info=await getDrivingInfo(geoPos,depotCoord);
-      if(info){
-        const ctdLink=document.getElementById('curr-to-depot-link');
-        ctdLink.href=`https://www.google.com/maps/dir/${geoPos.lat},${geoPos.lon}/${encodeURIComponent(DEPOT)}`;
-        ctdLink.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-        cumSecs+=info.rawSecs;
-        const etaDepot=new Date(startTime.getTime()+cumSecs*1000);
-        const ed=document.getElementById('eta-depot');
-        if(ed){ed.textContent=fmtTime(etaDepot);ed.classList.add('show');}
-      }
+  svc.getDistanceMatrix({
+    origins: addrs.slice(0,-1),
+    destinations: addrs.slice(1),
+    travelMode: google.maps.TravelMode.DRIVING,
+  }, function(resp, status){
+    if(status !== 'OK') return;
+    let cumSecs = 0;
+    for(let i = 0; i < STOPS.length; i++){
+      const row = resp.rows[i];
+      if(!row) continue;
+      const elem = row.elements[0];
+      if(!elem || elem.status !== 'OK') continue;
+      const secs = elem.duration.value;
+      const mins = Math.round(secs / 60);
+      const hrs  = Math.floor(mins / 60), rem = mins % 60;
+      const timeStr = hrs > 0 ? `${hrs}h ${rem}m` : `${mins} min`;
+      const dist = (elem.distance.value * 0.000621371).toFixed(1);
+      const el = document.getElementById('leg-link-' + i);
+      if(el) el.innerHTML = `⇕ ${dist} mi &nbsp;·&nbsp; ~${timeStr}`;
+      cumSecs += secs;
+      setEta(i + 1, new Date(startTime.getTime() + cumSecs * 1000));
     }
-    chainStart=geoPos; // recalculate depot→stop1 from geoPos for cumulative ETAs
-    // reset cumSecs to depotArrival then add depot→stop1
-    // actually keep cumSecs as-is (includes drive to depot)
-  }catch(e){
-    // Geolocation denied or unavailable — silent fallback to depot start
-  }
-
-  // Leg: (depot or current) → stop 1
-  const depotCoord=coords[DEPOT];
-  const stop1Coord=STOPS[0]&&coords[STOPS[0].addr];
-  if(depotCoord&&stop1Coord){
-    try{
-      const info=await getDrivingInfo(depotCoord,stop1Coord);
-      if(info){
-        cumSecs+=info.rawSecs;
-        setEta(1,new Date(startTime.getTime()+cumSecs*1000));
-      }
-    }catch(e){}
-  }
-
-  // Legs between stops
-  for(let i=1;i<STOPS.length;i++){
-    const el=document.getElementById('leg-link-'+i);
-    const fromCoord=coords[STOPS[i-1].addr], toCoord=coords[STOPS[i].addr];
-    if(!fromCoord||!toCoord){if(el)el.innerHTML='⇕ Open in Maps';continue;}
-    try{
-      const info=await getDrivingInfo(fromCoord,toCoord);
-      if(info){
-        if(el) el.innerHTML=`⇕ ${info.miles} mi &nbsp;·&nbsp; ~${info.timeStr}`;
-        cumSecs+=info.rawSecs;
-        setEta(i+1,new Date(startTime.getTime()+cumSecs*1000));
-      } else {
-        if(el) el.innerHTML='⇕ Open in Maps';
-      }
-    }catch(e){if(el)el.innerHTML='⇕ Open in Maps';}
-  }
+  });
 }
 
-if(STOPS.length>0) loadDistances();
+function mapsReady(){
+  // Auto-optimize if no custom order and 2+ stops
+  if(STOPS.length >= 2 && !HAS_CUSTOM_ORDER){
+    optimizeRoute(true);
+  }
+  if(STOPS.length > 0) loadDistances();
+}
 </script>
 <style>
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -10843,6 +10807,8 @@ def admin_route():
         excluded_bookings=excluded_bookings,
         stops_json=stops_json,
         sheet_token=_sheet_token(route_date),
+        google_maps_key=GOOGLE_MAPS_KEY,
+        has_custom_order=bool(request.args.get("order", "")),
     )
 
 
