@@ -7992,7 +7992,10 @@ def confirm_booking(booking_id):
     if conn:
         try:
             cur = conn.cursor()
-            cur.execute("UPDATE bookings SET status=%s WHERE id=%s", (new_status, booking_id,))
+            cur.execute(
+                "UPDATE bookings SET status='accepted', payment_status=%s WHERE id=%s",
+                (new_pmt_status_manual, booking_id,)
+            )
             conn.commit()
             cur2 = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur2.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
@@ -8000,7 +8003,7 @@ def confirm_booking(booking_id):
             cur2.close(); cur.close(); conn.close()
             if row:
                 send_receipt_email(_row(row))
-            log.info(f"Booking #{booking_id} manually confirmed")
+            log.info(f"Booking #{booking_id} manually confirmed — {new_pmt_status_manual}")
         except Exception as e:
             log.error(f"Confirm error: {e}")
     return redirect(url_for("admin_dashboard"))
@@ -8059,12 +8062,13 @@ def record_payment(booking_id):
                 balance      = round(grand_total - new_paid, 2)
                 new_pmt_status_manual = "paid" if balance <= 0.50 else "partial"
                 cur.execute(
-                    "UPDATE bookings SET amount_paid=%s, status=%s WHERE id=%s",
-                    (new_paid, new_status, booking_id)
+                    "UPDATE bookings SET amount_paid=%s, payment_status=%s, status='accepted' WHERE id=%s",
+                    (new_paid, new_pmt_status_manual, booking_id)
                 )
                 conn.commit()
-                b["amount_paid"] = new_paid
-                b["status"]      = new_status
+                b["amount_paid"]    = new_paid
+                b["payment_status"] = new_pmt_status_manual
+                b["status"]         = "accepted"
                 send_receipt_email(b)
                 # Notify admin
                 _send_email(
@@ -8073,12 +8077,12 @@ def record_payment(booking_id):
                     f"<html><body style='font-family:sans-serif;padding:1rem'>"
                     f"<p><strong>{b.get('full_name')}</strong> — ${amount:.2f} recorded via {method}.</p>"
                     f"<p>Total paid: <strong>${new_paid:.2f}</strong> / ${grand_total:.2f} | "
-                    f"Balance: <strong>${max(balance,0):.2f}</strong> | Status: <strong>{new_status.upper()}</strong></p>"
+                    f"Balance: <strong>${max(balance,0):.2f}</strong> | Status: <strong>{new_pmt_status_manual.upper()}</strong></p>"
                     f"<p><a href='{BASE_URL}/admin/booking/{booking_id}'>View Booking</a></p>"
                     f"</body></html>",
                     f"Payment Recorded — Booking #{booking_id}: ${amount:.2f} via {method}",
                 )
-                log.info(f"Booking #{booking_id}: ${amount:.2f} recorded via {method}, status={new_status}")
+                log.info(f"Booking #{booking_id}: ${amount:.2f} recorded via {method}, payment_status={new_pmt_status_manual}")
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"Record payment error: {e}")
