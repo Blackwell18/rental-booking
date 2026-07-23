@@ -6569,7 +6569,7 @@ def _submit_inner():
             _ap = round(float(request.form.get("amount_paid") or 0), 2)
             _notes = request.form.get("notes", "").strip()
             _pst = "paid" if _st == "accepted_paid" else ("partial" if _ap > 0 else "waiting")
-            _db_st = "accepted" if _st in ("accepted_paid",) else _st
+            _db_st = "accepted" if _st in ("accepted_paid", "partial") else _st
             conn2 = get_db()
             if conn2:
                 try:
@@ -8538,7 +8538,9 @@ def new_booking():
     if request.method == "GET":
         return render_template_string(ADMIN_NEW_BOOKING_HTML,
             business_name=BUSINESS_NAME, products=get_products(),
-            google_maps_key=GOOGLE_MAPS_KEY)
+            google_maps_key=GOOGLE_MAPS_KEY,
+            exact_time_fee=EXACT_TIME_FEE,
+            error=None, form={})
     # POST — delegate to _submit_inner() which handles all pricing + DB insert
     # admin_create=1 is set in the form so _submit_inner redirects to admin booking page
     try:
