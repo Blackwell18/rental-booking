@@ -3982,232 +3982,361 @@ table{border-collapse:collapse}
 """
 
 
-ADMIN_NEW_BOOKING_HTML = """
+ADMIN_NEW_BOOKING_HTML = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="manifest" href="/admin-manifest.json"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Admin">
-  <title>New Booking — {{ business_name }}</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
+  <title>Book a Rental — {{ business_name }}</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
-    header{background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;padding:1.25rem 2rem;display:flex;justify-content:space-between;align-items:center}
-    header h1{font-size:1.2rem}
-    .container{max-width:860px;margin:0 auto;padding:1.5rem 1rem}
-    .card{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:1.5rem;margin-bottom:1.5rem}
-    .card h2{font-size:.95rem;font-weight:700;color:#2b6cb0;border-bottom:2px solid #ebf4ff;padding-bottom:.5rem;margin-bottom:1rem;text-transform:uppercase;letter-spacing:.4px}
-    .fg{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem}
-    .fg.one{grid-template-columns:1fr}
-    .fg.three{grid-template-columns:1fr 1fr 1fr}
-    label{display:block;font-size:.78rem;font-weight:600;color:#6b7280;margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.3px}
-    input,select,textarea{width:100%;border:1px solid #d1d5db;border-radius:7px;padding:.5rem .75rem;font-size:.92rem;color:#1a202c;background:white}
-    input:focus,select:focus,textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
-    textarea{resize:vertical;min-height:70px}
-    .item-row{display:grid;grid-template-columns:1fr 80px 110px 90px 36px;gap:.4rem;align-items:center;margin-bottom:.4rem}
-    .item-row input{font-size:.88rem}
-    .item-total{font-size:.88rem;font-weight:600;color:#2563eb;text-align:right;padding-right:.25rem}
-    .add-btn{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:7px;padding:.4rem .85rem;font-size:.82rem;font-weight:600;cursor:pointer;margin-top:.35rem}
-    .del-btn{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;width:32px;height:32px;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-    .subtotal-bar{display:flex;justify-content:flex-end;gap:1.5rem;font-size:.88rem;padding:.6rem .25rem;border-top:1px solid #e5e7eb;margin-top:.35rem}
-    .subtotal-bar span{font-weight:700;color:#1a202c}
-    .actions{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.5rem}
-    .btn{padding:.65rem 1.4rem;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;display:inline-block}
-    .btn-save{background:#16a34a;color:white}
-    .btn-cancel{background:#f0f4f8;color:#4a5568}
-    .col-hdr{font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.3px;padding:.1rem .1rem .4rem}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
+    header{background:linear-gradient(135deg,#1a365d 0%,#2b6cb0 100%);color:white;padding:2.5rem 1.5rem;text-align:center}
+    header h1{font-size:2rem;font-weight:700}
+    header p{margin-top:.5rem;opacity:.85;font-size:1.05rem}
+    .container{max-width:720px;margin:0 auto;padding:2rem 1rem 4rem}
+    .card{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:1.75rem;margin-bottom:1.5rem}
+    .card h2{font-size:1rem;font-weight:700;color:#2b6cb0;border-bottom:2px solid #ebf4ff;padding-bottom:.6rem;margin-bottom:1.25rem;text-transform:uppercase;letter-spacing:.5px}
+    .field{margin-bottom:1rem}
+    .field label{display:block;font-size:.85rem;font-weight:600;color:#4a5568;margin-bottom:.3rem}
+    .field input,.field select,.field textarea{width:100%;padding:.65rem .85rem;border:1.5px solid #cbd5e0;border-radius:8px;font-size:.97rem;color:#1a202c;background:#fff;transition:border-color .15s}
+    .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:#2b6cb0;box-shadow:0 0 0 3px rgba(43,108,176,.12)}
+    .field textarea{resize:vertical;min-height:80px}
+    .row{display:grid;gap:1rem;grid-template-columns:1fr 1fr}
+    .row3{display:grid;gap:1rem;grid-template-columns:2fr 1fr 1fr}
+    @media(max-width:560px){.row,.row3{grid-template-columns:1fr}}
+    .required{color:#e53e3e}
+    .section-note{font-size:.82rem;color:#718096;margin-bottom:1rem;font-style:italic}
+    .type-toggle{display:flex;gap:.75rem;margin-bottom:1rem}
+    .type-btn{flex:1;padding:.65rem;border:2px solid #cbd5e0;border-radius:8px;background:white;font-size:.9rem;font-weight:600;color:#718096;cursor:pointer;text-align:center;transition:all .15s}
+    .type-btn.active{border-color:#2b6cb0;background:#ebf4ff;color:#2b6cb0}
+    .exact-toggle{display:flex;align-items:center;gap:.75rem;padding:1rem;background:#fffaf0;border:2px solid #ed8936;border-radius:10px;cursor:pointer;margin-bottom:.75rem}
+    .exact-toggle input[type=checkbox]{width:20px;height:20px;cursor:pointer;accent-color:#2b6cb0}
+    .exact-label{flex:1}
+    .exact-label strong{display:block;font-size:.97rem;color:#1a202c}
+    .exact-label span{font-size:.82rem;color:#718096}
+    .exact-badge{background:#ed8936;color:white;padding:.2rem .6rem;border-radius:20px;font-size:.8rem;font-weight:700}
+    .product-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:.75rem;padding:.85rem 0;border-bottom:1px solid #f0f4f8}
+    .product-row:last-child{border-bottom:none}
+    .product-name{font-weight:600;font-size:.95rem}
+    .product-meta{display:flex;gap:1rem;font-size:.8rem;margin-top:.15rem}
+    .product-price{color:#718096}
+    .avail-badge{font-weight:600}
+    .avail-badge.ok{color:#38a169}
+    .avail-badge.low{color:#d69e2e}
+    .avail-badge.out{color:#e53e3e}
+    .qty-control{display:flex;align-items:center;border:1.5px solid #cbd5e0;border-radius:8px;overflow:hidden}
+    .qty-btn{background:#f7fafc;border:none;width:34px;height:36px;font-size:1.1rem;color:#2b6cb0;cursor:pointer;transition:background .12s}
+    .qty-btn:hover{background:#ebf4ff}
+    .qty-input{width:52px;border:none;border-left:1.5px solid #cbd5e0;border-right:1.5px solid #cbd5e0;text-align:center;font-size:.95rem;font-weight:600;padding:.4rem .2rem;outline:none}
+    .product-sub{text-align:right;min-width:70px;font-weight:600;color:#718096;font-size:.95rem}
+    .product-sub.has-val{color:#2b6cb0}
+    .total-bar{background:linear-gradient(135deg,#1a365d,#2b6cb0);border-radius:12px;padding:1.25rem 1.75rem;color:white;margin-bottom:1.5rem}
+    .total-row{display:flex;justify-content:space-between;padding:.2rem 0;font-size:.95rem;opacity:.85}
+    .total-row.grand{font-size:1.35rem;font-weight:700;opacity:1;border-top:1px solid rgba(255,255,255,.25);margin-top:.5rem;padding-top:.6rem}
+    .total-note{font-size:.78rem;opacity:.7;margin-top:.5rem;font-style:italic}
+    .alert{background:#fff5f5;border:1px solid #feb2b2;color:#c53030;padding:.85rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem}
+    .submit-btn{width:100%;padding:1rem;background:linear-gradient(135deg,#1a365d,#2b6cb0);color:white;border:none;border-radius:10px;font-size:1.1rem;font-weight:700;cursor:pointer;transition:opacity .15s}
+    .submit-btn:hover{opacity:.92}
+    .submit-btn:disabled{opacity:.6;cursor:not-allowed}
   </style>
-<style>
-/* ── Sidebar (shared) ── */
-.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
-.sb-overlay.show{display:block}
-.sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
-.sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
-.sb-brand img{height:1.8rem;width:auto;object-fit:contain}
-.sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
-.sb-new-btn:hover{background:#15803d}
-.sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
-.sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
-.sb-link:hover{background:#f3f4f6;color:#111827}
-.sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
-.sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
-.sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
-.page-content{margin-left:210px;min-height:100vh}
-.pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
-.pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
-.pg-back{font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap}
-.pg-back:hover{color:#111827}
-.mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
-.mobile-menu-btn:hover{background:#f3f4f6}
-@media(max-width:768px){
-  .sidebar{transform:translateX(-210px)}
-  .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
-  .page-content{margin-left:0!important}
-  .mobile-menu-btn{display:block}
-}
-</style>
 </head>
 <body>
-<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
-<aside class="sidebar" id="sidebar">
-  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
-  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
-  <nav class="sb-nav">
-    <a href="/admin/dashboard" class="sb-link active">🏠 Dashboard</a>
-    <div class="sb-divider"></div>
-    <a href="/admin/customers" class="sb-link">👥 Clients</a>
-    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
-    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
-    <a href="/admin/route" class="sb-link">🗺 Route</a>
-    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
-    <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
-  </nav>
-  <div class="sb-bottom">
-    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
-  </div>
-</aside>
-<div class="page-content">
-<div class="pg-hdr">
-  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
-  <h1>➕ New Booking</h1>
-  <a href="/admin/dashboard" class="pg-back">← Dashboard</a>
-</div>
-<div class="container">
-<form method="POST" action="/admin/booking/new" id="nbform">
-
+<header>
+  <img src="/logo.png" alt="{{ business_name }}" style="height:90px;width:auto;object-fit:contain;margin-bottom:.6rem;filter:drop-shadow(0 2px 8px rgba(0,0,0,.25))">
+  <h1>{{ business_name }}</h1>
+  <p>Request a rental quote — we'll respond quickly!</p>
+</header>
+<div class="container"><div style="margin-bottom:1rem"><a href="/admin/dashboard" style="font-size:.85rem;color:#6b7280;text-decoration:none">← Back to Dashboard</a></div>
+{% if error %}<div class="alert">{{ error }}</div>{% endif %}
+<form method="POST" action="/admin/booking/new" id="bookingForm">
+  <input type="hidden" name="admin_create" value="1">
   <div class="card">
-    <h2>Customer</h2>
-    <div class="fg">
-      <div style="position:relative">
-        <label>Full Name *</label>
-        <input name="full_name" id="full_name_input" required placeholder="Jane Smith" autocomplete="off">
-        <ul id="name-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:white;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);margin:2px 0;padding:0;list-style:none;max-height:220px;overflow-y:auto"></ul>
-      </div>
-      <div><label>Email</label><input name="email" id="nb_email" type="email" placeholder="jane@email.com"></div>
-      <div><label>Phone</label><input name="phone" id="nb_phone" placeholder="(555) 000-0000"></div>
-      <div><label>Company</label><input name="company_name" id="nb_company" placeholder="Optional"></div>
+    <h2>Your Information</h2>
+    <div class="row">
+      <div class="field"><label>Full Name <span class="required">*</span></label><input name="full_name" required placeholder="Jane Smith" value="{{ form.full_name or '' }}"></div>
+      <div class="field"><label>Company Name <span style="color:#718096;font-weight:400">(if applicable)</span></label><input name="company_name" placeholder="ABC Events LLC" value="{{ form.company_name or '' }}"></div>
     </div>
-    <input type="hidden" name="renter_street" id="nb_renter_street">
-    <input type="hidden" name="renter_city"   id="nb_renter_city">
-    <input type="hidden" name="renter_state"  id="nb_renter_state">
-    <input type="hidden" name="renter_zip"    id="nb_renter_zip">
-  </div>
-
-  <div class="card">
-    <h2>Event</h2>
-    <div class="fg">
-      <div><label>Event Start Date *</label><input name="event_start_date" type="date" required></div>
-      <div><label>Event Start Time *</label>
-        <select name="event_start_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .65rem;font-size:.95rem;background:#fff;color:#1a202c">
-          <option value="">-- Select --</option>
-          <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
-          <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
-          <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
-          <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
-          <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
-          <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
-          <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
-          <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
-          <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
-          <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
-          <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
-          <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
-          <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
-          <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
-          <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
-          <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
-          <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
-          <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
-        </select>
-      </div>
-      <div><label>Event End Date *</label><input name="event_end_date" type="date" required></div>
-      <div><label>Event End Time *</label>
-        <select name="event_end_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .65rem;font-size:.95rem;background:#fff;color:#1a202c">
-          <option value="">-- Select --</option>
-          <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
-          <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
-          <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
-          <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
-          <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
-          <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
-          <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
-          <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
-          <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
-          <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
-          <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
-          <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
-          <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
-          <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
-          <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
-          <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
-          <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
-          <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
-        </select>
-      </div>
+    <div class="field"><label>Street Address <span class="required">*</span></label><input name="renter_street" required placeholder="123 Main Street" value="{{ form.renter_street or '' }}"></div>
+    <div class="row3">
+      <div class="field"><label>City <span class="required">*</span></label><input name="renter_city" required placeholder="Hartford" value="{{ form.renter_city or '' }}"></div>
+      <div class="field"><label>State <span class="required">*</span></label><input name="renter_state" required placeholder="CT" maxlength="2" value="{{ form.renter_state or '' }}"></div>
+      <div class="field"><label>Zip <span class="required">*</span></label><input name="renter_zip" required placeholder="06101" value="{{ form.renter_zip or '' }}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Phone <span class="required">*</span></label><input name="phone" type="tel" required placeholder="(555) 000-0000" value="{{ form.phone or '' }}"></div>
+      <div class="field"><label>Email <span class="required">*</span></label><input name="email" type="email" required placeholder="jane@email.com" value="{{ form.email or '' }}"></div>
+    </div>
+    <div style="margin-top:1rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
+      <input type="checkbox" name="tax_exempt_request" id="tax_exempt_request" value="1" onchange="updateTotals()" style="width:18px;height:18px;margin-top:.15rem;accent-color:#16a34a;cursor:pointer;flex-shrink:0">
+      <label for="tax_exempt_request" style="cursor:pointer;font-size:.9rem;color:#166534;font-weight:600;line-height:1.4">
+        I have a Connecticut Tax-Exempt Certificate
+        <span style="display:block;font-weight:400;font-size:.8rem;color:#4b7c5a;margin-top:.1rem">Check this if your organization is tax-exempt. You will need to provide your certificate number to the rental office.</span>
+      </label>
     </div>
   </div>
 
   <div class="card">
-    <h2>Delivery</h2>
-    <div class="fg">
-      <div><label>Delivery Date *</label><input name="setup_date" type="date" required></div>
-      <div><label>Delivery Time</label>
-        <select name="setup_time" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .65rem;font-size:.95rem;background:#fff;color:#1a202c">
-          <option value="">-- Select --</option>
-          <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
-          <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
-          <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
-          <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
-          <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
-          <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
-          <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
-          <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
-          <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
-          <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
-          <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
-          <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
-          <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
-          <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
-          <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
-          <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
-          <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
-          <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+    <h2>Event Details</h2>
+
+    {%- set time_opts -%}
+    <option value="">-- Select --</option>
+    <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+    <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+    <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+    <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+    <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+    <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+    <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+    <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+    <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+    <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+    <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+    <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+    <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+    <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+    <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+    <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+    <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+    <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+    {%- endset -%}
+
+    <div class="row">
+      <div class="field"><label>Event Start Date <span class="required">*</span></label><input id="event_start_date" name="event_start_date" type="date" required onchange="onDateChange()" value="{{ form.event_start_date or '' }}"></div>
+      <div class="field"><label>Event Start Time <span class="required">*</span></label>
+        <select name="event_start_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+          {{ time_opts }}
         </select>
       </div>
-      <div><label>Pickup Date *</label><input name="pickup_date_display" type="date" required></div>
-      <div><label>Pickup Time</label>
-        <select name="pickup_time_display" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .65rem;font-size:.95rem;background:#fff;color:#1a202c">
-          <option value="">-- Select --</option>
-          <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
-          <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
-          <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
-          <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
-          <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
-          <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
-          <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
-          <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
-          <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
-          <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
-          <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
-          <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
-          <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
-          <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
-          <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
-          <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
-          <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
-          <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+    </div>
+    <div class="row">
+      <div class="field"><label>Event End Date <span class="required">*</span></label><input id="event_end_date" name="event_end_date" type="date" required onchange="onDateChange()" value="{{ form.event_end_date or '' }}"></div>
+      <div class="field"><label>Event End Time <span class="required">*</span></label>
+        <select name="event_end_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+          {{ time_opts }}
         </select>
       </div>
-      <div><label>Venue Type</label>
-        <select name="venue_type">
-          <option value="venue">Venue</option>
-          <option value="residential">Residential</option>
+    </div>
+    <div class="row">
+      <div class="field"><label>Setup / Delivery Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl" onchange="checkDeliveryBeforeEvent()"></div>
+      <div class="field"><label>Setup / Delivery Time <span class="required">*</span></label>
+        <select name="setup_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+          {{ time_opts }}
         </select>
       </div>
-      <div>
+    </div>
+
+    <!-- Early delivery acknowledgment — shown only when delivery date is before event date -->
+    <div id="early-delivery-notice" style="display:none;background:#fff7ed;border:2px solid #f97316;border-radius:10px;padding:1rem 1.15rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:flex-start;gap:.75rem">
+        <span style="font-size:1.5rem;line-height:1">📦</span>
+        <div style="flex:1">
+          <div style="font-weight:700;color:#c2410c;font-size:1rem;margin-bottom:.35rem">Your delivery is scheduled BEFORE your event date</div>
+          <div style="font-size:.9rem;color:#7c2d12;line-height:1.5;margin-bottom:.75rem">
+            Your event starts on <strong id="notice-event-date"></strong>, but you requested delivery on <strong id="notice-delivery-date"></strong>.
+          </div>
+          <label style="display:flex;align-items:flex-start;gap:.6rem;cursor:pointer;background:#ffedd5;border:1px solid #fb923c;border-radius:7px;padding:.65rem .85rem">
+            <input type="checkbox" id="early_delivery_ack" name="early_delivery_ack" value="1"
+              onchange="checkDeliveryAck()"
+              style="width:20px;height:20px;margin-top:.1rem;accent-color:#ea580c;flex-shrink:0;cursor:pointer">
+            <span style="font-size:.88rem;font-weight:600;color:#9a3412;line-height:1.45">
+              I understand that my rental items will be delivered on <strong id="notice-ack-date"></strong> — before my event — and I approve this early delivery.
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Venue Type <span class="required">*</span></label>
+      <div class="type-toggle">
+        <div class="type-btn active" id="btn_venue" onclick="setVenue('venue')">Venue</div>
+        <div class="type-btn" id="btn_residential" onclick="setVenue('residential')">Residential</div>
+      </div>
+      <input type="hidden" name="venue_type" id="venue_type_input" value="venue">
+    </div>
+    <div id="venue_pickup_row" class="field"><label>Latest Pickup Time at Venue <span class="required">*</span></label>
+      <select id="venue_latest_pickup" name="venue_latest_pickup" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+        {{ time_opts }}
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Event Address</h2>
+    <p class="section-note">Where will we deliver your rental items?</p>
+    <div class="field"><label>Street Address <span class="required">*</span></label><input id="event_street" name="event_street" required placeholder="456 Venue Blvd" value="{{ form.event_street or '' }}" oninput="scheduleDistanceCalc()"></div>
+    <div class="row3">
+      <div class="field"><label>City <span class="required">*</span></label><input id="event_city" name="event_city" required placeholder="Hartford" value="{{ form.event_city or '' }}" oninput="scheduleDistanceCalc()"></div>
+      <div class="field"><label>State <span class="required">*</span></label><input id="event_state" name="event_state" required placeholder="CT" maxlength="2" value="{{ form.event_state or '' }}" oninput="scheduleDistanceCalc()"></div>
+      <div class="field"><label>Zip <span class="required">*</span></label><input id="event_zip" name="event_zip" required placeholder="06101" value="{{ form.event_zip or '' }}" oninput="scheduleDistanceCalc()"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Delivery Options</h2>
+    <label class="exact-toggle">
+      <input type="checkbox" id="exact_time_cb" name="exact_time_delivery" value="yes" onchange="updateTotals();toggleExactTimes(this.checked)">
+      <div class="exact-label"><strong>Exact Time Delivery</strong><span>Guaranteed delivery at your specified setup time</span></div>
+      <span class="exact-badge">+$175</span>
+    </label>
+
+    <div id="exact_time_fields" style="display:none;margin-top:1rem;background:#fff8f0;border:1px solid #f6ad55;border-radius:10px;padding:1rem 1.1rem">
+      <p style="margin:0 0 .75rem;font-size:.88rem;color:#92400e;font-weight:600">⏰ Exact Time Details</p>
+      <div class="row">
+        <div class="field">
+          <label>Exact Delivery Time <span class="required">*</span></label>
+          <select name="exact_delivery_time" id="exact_delivery_time" style="width:100%;border:1px solid #f6ad55;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+            <option value="">-- Select delivery time --</option>
+            <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+            <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+            <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+            <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+            <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+            <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+            <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+            <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+            <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+            <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+            <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+            <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+            <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+            <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+            <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+            <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+            <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+            <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Exact Pickup Time <span class="required">*</span></label>
+          <select name="exact_pickup_time" id="exact_pickup_time" style="width:100%;border:1px solid #f6ad55;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+            <option value="">-- Select pickup time --</option>
+            <option value="06:00">6:00 AM</option><option value="06:30">6:30 AM</option>
+            <option value="07:00">7:00 AM</option><option value="07:30">7:30 AM</option>
+            <option value="08:00">8:00 AM</option><option value="08:30">8:30 AM</option>
+            <option value="09:00">9:00 AM</option><option value="09:30">9:30 AM</option>
+            <option value="10:00">10:00 AM</option><option value="10:30">10:30 AM</option>
+            <option value="11:00">11:00 AM</option><option value="11:30">11:30 AM</option>
+            <option value="12:00">12:00 PM</option><option value="12:30">12:30 PM</option>
+            <option value="13:00">1:00 PM</option><option value="13:30">1:30 PM</option>
+            <option value="14:00">2:00 PM</option><option value="14:30">2:30 PM</option>
+            <option value="15:00">3:00 PM</option><option value="15:30">3:30 PM</option>
+            <option value="16:00">4:00 PM</option><option value="16:30">4:30 PM</option>
+            <option value="17:00">5:00 PM</option><option value="17:30">5:30 PM</option>
+            <option value="18:00">6:00 PM</option><option value="18:30">6:30 PM</option>
+            <option value="19:00">7:00 PM</option><option value="19:30">7:30 PM</option>
+            <option value="20:00">8:00 PM</option><option value="20:30">8:30 PM</option>
+            <option value="21:00">9:00 PM</option><option value="21:30">9:30 PM</option>
+            <option value="22:00">10:00 PM</option><option value="22:30">10:30 PM</option>
+            <option value="23:00">11:00 PM</option><option value="23:30">11:30 PM</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    function toggleExactTimes(checked) {
+      var el = document.getElementById('exact_time_fields');
+      el.style.display = checked ? 'block' : 'none';
+      document.getElementById('exact_delivery_time').required = checked;
+      document.getElementById('exact_pickup_time').required = checked;
+    }
+    </script>
+
+    <div class="field" style="margin-top:1rem"><label>Where on the premises will items be delivered? <span class="required">*</span></label><textarea name="delivery_location" required placeholder="e.g. Through the main entrance, set up in the ballroom on the left side...">{{ form.delivery_location or '' }}</textarea></div>
+  </div>
+
+  <!-- Hidden qty inputs — submitted with form -->
+  {% for p in products %}
+  <input type="hidden" class="qty-input" id="qty_{{ p.id }}" name="qty_{{ p.id }}" value="0" data-price="{{ p.price }}" data-max="{{ p.total }}">
+  {% endfor %}
+
+  <!-- Product data for JS -->
+  <script>
+  const ALL_PRODUCTS = [
+    {% for p in products %}
+    { id:"{{ p.id }}", name:{{ p.name | tojson }}, price:{{ p.price }}, max:{{ p.total }} },
+    {% endfor %}
+  ];
+  </script>
+
+  <div class="card">
+    <h2>Select Your Items</h2>
+    <p style="color:#6b7280;font-size:.88rem;margin-bottom:1.25rem">Click a category below to browse items. Select an item to add it to your order.</p>
+
+    <!-- Category accordion dropdowns -->
+    <div id="category-dropdowns"></div>
+
+    <!-- Selected items list -->
+    <div id="selected-items-wrap" style="display:none;margin-top:1.25rem;border-top:2px solid #e5e7eb;padding-top:1rem">
+      <div style="font-weight:700;font-size:.95rem;color:#1a202c;margin-bottom:.75rem">🛒 Your Items</div>
+      <div id="marquee-tier-notice" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.6rem .9rem;margin-bottom:.75rem;font-size:.88rem;color:#1e40af"></div>
+      <div id="selected-items-list"></div>
+    </div>
+  </div>
+
+  <!-- Stackable Marquee Option — shown only when marquee items are in cart -->
+  <div id="stackable-section" style="display:none;margin:.75rem 0;padding:1.1rem 1.25rem;background:#faf5ff;border:1.5px solid #d8b4fe;border-radius:10px">
+    <div style="font-weight:700;font-size:.95rem;color:#6b21a8;margin-bottom:.5rem">🔡 Stackable Marquee</div>
+    <p style="font-size:.88rem;color:#4c1d95;margin-bottom:.85rem;line-height:1.6">
+      Would you like your marquee letters/numbers to be <strong>stackable</strong> (stacked on top of each other)?
+      <span style="background:#ede9fe;color:#7c3aed;border-radius:4px;padding:.1rem .45rem;font-size:.8rem;font-weight:700;margin-left:.3rem">+$75 fee</span>
+    </p>
+    <div style="display:flex;gap:1rem;margin-bottom:.85rem">
+      <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-weight:600;color:#1a202c">
+        <input type="radio" name="stackable_choice" value="yes" onchange="onStackableChange()"
+          style="accent-color:#7c3aed;width:16px;height:16px"> Yes, I want stackable (+$75)
+      </label>
+      <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-weight:600;color:#1a202c">
+        <input type="radio" name="stackable_choice" value="no" onchange="onStackableChange()" checked
+          style="accent-color:#7c3aed;width:16px;height:16px"> No thanks
+      </label>
+    </div>
+    <div id="stackable-top-wrap" style="display:none">
+      <label style="font-size:.88rem;font-weight:600;color:#1a202c;display:block;margin-bottom:.35rem">
+        Which letters or numbers go on top? <span style="color:#dc2626">*</span>
+      </label>
+      <input type="text" id="stackable_top_display" placeholder="e.g. A, E, O — or 2, 5"
+        oninput="document.getElementById('stackable_top_input').value=this.value"
+        style="width:100%;border:1.5px solid #c4b5fd;border-radius:8px;padding:.5rem .75rem;font-size:.9rem;box-sizing:border-box">
+    </div>
+  </div>
+  <input type="hidden" name="stackable" id="stackable_input" value="no">
+  <input type="hidden" name="stackable_top" id="stackable_top_input" value="">
+
+  <input type="hidden" name="late_night_fee" id="late_night_fee_input" value="0">
+  <div id="late_night_notice" style="display:none;margin:.75rem 0;padding:.75rem 1rem;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:8px;font-size:.88rem;color:#92400e">
+    <strong>⏰ Late Night / Early Morning Fee: $125.00</strong><br>
+    Your pickup or dropoff time falls between 11:30 PM – 7:00 AM. A $125 fee applies for pickups or deliveries outside of standard hours.
+  </div>
+  <div class="total-bar">
+    <div class="total-row"><span>Items Subtotal</span><span id="t_items">$0.00</span></div>
+    <div class="total-row"><span>Exact Time Delivery</span><span id="t_exact">-</span></div>
+    <div class="total-row" id="t_stackable_row" style="display:none"><span>Stackable Marquee</span><span id="t_stackable">$75.00</span></div>
+    <div class="total-row" id="t_latenight_row" style="display:none"><span>Late Night / Early Morning Fee</span><span id="t_latenight">$125.00</span></div>
+    <div class="total-row"><span>Delivery Fee</span><span id="t_delivery">Calculated after review</span></div>
+    <div class="total-row"><span>CT Sales Tax (6.35%)</span><span id="t_tax">$0.00</span></div>
+    <div class="total-row grand"><span>Estimated Total</span><span id="t_grand">$0.00</span></div>
+    <p class="total-note">Live estimate — delivery fee calculated from event address.</p>
+  </div>
+
+
+
+    <div class="card" style="margin-bottom:1.25rem">
+    <h2 style="margin-bottom:.75rem;color:#1e40af">⚙️ Booking Status</h2>
+    <div class="row">
+      <div class="field">
         <label>Status</label>
-        <select name="status" id="nb_status" onchange="onStatusChange()">
+        <select name="status" style="width:100%;padding:.6rem .75rem;border:1px solid #e2e8f0;border-radius:8px;font-size:.95rem">
           <option value="accepted">Accepted — Awaiting Payment</option>
           <option value="accepted_paid">Accepted — Paid in Full</option>
           <option value="partial">Accepted — Partial Payment</option>
@@ -4215,278 +4344,451 @@ ADMIN_NEW_BOOKING_HTML = """
           <option value="pending">Pending Review</option>
         </select>
       </div>
-    </div>
-    <div id="partial_pay_row" style="display:none;margin-top:.75rem;padding:.75rem 1rem;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px">
-      <label style="font-weight:700;color:#7c3aed;font-size:.85rem;display:block;margin-bottom:.4rem">💳 How much did they pay?</label>
-      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:.4rem">
-          <span style="font-weight:600">$</span>
-          <input type="number" step="0.01" min="0" placeholder="0.00" id="partial_amt_input"
-                 style="width:130px;padding:.4rem .6rem;border:1px solid #c4b5fd;border-radius:6px;font-size:1rem"
-                 oninput="syncPartialAmt()">
-        </div>
-        <span id="partial_balance_note" style="font-size:.85rem;color:#7c3aed;font-weight:600"></span>
+      <div class="field">
+        <label>Amount Already Paid ($)</label>
+        <input type="number" name="amount_paid" step="0.01" min="0" placeholder="0.00" value="0"
+               style="width:100%;padding:.6rem .75rem;border:1px solid #e2e8f0;border-radius:8px;font-size:.95rem">
       </div>
     </div>
-    <div class="fg" style="margin-top:.75rem">
-      <div><label>Event Street</label><input name="event_street" id="nb_street" placeholder="456 Venue Blvd"></div>
-      <div><label>Event City</label><input name="event_city" id="nb_city" placeholder="Hartford"></div>
-      <div><label>State</label><input name="event_state" id="nb_state" placeholder="CT" style="width:80px"></div>
-      <div><label>ZIP</label><input name="event_zip" id="nb_zip" placeholder="06101" style="width:100px"></div>
+    <div class="field" style="margin-top:.5rem">
+      <label>Admin Notes (private)</label>
+      <textarea name="notes" rows="2" placeholder="Phone call notes, special instructions…"
+        style="width:100%;padding:.6rem .75rem;border:1px solid #e2e8f0;border-radius:8px;font-size:.95rem;resize:vertical"></textarea>
     </div>
-    <input type="hidden" name="distance_miles" id="nb_distance_miles">
-    <div id="del_fee_note" style="font-size:.8rem;color:#6b7280;margin-top:.4rem"></div>
   </div>
-
-  <div class="card">
-    <h2>Items</h2>
-    <datalist id="inv-list">
-      {% for p in products %}<option value="{{ p.name }}">{% endfor %}
-    </datalist>
-    <script>
-    const INV_PRICES = { {% for p in products %}"{{ p.name }}": {{ p.price }},{% endfor %} };
-    </script>
-    <div style="display:grid;grid-template-columns:1fr 80px 110px 90px 36px;gap:.4rem;padding-bottom:.25rem">
-      <div class="col-hdr">Item Name</div>
-      <div class="col-hdr" style="text-align:center">Qty</div>
-      <div class="col-hdr" style="text-align:center">Unit Price</div>
-      <div class="col-hdr" style="text-align:right">Total</div>
-      <div></div>
-    </div>
-    <div id="items-wrap"></div>
-    <button type="button" class="add-btn" onclick="addRow()">+ Add Item</button>
-    <div class="subtotal-bar">
-      Items Subtotal: <span id="items-sub">$0.00</span>
-    </div>
-    <input type="hidden" name="items_json" id="items_json_field">
-    <input type="hidden" name="items_subtotal" id="items_subtotal_field">
-  </div>
-
-  <div class="card">
-    <h2>Financials</h2>
-    <div class="fg three">
-      <div><label>Delivery Fee ($)</label><input name="delivery_fee" type="number" step="0.01" value="0" id="del_fee" oninput="recalc()"></div>
-      <div><label>CT Sales Tax (6.35%)</label><input name="tax_amount" type="number" step="0.01" id="tax_amt" readonly style="background:#f9fafb"></div>
-      <div><label>Grand Total ($)</label><input name="grand_total" type="number" step="0.01" id="grand_total" style="font-weight:700;background:#f0fff4" readonly></div>
-      <div><label>Amount Paid ($)</label><input name="amount_paid" type="number" step="0.01" value="0" id="amt_paid" oninput="recalc()"></div>
-      <div><label>Balance Due</label><input type="text" id="bal_due" readonly style="background:#fff5f5;font-weight:700;color:#dc2626"></div>
-      <div><label>Tax Exempt?</label>
-        <select name="tax_exempt" onchange="recalc()">
-          <option value="0">No — Apply 6.35% CT Tax</option>
-          <option value="1">Yes — Tax Exempt</option>
-        </select>
-      </div>
-    </div>
-    <input type="hidden" name="tax_rate" value="0.0635">
-  </div>
-
-  <div class="card">
-    <h2>Notes</h2>
-    <div class="fg one"><textarea name="notes" placeholder="Source, special instructions, Booqable reference #, etc."></textarea></div>
-  </div>
-
-  <div class="actions">
-    <button type="submit" class="btn btn-save" onclick="prepSubmit()">💾 Create Booking</button>
-    <a href="/admin/dashboard" class="btn btn-cancel">Cancel</a>
-  </div>
+  <button type="submit" class="submit-btn" id="submitBtn" style="background:linear-gradient(135deg,#1e40af,#2563eb)">➕ Create Booking</button>
 </form>
 </div>
-
 <script>
-let rowCount = 0;
-
-function addRow(name='', qty=1, price=0) {
-  rowCount++;
-  const wrap = document.getElementById('items-wrap');
-  const div = document.createElement('div');
-  div.className = 'item-row';
-  div.id = 'row' + rowCount;
-  const rc = rowCount;
-  div.innerHTML = `
-    <input type="text" list="inv-list" placeholder="Type item name…" id="rn${rc}" value="${name}" oninput="onNameChange(${rc})">
-    <input type="number" min="1" value="${qty}" id="rq${rc}" oninput="onQtyChange(${rc})" style="text-align:center">
-    <input type="number" step="0.01" value="${price.toFixed(2)}" id="rp${rc}" oninput="recalc()">
-    <div class="item-total" id="rt${rc}">$0.00</div>
-    <button type="button" class="del-btn" onclick="delRow(${rc})">×</button>
-  `;
-  wrap.appendChild(div);
-  recalc();
+const EXACT_FEE = {{ exact_time_fee }};
+const LATE_NIGHT_FEE = 125;
+const CT_TAX_RATE = 0.0635;
+function isLateNight(timeStr){
+  if(!timeStr) return false;
+  const [h,m]=timeStr.split(':').map(Number);
+  const mins=h*60+m;
+  return mins>=1410||mins<420;
+}
+function checkLateNightFee(){
+  const endTime=document.querySelector('[name="event_end_time"]').value;
+  const late=isLateNight(endTime);
+  document.getElementById('late_night_notice').style.display=late?'block':'none';
+  document.getElementById('t_latenight_row').style.display=late?'flex':'none';
+  document.getElementById('late_night_fee_input').value=late?LATE_NIGHT_FEE:0;
+  return late?LATE_NIGHT_FEE:0;
 }
 
-function onNameChange(rc) {
-  const name = document.getElementById('rn'+rc).value;
-  if (INV_PRICES[name] !== undefined) {
-    document.getElementById('rp'+rc).value = INV_PRICES[name].toFixed(2);
-  }
-  recalc();
+// ── Marquee Tier Pricing ──────────────────────────────────────────
+const MARQUEE_NUMBER_TIERS = [
+  { count:1, total:80 },
+  { count:2, total:150 },
+  { count:3, total:215 },
+  { count:4, total:275 },
+];
+function getMarqueeNumberTotal(n){
+  if(n<=0) return 0;
+  const t=MARQUEE_NUMBER_TIERS.find(x=>x.count===n);
+  if(t) return t.total;
+  return 275+(n-4)*55;
+}
+const MARQUEE_LETTER_TIERS = [
+  { count:1, total:85 },
+  { count:2, total:160 },
+  { count:3, total:225 },
+  { count:4, total:285 },
+];
+function getMarqueeLetterTotal(n){
+  if(n<=0) return 0;
+  const t=MARQUEE_LETTER_TIERS.find(x=>x.count===n);
+  if(t) return t.total;
+  return 285+(n-4)*55;
+}
+function isMarqueeNumber(name){ return /^marquee\s+#?\d/i.test(name); }
+function isMarqueeLetter(name){ return /^marquee\s+[a-z]$/i.test(name); }
+
+// ── Item Categories ───────────────────────────────────────────────
+const ITEM_CATEGORIES = [
+  { label:"🪑 Chairs",           keywords:["chair","stool","bench","seat","chiavari"] },
+  { label:"🪣 Tables",           keywords:["table","tablecloth","linen","cloth","runner","overlay","skirt"] },
+  { label:"🔢 Marquee Numbers",  keywords:["marquee number"] },
+  { label:"🔤 Marquee Letters",  keywords:["marquee letter"] },
+  { label:"💡 Lighting",         keywords:["light","lamp","led","glow","neon","bulb","lantern","fairy","chandelier","uplighting"] },
+  { label:"🎭 Backdrops & Décor",keywords:["backdrop","banner","balloon","arch","flower","floral","decor","sign","drape","curtain","pillar","column","centerpiece","vase","frame","wall"] },
+  { label:"🎪 Entertainment",    keywords:["bounce","slide","game","popcorn","cotton candy","machine","photo booth","casino","carnival","inflatable"] },
+  { label:"⛺ Tents & Canopies", keywords:["tent","canopy","pergola","gazebo","umbrella"] },
+];
+function getCat(name){
+  const n=name.trim();
+  // Marquee Letter: "Marquee A", "Marquee B", etc. — marquee followed by a single letter
+  if(/^marquee\s+[a-zA-Z]$/i.test(n) || /marquee\s+[a-zA-Z]\s*$/i.test(n)) return "🔤 Marquee Letters";
+  // Marquee Number: "Marquee #5", "Marquee 3", etc. — marquee followed by # or digit
+  if(/marquee\s+#?\d/i.test(n)) return "🔢 Marquee Numbers";
+  const nl=n.toLowerCase();
+  for(const c of ITEM_CATEGORIES){ if(c.keywords.some(k=>nl.includes(k))) return c.label; }
+  return "📦 Other";
 }
 
-function onQtyChange(rc) { recalc(); }
-
-function delRow(rc) {
-  const el = document.getElementById('row'+rc);
-  if (el) el.remove();
-  recalc();
-}
-
-function recalc() {
-  let sub = 0;
-  document.querySelectorAll('.item-row').forEach(row => {
-    const rc = row.id.replace('row','');
-    const qty = parseFloat(document.getElementById('rq'+rc)?.value || 0);
-    const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
-    const tot = qty * price;
-    sub += tot;
-    const totEl = document.getElementById('rt'+rc);
-    if (totEl) totEl.textContent = '$' + tot.toFixed(2);
+// ── Build Category Accordion Dropdowns ───────────────────────────
+function buildDropdowns(){
+  // Group products by category
+  const groups={};
+  ALL_PRODUCTS.forEach(p=>{
+    const cat=getCat(p.name);
+    if(!groups[cat]) groups[cat]=[];
+    groups[cat].push(p);
   });
-  document.getElementById('items-sub').textContent = '$' + sub.toFixed(2);
-  document.getElementById('items_subtotal_field').value = sub.toFixed(2);
-  const delFee = parseFloat(document.getElementById('del_fee').value || 0);
-  const taxExempt = document.querySelector('[name=tax_exempt]').value === '1';
-  const taxable = sub + delFee;
-  const tax = taxExempt ? 0 : Math.round(taxable * 0.0635 * 100) / 100;
-  document.getElementById('tax_amt').value = tax.toFixed(2);
-  const grand = taxable + tax;
-  document.getElementById('grand_total').value = grand.toFixed(2);
-  const paid = parseFloat(document.getElementById('amt_paid').value || 0);
-  const bal = Math.max(0, grand - paid);
-  document.getElementById('bal_due').value = '$' + bal.toFixed(2);
-}
-
-function prepSubmit() {
-  const items = [];
-  document.querySelectorAll('.item-row').forEach(row => {
-    const rc = row.id.replace('row','');
-    const name = (document.getElementById('rn'+rc)?.value || '').trim();
-    const qty = parseInt(document.getElementById('rq'+rc)?.value || 0);
-    const price = parseFloat(document.getElementById('rp'+rc)?.value || 0);
-    if (name && qty > 0) items.push({name, qty, unit_price: price, total: Math.round(qty*price*100)/100});
+  const wrap=document.getElementById('category-dropdowns');
+  wrap.innerHTML='';
+  const CAT_ORDER=['🪑 Chairs','🪣 Tables','🔤 Marquee Letters','🔢 Marquee Numbers'];
+  const sorted=Object.entries(groups).sort(([a],[b])=>{
+    if(a==='📦 Other') return 1;
+    if(b==='📦 Other') return -1;
+    const ai=CAT_ORDER.indexOf(a), bi=CAT_ORDER.indexOf(b);
+    if(ai>=0&&bi>=0) return ai-bi;
+    if(ai>=0) return -1;
+    if(bi>=0) return 1;
+    return a.localeCompare(b);
   });
-  document.getElementById('items_json_field').value = JSON.stringify(items);
-  // un-readonly grand_total and tax so they submit
-  document.getElementById('grand_total').removeAttribute('readonly');
-  document.getElementById('tax_amt').removeAttribute('readonly');
+  sorted.forEach(([cat,items])=>{
+    const sec=document.createElement('div');
+    sec.style.cssText='border:1px solid #e5e7eb;border-radius:8px;margin-bottom:.5rem;overflow:hidden';
+    sec.innerHTML=`
+      <button type="button" onclick="toggleCat(this)"
+        style="width:100%;text-align:left;background:#f9fafb;border:none;padding:.75rem 1rem;font-size:.95rem;font-weight:700;color:#1a202c;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+        <span>${cat} <span style="font-size:.8rem;font-weight:400;color:#9ca3af">(${items.length} item${items.length!==1?'s':''})</span></span>
+        <span class="chev" style="transition:transform .2s;font-size:.8rem">▼</span>
+      </button>
+      <div class="cat-body" style="display:none;padding:.75rem 1rem;background:white">
+        ${cat==='🔢 Marquee Numbers'?`<div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:.6rem .9rem;margin-bottom:.75rem;font-size:.83rem;color:#713f12">
+          <strong>📋 Tier Pricing:</strong> 1 for $80 &nbsp;·&nbsp; 2 for $150 &nbsp;·&nbsp; 3 for $215 &nbsp;·&nbsp; 4 for $275 &nbsp;·&nbsp; 5+ = $275 + $55 each additional
+        </div>`:''}
+        ${cat==='🔤 Marquee Letters'?`<div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:.6rem .9rem;margin-bottom:.75rem;font-size:.83rem;color:#713f12">
+          <strong>📋 Tier Pricing:</strong> 1 for $85 &nbsp;·&nbsp; 2 for $160 &nbsp;·&nbsp; 3 for $225 &nbsp;·&nbsp; 4 for $285 &nbsp;·&nbsp; 5+ = $285 + $55 each additional
+        </div>`:''}
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+          ${items.map(p=>`
+            <button type="button" onclick="addToCart('${p.id}')"
+              data-id="${p.id}"
+              style="background:#eff6ff;color:#1d4ed8;border:1.5px solid #bfdbfe;border-radius:20px;padding:.35rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .15s"
+              onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+              ${p.name} — $${p.price.toFixed(2)}
+            </button>`).join('')}
+        </div>
+      </div>`;
+    wrap.appendChild(sec);
+  });
+}
+function toggleCat(btn){
+  const body=btn.nextElementSibling;
+  const open=body.style.display==='block';
+  body.style.display=open?'none':'block';
+  btn.querySelector('.chev').style.transform=open?'':'rotate(180deg)';
+  btn.style.background=open?'#f9fafb':'#eff6ff';
 }
 
-// Start with two blank rows
-addRow(); addRow();
-
-// ── Partial payment toggle ───────────────────────────────────────────────────
-function onStatusChange() {
-  const status = document.getElementById('nb_status').value;
-  const row = document.getElementById('partial_pay_row');
-  row.style.display = (status === 'partial' || payment_status === 'partial') ? 'block' : 'none';
-  if (status !== 'partial') {
-    document.getElementById('amt_paid').value = '0';
-    recalc();
+// ── Cart ──────────────────────────────────────────────────────────
+const cart={};  // id -> qty
+function addToCart(id){
+  const p=ALL_PRODUCTS.find(x=>x.id===id);
+  if(!p) return;
+  if(cart[id]){ setQty(id, cart[id]+1); }
+  else { cart[id]=1; renderCart(); }
+  setHiddenQty(id, cart[id]);
+  updateTotals();
+  // Highlight the button
+  const btn=document.querySelector(`button[data-id="${id}"]`);
+  if(btn){ btn.style.background='#bbf7d0'; btn.style.borderColor='#4ade80'; btn.style.color='#166534';
+    setTimeout(()=>{ btn.style.background='#eff6ff'; btn.style.borderColor='#bfdbfe'; btn.style.color='#1d4ed8'; },600); }
+}
+function setQty(id, val){
+  const p=ALL_PRODUCTS.find(x=>x.id===id);
+  if(!p) return;
+  const v=Math.max(0, val);
+  if(v===0){ delete cart[id]; }
+  else { cart[id]=v; }
+  const inp=document.getElementById('cart-qty-'+id);
+  if(inp) inp.value=v===0?'':v;
+  setHiddenQty(id, v);
+  renderCart();
+  updateTotals();
+}
+function setHiddenQty(id, val){
+  const h=document.getElementById('qty_'+id);
+  if(h) h.value=val;
+}
+function removeFromCart(id){
+  delete cart[id];
+  setHiddenQty(id,0);
+  renderCart();
+  updateTotals();
+}
+const STACKABLE_FEE = 75;
+function hasMarqueeInCart(){
+  return Object.keys(cart).some(id=>{
+    const p=ALL_PRODUCTS.find(x=>x.id===id);
+    return p && (isMarqueeLetter(p.name)||isMarqueeNumber(p.name));
+  });
+}
+function onStackableChange(){
+  const sel=document.querySelector('input[name="stackable_choice"]:checked');
+  const yes=sel&&sel.value==='yes';
+  document.getElementById('stackable_input').value=yes?'yes':'no';
+  document.getElementById('stackable-top-wrap').style.display=yes?'block':'none';
+  if(!yes){ document.getElementById('stackable_top_input').value=''; const d=document.getElementById('stackable_top_display'); if(d) d.value=''; }
+  updateTotals();
+}
+function renderCart(){
+  const list=document.getElementById('selected-items-list');
+  const wrap=document.getElementById('selected-items-wrap');
+  const ids=Object.keys(cart);
+  if(ids.length===0){
+    wrap.style.display='none'; list.innerHTML='';
+    // Hide stackable section and reset when cart is empty
+    const ss=document.getElementById('stackable-section');
+    if(ss) ss.style.display='none';
+    document.getElementById('stackable_input').value='no';
+    const noRadio=document.querySelector('input[name="stackable_choice"][value="no"]');
+    if(noRadio){ noRadio.checked=true; }
+    document.getElementById('stackable-top-wrap').style.display='none';
+    return;
+  }
+  wrap.style.display='block';
+  // Show stackable section only when marquee items are in cart
+  const ss=document.getElementById('stackable-section');
+  if(ss) ss.style.display=hasMarqueeInCart()?'block':'none';
+  if(!hasMarqueeInCart()){
+    document.getElementById('stackable_input').value='no';
+    const noRadio=document.querySelector('input[name="stackable_choice"][value="no"]');
+    if(noRadio){ noRadio.checked=true; }
+    document.getElementById('stackable-top-wrap').style.display='none';
+  }
+  // Calculate total marquee numbers for proration
+  let mnCount=0, mlCount=0;
+  ids.forEach(id=>{ const p=ALL_PRODUCTS.find(x=>x.id===id); if(!p) return;
+    if(isMarqueeNumber(p.name)) mnCount+=cart[id]||0;
+    else if(isMarqueeLetter(p.name)) mlCount+=cart[id]||0;
+  });
+  const mnTierTotal=getMarqueeNumberTotal(mnCount);
+  const mlTierTotal=getMarqueeLetterTotal(mlCount);
+  const mnUnitPrice=mnCount>0?(mnTierTotal/mnCount):0;
+  const mlUnitPrice=mlCount>0?(mlTierTotal/mlCount):0;
+  list.innerHTML=ids.map(id=>{
+    const p=ALL_PRODUCTS.find(x=>x.id===id);
+    const q=cart[id]||1;
+    const isMN=isMarqueeNumber(p.name);
+    const isML=isMarqueeLetter(p.name);
+    const unitPrice=isMN?mnUnitPrice:isML?mlUnitPrice:p.price;
+    const lineTotal=(unitPrice*q).toFixed(2);
+    const tierTag=(isMN||isML)?` <span style="font-size:.75rem;color:#2563eb;font-weight:600">(tier)</span>`:'';
+    const unitLabel=`$${unitPrice.toFixed(2)} ea${tierTag}`;
+    return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem .5rem;border-bottom:1px solid #f3f4f6">
+      <span style="flex:1;font-size:.92rem;font-weight:600;color:#1a202c">${p.name}</span>
+      <span style="font-size:.82rem;color:#6b7280;white-space:nowrap">${unitLabel}</span>
+      <div style="display:flex;align-items:center;gap:.3rem">
+        <button type="button" onclick="setQty('${id}',${q-1})"
+          style="width:28px;height:28px;border:1px solid #d1d5db;border-radius:6px;background:white;font-size:1rem;cursor:pointer;line-height:1">−</button>
+        <input id="cart-qty-${id}" type="number" value="${q}" min="1" max="9999"
+          onchange="setQty('${id}',parseInt(this.value)||1)"
+          style="width:44px;text-align:center;border:1px solid #d1d5db;border-radius:6px;padding:.2rem;font-size:.9rem;font-weight:700">
+        <button type="button" onclick="setQty('${id}',${q+1})"
+          style="width:28px;height:28px;border:1px solid #d1d5db;border-radius:6px;background:white;font-size:1rem;cursor:pointer;line-height:1">+</button>
+      </div>
+      <span style="font-size:.9rem;font-weight:700;color:#2563eb;min-width:52px;text-align:right">$${lineTotal}</span>
+      <button type="button" onclick="removeFromCart('${id}')"
+        style="background:none;border:none;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.1rem .3rem" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
+function updateTotals(){
+  let regularSub=0, mnCount=0, mlCount=0;
+  ALL_PRODUCTS.forEach(p=>{
+    const qty=cart[p.id]||0;
+    if(!qty) return;
+    if(isMarqueeNumber(p.name)) mnCount+=qty;
+    else if(isMarqueeLetter(p.name)) mlCount+=qty;
+    else regularSub+=qty*p.price;
+  });
+  const mnSub=getMarqueeNumberTotal(mnCount);
+  const mlSub=getMarqueeLetterTotal(mlCount);
+  const sub=regularSub+mnSub+mlSub;
+  // Update tier notices in cart
+  const tierEl=document.getElementById('marquee-tier-notice');
+  if(tierEl){
+    let html='';
+    if(mnCount>0){
+      const nextN=MARQUEE_NUMBER_TIERS.find(t=>t.count===mnCount+1);
+      const savN=nextN?` <span style="color:#16a34a;font-size:.82rem">· Add 1 more for $${nextN.total} total</span>`:'';
+      html+=`🔢 <strong>${mnCount} Marquee Number${mnCount!==1?'s':''}</strong> — Tier Price: <strong>$${mnSub.toFixed(2)}</strong>${savN}<br>`;
+    }
+    if(mlCount>0){
+      const nextL=MARQUEE_LETTER_TIERS.find(t=>t.count===mlCount+1);
+      const savL=nextL?` <span style="color:#16a34a;font-size:.82rem">· Add 1 more for $${nextL.total} total</span>`:'';
+      html+=`🔤 <strong>${mlCount} Marquee Letter${mlCount!==1?'s':''}</strong> — Tier Price: <strong>$${mlSub.toFixed(2)}</strong>${savL}`;
+    }
+    tierEl.innerHTML=html;
+    tierEl.style.display=(mnCount>0||mlCount>0)?'block':'none';
+  }
+  const exactCb=document.getElementById('exact_time_cb');
+  const ef=exactCb&&exactCb.checked?EXACT_FEE:0;
+  const lf=checkLateNightFee();
+  const stackableSel=document.querySelector('input[name="stackable_choice"]:checked');
+  const sf=(stackableSel&&stackableSel.value==='yes'&&hasMarqueeInCart())?STACKABLE_FEE:0;
+  const stackRow=document.getElementById('t_stackable_row');
+  if(stackRow) stackRow.style.display=sf>0?'flex':'none';
+  const exemptCb=document.getElementById('tax_exempt_request');
+  const exempt=exemptCb&&exemptCb.checked;
+  const df=typeof _calcDeliveryFee!=='undefined'?_calcDeliveryFee:0;
+  const tax=exempt?0:(sub+ef+sf+lf+df)*CT_TAX_RATE;
+  const taxEl=document.getElementById('t_tax');
+  if(taxEl){ taxEl.textContent='$'+tax.toFixed(2); taxEl.style.color=exempt?'#16a34a':'';
+    const lbl=taxEl.previousElementSibling; if(lbl) lbl.textContent=exempt?'CT Sales Tax (EXEMPT)':'CT Sales Tax (6.35%)'; }
+  document.getElementById('t_items').textContent='$'+sub.toFixed(2);
+  document.getElementById('t_exact').textContent=ef>0?'$'+ef.toFixed(2):'-';
+  document.getElementById('t_grand').textContent='$'+(sub+ef+sf+lf+df+tax).toFixed(2)+'+';
+}
+document.addEventListener('DOMContentLoaded', buildDropdowns);
+function setVenue(type){document.getElementById('venue_type_input').value=type;document.getElementById('btn_venue').classList.toggle('active',type==='venue');document.getElementById('btn_residential').classList.toggle('active',type==='residential');const row=document.getElementById('venue_pickup_row');const inp=document.getElementById('venue_latest_pickup');row.style.display=type==='venue'?'block':'none';inp.required=type==='venue';}
+setVenue('venue');
+function onDateChange(){const start=document.getElementById('event_start_date').value;const end=document.getElementById('event_end_date').value;if(!start||!end||end<start)return;fetch('/availability?start='+start+'&end='+end).then(r=>r.json()).then(data=>{ALL_PRODUCTS.forEach(p=>{if(data[p.id]!==undefined){p.max=data[p.id];}});updateTotals();}).catch(()=>{});checkDeliveryBeforeEvent();}
+function fmtDateNice(d){if(!d)return'';const p=d.split('-');if(p.length!==3)return d;const months=['January','February','March','April','May','June','July','August','September','October','November','December'];return months[parseInt(p[1],10)-1]+' '+parseInt(p[2],10)+', '+p[0];}
+function checkDeliveryBeforeEvent(){
+  const ed=document.getElementById('event_start_date').value;
+  const sd=document.getElementById('setupDateEl').value;
+  const notice=document.getElementById('early-delivery-notice');
+  const ack=document.getElementById('early_delivery_ack');
+  if(!notice)return;
+  if(sd&&ed&&sd<ed){
+    document.getElementById('notice-event-date').textContent=fmtDateNice(ed);
+    document.getElementById('notice-delivery-date').textContent=fmtDateNice(sd);
+    document.getElementById('notice-ack-date').textContent=fmtDateNice(sd);
+    // Calculate days before
+    const diff=Math.round((new Date(ed)-new Date(sd))/(1000*60*60*24));
+    document.getElementById('notice-days-before').textContent=diff===1?'1 day':diff+' days';
+    notice.style.display='';
+  } else {
+    notice.style.display='none';
+    if(ack)ack.checked=false;
   }
 }
+function checkDeliveryAck(){
+  // no-op, submit handler checks state
+}
+let distTimer;
+let _calcDeliveryFee=0;
+function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';_calcDeliveryFee=d.fee;updateTotals();}).catch(()=>{});}},800);}
+// ── Date validation ───────────────────────────────────────────────────────
+const today=new Date().toISOString().split('T')[0];
+const startDateEl = document.getElementById('event_start_date');
+const endDateEl   = document.getElementById('event_end_date');
+const startTimeEl = document.querySelector('[name="event_start_time"]');
+const endTimeEl   = document.querySelector('[name="event_end_time"]');
+const setupTimeEl = document.querySelector('[name="setup_time"]');
 
-function syncPartialAmt() {
-  const val = parseFloat(document.getElementById('partial_amt_input').value) || 0;
-  document.getElementById('amt_paid').value = val.toFixed(2);
-  recalc();
-  const grand = parseFloat(document.getElementById('grand_total').value) || 0;
-  const bal = Math.max(0, grand - val);
-  const noteEl = document.getElementById('partial_balance_note');
-  if (grand > 0) {
-    noteEl.textContent = `Balance remaining: $${bal.toFixed(2)}`;
-    noteEl.style.color = bal > 0 ? '#7c3aed' : '#16a34a';
+startDateEl.min = today;
+endDateEl.min   = today;
+
+// When start date changes, end date must be >= start date
+startDateEl.addEventListener('change', function() {
+  endDateEl.min = this.value;
+  if (endDateEl.value && endDateEl.value < this.value) {
+    endDateEl.value = this.value;
   }
+  onDateChange();
+});
+
+endDateEl.addEventListener('change', function() {
+  if (this.value < startDateEl.value) {
+    this.value = startDateEl.value;
+    showTimeError('End date cannot be before start date.');
+  }
+  onDateChange();
+});
+
+// When start time changes:
+//   - end time rule only applies if start date == end date (same-day event)
+//   - delivery (setup) time must always be before start time (delivery is always same day as start)
+startTimeEl.addEventListener('change', function() {
+  const sameDay = startDateEl.value && endDateEl.value && startDateEl.value === endDateEl.value;
+  if (sameDay && endTimeEl.value && endTimeEl.value <= this.value) {
+    endTimeEl.value = '';
+    showTimeError('Event end time must be after start time.');
+  }
+  if (setupTimeEl.value && setupTimeEl.value >= this.value) {
+    setupTimeEl.value = '';
+    showTimeError('Setup time must be before event start time.');
+  }
+});
+
+endTimeEl.addEventListener('change', function() {
+  const sameDay = startDateEl.value && endDateEl.value && startDateEl.value === endDateEl.value;
+  if (sameDay && startTimeEl.value && this.value <= startTimeEl.value) {
+    this.value = '';
+    showTimeError('Event end time must be after the start time.');
+  }
+  updateTotals();
+});
+
+setupTimeEl.addEventListener('change', function() {
+  const setupDate = document.getElementById('setupDateEl');
+  const sameDay = setupDate && setupDate.value && startDateEl.value && setupDate.value === startDateEl.value;
+  if (sameDay && startTimeEl.value && this.value >= startTimeEl.value) {
+    this.value = '';
+    showTimeError('Setup / delivery time must be before the event start time when delivery is on the same day.');
+  }
+});
+
+function showTimeError(msg) {
+  let el = document.getElementById('time_error');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'time_error';
+    el.style.cssText = 'background:#fff5f5;border:1px solid #feb2b2;color:#c53030;padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem';
+    document.getElementById('submitBtn').before(el);
+  }
+  el.textContent = msg;
+  setTimeout(() => { if (el) el.textContent = ''; }, 4000);
 }
 
-// ── Delivery fee auto-calculate ──────────────────────────────────────────────
-(function() {
-  const street = document.getElementById('nb_street');
-  const city   = document.getElementById('nb_city');
-  const state  = document.getElementById('nb_state');
-  const zip    = document.getElementById('nb_zip');
-  const feeEl  = document.getElementById('del_fee');
-  const noteEl = document.getElementById('del_fee_note');
-  const distEl = document.getElementById('nb_distance_miles');
-  let debounce;
+// ── Form submit validation ────────────────────────────────────────────────
+document.getElementById('bookingForm').addEventListener('submit', function(e) {
+  const errors = [];
+  const sd = startDateEl.value, ed = endDateEl.value;
+  const st = startTimeEl.value, et = endTimeEl.value, sut = setupTimeEl.value;
+  const sameDay = sd && ed && sd === ed;
 
-  function lookupFee() {
-    const addr = [street.value, city.value, state.value, zip.value].filter(Boolean).join(', ');
-    if (!city.value || !state.value) return;
-    clearTimeout(debounce);
-    debounce = setTimeout(() => {
-      noteEl.textContent = '⏳ Calculating delivery fee…';
-      fetch('/delivery_fee?address=' + encodeURIComponent(addr))
-        .then(r => r.json())
-        .then(d => {
-          feeEl.value = d.fee.toFixed(2);
-          distEl.value = d.miles || '';
-          noteEl.textContent = d.miles ? '📍 ' + d.note : '⚠️ ' + d.note;
-          recalc();
-        })
-        .catch(() => { noteEl.textContent = ''; });
-    }, 800);
+  if (sd && ed && ed < sd)   errors.push('End date cannot be before start date.');
+  // End time vs start time only matters when event starts and ends the same day
+  if (sameDay && st && et && et <= st)  errors.push('Event end time must be after the start time.');
+  // Delivery time vs start time only matters when setup date == event start date
+  const setupDateEl = document.getElementById('setupDateEl');
+  const setupSameDay = setupDateEl && setupDateEl.value && sd && setupDateEl.value === sd;
+  if (setupSameDay && sut && st && sut >= st) errors.push('Setup / delivery time must be before the event start time when delivery is on the same day.');
+  // Block if early delivery not acknowledged
+  const earlyNotice = document.getElementById('early-delivery-notice');
+  const earlyAck = document.getElementById('early_delivery_ack');
+  if (earlyNotice && earlyNotice.style.display !== 'none' && earlyAck && !earlyAck.checked) {
+    errors.push('Please check the box acknowledging your early delivery date before submitting.');
   }
 
-  [street, city, state, zip].forEach(el => el.addEventListener('change', lookupFee));
-  [city, zip].forEach(el => el.addEventListener('blur', lookupFee));
-})();
-
-// ── Customer autocomplete ────────────────────────────────────────────────────
-(function() {
-  const nameInput  = document.getElementById('full_name_input');
-  const suggestions = document.getElementById('name-suggestions');
-  let debounce;
-
-  const LI_STYLE = 'padding:.55rem .85rem;cursor:pointer;font-size:.92rem;border-bottom:1px solid #f1f5f9';
-
-  nameInput.addEventListener('input', function() {
-    clearTimeout(debounce);
-    const q = this.value.trim();
-    if (q.length < 1) { suggestions.style.display='none'; return; }
-    debounce = setTimeout(() => {
-      fetch('/admin/customer-search?q=' + encodeURIComponent(q))
-        .then(r => r.json())
-        .then(data => {
-          suggestions.innerHTML = '';
-          if (!data.length) { suggestions.style.display='none'; return; }
-          data.forEach(c => {
-            const li = document.createElement('li');
-            li.style.cssText = LI_STYLE;
-            li.innerHTML = '<strong>' + c.full_name + '</strong>' +
-              (c.email ? ' <span style="color:#64748b;font-size:.82rem">— ' + c.email + '</span>' : '');
-            li.addEventListener('mousedown', function(e) {
-              e.preventDefault();
-              nameInput.value = c.full_name;
-              document.getElementById('nb_email').value         = c.email        || '';
-              document.getElementById('nb_phone').value         = c.phone        || '';
-              document.getElementById('nb_company').value       = c.company_name || '';
-              document.getElementById('nb_renter_street').value = c.renter_street || '';
-              document.getElementById('nb_renter_city').value   = c.renter_city   || '';
-              document.getElementById('nb_renter_state').value  = c.renter_state  || '';
-              document.getElementById('nb_renter_zip').value    = c.renter_zip    || '';
-              suggestions.style.display = 'none';
-            });
-            suggestions.appendChild(li);
-          });
-          suggestions.style.display = 'block';
-        })
-        .catch(() => { suggestions.style.display='none'; });
-    }, 250);
-  });
-
-  nameInput.addEventListener('blur', function() {
-    setTimeout(() => { suggestions.style.display='none'; }, 150);
-  });
-})();
-
-// ── Google Maps Places Autocomplete for Event Address ─────────────────────────
-function initEventAutocomplete() {
-  var streetEl = document.getElementById('nb_street');
+  if (errors.length) {
+    e.preventDefault();
+    showTimeError(errors.join(' '));
+    return;
+  }
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+});
+</script>
+<script>
+function initPublicEventAutocomplete() {
+  var streetEl = document.getElementById('event_street');
   if (!streetEl || !window.google) return;
   var ac = new google.maps.places.Autocomplete(streetEl, {
     types: ['address'],
     componentRestrictions: { country: 'us' },
     fields: ['address_components']
   });
-  // Prevent form submit on Enter inside autocomplete dropdown
   streetEl.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') e.preventDefault();
   });
@@ -4496,100 +4798,26 @@ function initEventAutocomplete() {
     var streetNum = '', route = '', city = '', state = '', zip = '';
     place.address_components.forEach(function(comp) {
       var t = comp.types;
-      if (t.includes('street_number'))                   streetNum = comp.long_name;
-      else if (t.includes('route'))                      route     = comp.long_name;
-      else if (t.includes('locality'))                   city      = comp.long_name;
-      else if (t.includes('administrative_area_level_1')) state    = comp.short_name;
-      else if (t.includes('postal_code'))                zip       = comp.long_name;
+      if (t.includes('street_number'))                    streetNum = comp.long_name;
+      else if (t.includes('route'))                       route     = comp.long_name;
+      else if (t.includes('locality'))                    city      = comp.long_name;
+      else if (t.includes('administrative_area_level_1')) state     = comp.short_name;
+      else if (t.includes('postal_code'))                 zip       = comp.long_name;
     });
     streetEl.value = [streetNum, route].filter(Boolean).join(' ');
-    var cityEl = document.getElementById('nb_city');
-    document.getElementById('nb_state').value = state;
-    document.getElementById('nb_zip').value   = zip;
-    cityEl.value = city;
-    // Trigger the delivery fee lookup (the IIFE listens for 'change' on city)
-    cityEl.dispatchEvent(new Event('change'));
+    var cityEl  = document.getElementById('event_city');
+    var stateEl = document.getElementById('event_state');
+    var zipEl   = document.getElementById('event_zip');
+    if (cityEl)  cityEl.value  = city;
+    if (stateEl) stateEl.value = state;
+    if (zipEl)   zipEl.value   = zip;
+    scheduleDistanceCalc();
   });
 }
 </script>
 {% if google_maps_key %}
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initEventAutocomplete" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initPublicEventAutocomplete" async defer></script>
 {% endif %}
-</div>
-<script>
-function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
-function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
-</script>
-
-<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
-<script>
-(function(){
-  var btn = document.getElementById('back-fab');
-  if(!btn) return;
-  var SK = 'back_fab_pos';
-  var dragging = false, didDrag = false;
-  var startX, startY, origLeft, origBottom;
-
-  // Restore saved position
-  try {
-    var saved = JSON.parse(localStorage.getItem(SK));
-    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
-  } catch(e){}
-
-  function savePos() {
-    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
-  }
-
-  function startDrag(cx, cy) {
-    dragging = true; didDrag = false;
-    var rect = btn.getBoundingClientRect();
-    startX = cx; startY = cy;
-    origLeft = rect.left;
-    origBottom = window.innerHeight - rect.bottom;
-    btn.style.cursor = 'grabbing';
-    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
-    btn.style.transition = 'none';
-  }
-
-  function moveDrag(cx, cy) {
-    if(!dragging) return;
-    var dx = cx - startX, dy = cy - startY;
-    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
-    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
-    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
-    btn.style.left = newLeft + 'px';
-    btn.style.bottom = newBottom + 'px';
-    btn.style.top = '';
-  }
-
-  function endDrag() {
-    if(!dragging) return;
-    dragging = false;
-    btn.style.cursor = 'grab';
-    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
-    btn.style.transition = 'box-shadow .15s';
-    savePos();
-  }
-
-  // Mouse
-  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
-  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
-  document.addEventListener('mouseup', function(e){
-    if(!dragging) return;
-    var wasDrag = didDrag; endDrag();
-    if(!wasDrag) history.back();
-  });
-
-  // Touch
-  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
-  document.addEventListener('touchend', function(){
-    if(!dragging) return;
-    var wasDrag = didDrag; endDrag();
-    if(!wasDrag) history.back();
-  });
-})();
-</script>
 <style>
 /* ── Mobile horizontal scroll fix ── */
 html{overflow-x:auto}
@@ -5590,6 +5818,18 @@ ADMIN_BOOKING_HTML = """
         </button>
       </form>
       {% endif %}
+      {% if b.status == 'accepted' and b.payment_status in ('partial',) %}
+      {% set _bal = [((b.grand_total or 0)|float - (b.amount_paid or 0)|float), 0]|max %}
+      <form method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder"
+            style="margin-bottom:.6rem"
+            onsubmit="return confirm('Email final payment link for ${{ "%.2f"|format(_bal) }} to {{ b.email }}?')">
+        <input type="hidden" name="custom_amount" value="{{ "%.2f"|format(_bal) }}">
+        <button type="submit"
+          style="width:100%;background:#dc2626;color:#fff;border:none;border-radius:7px;padding:.55rem .9rem;font-size:.86rem;font-weight:700;cursor:pointer">
+          📧 Email Final Payment to Customer — ${{ "%.2f"|format(_bal) }}
+        </button>
+      </form>
+      {% endif %}
       <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
         <input type="number" name="amount" min="0.50" step="0.01" placeholder="$ Amount" required
                style="flex:1;min-width:80px;border:1px solid #d1d5db;border-radius:6px;padding:.38rem .5rem;font-size:.9rem">
@@ -5686,9 +5926,10 @@ ADMIN_BOOKING_HTML = """
         </form>
         {% endif %}
         {% if b.status == 'accepted' and b.payment_status in ('paid','partial') %}
-        <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder">
+        <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder"
+              onsubmit="return confirm('Send final payment link for ${{ "%.2f"|format([((b.grand_total or 0)|float - (b.amount_paid or 0)|float), 0]|max) }} to {{ b.email }}?')">
           <input type="hidden" name="custom_amount" id="final-amount-input">
-          <button type="button" id="final-btn" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">🔔 Remind</button>
+          <button type="submit" id="final-btn" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fdba74;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">🔔 Remind</button>
         </form>
         {% endif %}
       </div>
@@ -6322,6 +6563,25 @@ def _submit_inner():
 
     # PRG: redirect so browser refresh doesn't re-POST
     if booking_id:
+        if request.form.get("admin_create") == "1":
+            # Admin created — set status/payment_status from form
+            _st = request.form.get("status", "accepted")
+            _ap = round(float(request.form.get("amount_paid") or 0), 2)
+            _notes = request.form.get("notes", "").strip()
+            _pst = "paid" if _st == "accepted_paid" else ("partial" if _ap > 0 else "waiting")
+            _db_st = "accepted" if _st in ("accepted_paid",) else _st
+            conn2 = get_db()
+            if conn2:
+                try:
+                    cur2 = conn2.cursor()
+                    cur2.execute(
+                        "UPDATE bookings SET status=%s, payment_status=%s, amount_paid=%s, admin_notes=%s WHERE id=%s",
+                        (_db_st, _pst, _ap, _notes or None, booking_id)
+                    )
+                    conn2.commit(); cur2.close(); conn2.close()
+                except Exception as _e:
+                    log.error(f"Admin new booking status update error: {_e}")
+            return redirect(url_for("admin_booking", booking_id=booking_id))
         return redirect(url_for("booking_success", booking_id=booking_id))
     return render_template_string(SUCCESS_HTML,
         business_name=BUSINESS_NAME,
@@ -8279,92 +8539,12 @@ def new_booking():
         return render_template_string(ADMIN_NEW_BOOKING_HTML,
             business_name=BUSINESS_NAME, products=get_products(),
             google_maps_key=GOOGLE_MAPS_KEY)
-    # POST — create booking
-    f = request.form
+    # POST — delegate to _submit_inner() which handles all pricing + DB insert
+    # admin_create=1 is set in the form so _submit_inner redirects to admin booking page
     try:
-        items_json_raw = f.get("items_json", "[]")
-        try:
-            items = json.loads(items_json_raw)
-        except Exception:
-            items = []
-        items_subtotal = float(f.get("items_subtotal") or 0)
-        delivery_fee   = float(f.get("delivery_fee") or 0)
-        tax_exempt     = f.get("tax_exempt", "0") == "1"
-        tax_rate       = 0.0 if tax_exempt else 0.0635
-        taxable        = items_subtotal + delivery_fee
-        tax_amount     = 0.0 if tax_exempt else round(taxable * tax_rate, 2)
-        grand_total    = float(f.get("grand_total") or round(taxable + tax_amount, 2))
-        amount_paid    = float(f.get("amount_paid") or 0)
-        conn = get_db()
-        if not conn:
-            return "Database unavailable", 500
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO bookings (
-                full_name, company_name, email, phone,
-                renter_street, renter_city, renter_state, renter_zip,
-                event_start_date, event_end_date, event_start_time, event_end_time,
-                setup_time, setup_date, venue_type, venue_latest_pickup,
-                exact_time_delivery,
-                event_street, event_city, event_state, event_zip,
-                delivery_location, status,
-                items_json, items_subtotal, delivery_fee, late_night_fee,
-                distance_miles,
-                tax_rate, tax_amount, tax_exempt,
-                grand_total, amount_paid, notes,
-                created_at
-            ) VALUES (
-                %s,%s,%s,%s, %s,%s,%s,%s,
-                %s,%s,%s,%s, %s,%s,%s,%s, %s,
-                %s,%s,%s,%s, %s,%s,
-                %s,%s,%s,%s, %s,
-                %s,%s,%s, %s,%s,%s, NOW()
-            ) RETURNING id
-        """, (
-            f.get("full_name","").strip(),
-            f.get("company_name","").strip() or None,
-            f.get("email","").strip() or None,
-            f.get("phone","").strip() or None,
-            f.get("renter_street","").strip() or None,
-            f.get("renter_city","").strip() or None,
-            f.get("renter_state","").strip() or None,
-            f.get("renter_zip","").strip() or None,
-            f.get("event_start_date","").strip() or None,
-            f.get("event_end_date","").strip() or None,
-            f.get("event_start_time","").strip() or None,
-            f.get("event_end_time","").strip() or None,
-            f.get("setup_time","").strip() or None,
-            f.get("setup_date","").strip() or None,
-            f.get("venue_type","other"),
-            f.get("venue_latest_pickup","").strip() or None,
-            f.get("exact_time_delivery") == "yes",
-            f.get("event_street","").strip() or None,
-            f.get("event_city","").strip() or None,
-            f.get("event_state","").strip() or None,
-            f.get("event_zip","").strip() or None,
-            f.get("delivery_location","").strip() or None,
-            "accepted" if f.get("status","pending") == "accepted_paid" else f.get("status","pending"),
-            json.dumps(items), items_subtotal, delivery_fee,
-            float(f.get("late_night_fee") or 0),
-            float(f.get("distance_miles") or 0) or None,
-            tax_rate, tax_amount, tax_exempt,
-            grand_total,
-            grand_total if f.get("status") == "accepted_paid" else amount_paid,
-            f.get("notes","").strip() or None,
-        ))
-        new_id = cur.fetchone()[0]
-        # Set payment_status for paid/partial admin bookings
-        _st = f.get("status","pending")
-        if _st in ("accepted_paid", "accepted"):
-            _pst = "paid" if _st == "accepted_paid" else "waiting"
-            cur.execute("UPDATE bookings SET payment_status=%s WHERE id=%s", (_pst, new_id))
-        elif _st == "partial":
-            cur.execute("UPDATE bookings SET payment_status='partial' WHERE id=%s", (new_id,))
-        conn.commit()
-        cur.close(); conn.close()
-        return redirect(url_for("admin_booking", booking_id=new_id))
+        return _submit_inner()
     except Exception as e:
-        log.error(f"New booking create error: {e}")
+        log.error(f"Admin new booking error: {e}")
         return f"Error creating booking: {e}", 500
 
 
