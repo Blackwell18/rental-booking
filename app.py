@@ -286,6 +286,8 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS route_override BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_date DATE DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_time VARCHAR(10) DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pickup_date DATE DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pickup_time VARCHAR(10) DEFAULT NULL",
             # Migrate: confirmed → accepted + paid
             "UPDATE bookings SET status='accepted', payment_status='paid' WHERE status='confirmed' AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid >= grand_total - 0.50",
             "UPDATE bookings SET status='accepted', payment_status='waiting' WHERE status='confirmed' AND (amount_paid IS NULL OR amount_paid < 0.50)",
@@ -4229,12 +4231,30 @@ ADMIN_NEW_BOOKING_HTML = r"""
           if(edEl)edEl.value=fmt(pu);
           var etEl=document.querySelector('[name="event_end_time"]');
           if(etEl){for(var i=0;i<etEl.options.length;i++){if(etEl.options[i].value==='10:00'){etEl.value='10:00';break;}}}
+          var puEl=document.getElementById('pickupDateEl');
+          if(puEl)puEl.value=fmt(pu);
+          var ptEl=document.getElementById('pickupTimeEl');
+          if(ptEl){for(var i=0;i<ptEl.options.length;i++){if(ptEl.options[i].value==='10:00'){ptEl.value='10:00';break;}}}
           var msg=document.getElementById('weekend-msg');
           if(msg){msg.textContent='✓ '+label;msg.style.display='inline';}
         })()">
         📅 Apply Weekend Schedule
       </button>
       <span id="weekend-msg" style="margin-left:.75rem;font-size:.8rem;color:#059669;display:none"></span>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>📦 Pickup Date</label>
+        <input name="pickup_date" id="pickupDateEl" type="date" value="{{ form.pickup_date or '' }}"
+               style="width:100%;border:1px solid #86efac;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#f0fdf4">
+      </div>
+      <div class="field">
+        <label>📦 Pickup Time</label>
+        <select name="pickup_time" id="pickupTimeEl" style="width:100%;border:1px solid #86efac;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#f0fdf4;color:#1a202c">
+          <option value="">-- Select --</option>
+          {{ time_opts }}
+        </select>
+      </div>
     </div>
 
     <!-- Early delivery acknowledgment — shown only when delivery date is before event date -->
@@ -6510,6 +6530,8 @@ def _submit_inner():
     venue_latest     = f.get("venue_latest_pickup","").strip()
     delivery_date    = f.get("delivery_date",    "").strip()
     delivery_time    = f.get("delivery_time",    "").strip()
+    pickup_date      = f.get("pickup_date",      "").strip()
+    pickup_time      = f.get("pickup_time",      "").strip()
 
     # Auto-apply weekend residential schedule if delivery_date not provided
     # Saturday event → deliver Friday, pickup Sunday
@@ -6671,6 +6693,7 @@ def _submit_inner():
                     event_start_date, event_end_date,
                     event_start_time, event_end_time, setup_time, setup_date,
                     delivery_date, delivery_time,
+                    pickup_date, pickup_time,
                     venue_type, venue_latest_pickup,
                     event_street, event_city, event_state, event_zip,
                     exact_time_delivery, delivery_location,
@@ -6678,7 +6701,7 @@ def _submit_inner():
                     items_json, items_subtotal, exact_time_fee, late_night_fee, tax_rate, tax_amount, tax_exempt, grand_total,
                     notes
                 ) VALUES (
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                 ) RETURNING id
             """, (
@@ -6689,6 +6712,7 @@ def _submit_inner():
                 event_start_time, event_end_time, setup_time,
                 setup_date or None,
                 delivery_date or None, delivery_time or None,
+                pickup_date or None, pickup_time or None,
                 venue_type, venue_latest or None,
                 event_street, event_city, event_state, event_zip,
                 exact_delivery, delivery_location,
