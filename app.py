@@ -284,6 +284,8 @@ def init_db():
             )""",
             "CREATE INDEX IF NOT EXISTS payment_logs_booking_idx ON payment_logs(booking_id)",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS route_override BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_date DATE DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_time VARCHAR(10) DEFAULT NULL",
             # Migrate: confirmed → accepted + paid
             "UPDATE bookings SET status='accepted', payment_status='paid' WHERE status='confirmed' AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid >= grand_total - 0.50",
             "UPDATE bookings SET status='accepted', payment_status='waiting' WHERE status='confirmed' AND (amount_paid IS NULL OR amount_paid < 0.50)",
@@ -4149,9 +4151,24 @@ ADMIN_NEW_BOOKING_HTML = r"""
       </div>
     </div>
     <div class="row">
-      <div class="field"><label>Setup / Delivery Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl" onchange="checkDeliveryBeforeEvent()"></div>
-      <div class="field"><label>Setup / Delivery Time <span class="required">*</span></label>
+      <div class="field"><label>Setup Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl" onchange="checkDeliveryBeforeEvent()"></div>
+      <div class="field"><label>Setup Time <span class="required">*</span></label>
         <select name="setup_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
+          {{ time_opts }}
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>🚚 Delivery Date</label>
+        <input name="delivery_date" type="date" value="{{ form.delivery_date or '' }}"
+               style="width:100%;border:1px solid #93c5fd;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#eff6ff">
+        <div style="font-size:.75rem;color:#2563eb;margin-top:.25rem">Drives route page &amp; delivery tabs. Auto-set for weekend residential.</div>
+      </div>
+      <div class="field">
+        <label>🚚 Delivery Time</label>
+        <select name="delivery_time" style="width:100%;border:1px solid #93c5fd;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#eff6ff;color:#1a202c">
+          <option value="">-- Select --</option>
           {{ time_opts }}
         </select>
       </div>
@@ -6397,26 +6414,28 @@ def _submit_inner():
     setup_date       = f.get("setup_date",       "").strip()
     venue_type       = f.get("venue_type",       "venue").strip()
     venue_latest     = f.get("venue_latest_pickup","").strip()
+    delivery_date    = f.get("delivery_date",    "").strip()
+    delivery_time    = f.get("delivery_time",    "").strip()
 
-    # Auto-apply weekend residential schedule if setup_date not provided
+    # Auto-apply weekend residential schedule if delivery_date not provided
     # Saturday event → deliver Friday, pickup Sunday
     # Sunday event   → deliver Friday, pickup Monday
-    if not setup_date and event_start_date and venue_type.lower() == "residential":
+    if not delivery_date and event_start_date and venue_type.lower() == "residential":
         try:
             _esd = datetime.strptime(event_start_date[:10], "%Y-%m-%d").date()
             _wd  = _esd.weekday()  # 5=Saturday, 6=Sunday
             if _wd == 5:  # Saturday
-                setup_date = (_esd - timedelta(days=1)).strftime("%Y-%m-%d")
+                delivery_date = (_esd - timedelta(days=1)).strftime("%Y-%m-%d")
+                if not delivery_time:
+                    delivery_time = "16:00"
                 if not event_end_date:
                     event_end_date = (_esd + timedelta(days=1)).strftime("%Y-%m-%d")
-                if not setup_time:
-                    setup_time = "16:00"
             elif _wd == 6:  # Sunday
-                setup_date = (_esd - timedelta(days=2)).strftime("%Y-%m-%d")
+                delivery_date = (_esd - timedelta(days=2)).strftime("%Y-%m-%d")
+                if not delivery_time:
+                    delivery_time = "16:00"
                 if not event_end_date:
                     event_end_date = (_esd + timedelta(days=1)).strftime("%Y-%m-%d")
-                if not setup_time:
-                    setup_time = "16:00"
         except Exception:
             pass
     event_street     = f.get("event_street",     "").strip()
@@ -6557,6 +6576,7 @@ def _submit_inner():
                     phone, email,
                     event_start_date, event_end_date,
                     event_start_time, event_end_time, setup_time, setup_date,
+                    delivery_date, delivery_time,
                     venue_type, venue_latest_pickup,
                     event_street, event_city, event_state, event_zip,
                     exact_time_delivery, delivery_location,
@@ -6564,7 +6584,7 @@ def _submit_inner():
                     items_json, items_subtotal, exact_time_fee, late_night_fee, tax_rate, tax_amount, tax_exempt, grand_total,
                     notes
                 ) VALUES (
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                 ) RETURNING id
             """, (
@@ -6574,6 +6594,7 @@ def _submit_inner():
                 event_start_date or None, event_end_date or None,
                 event_start_time, event_end_time, setup_time,
                 setup_date or None,
+                delivery_date or None, delivery_time or None,
                 venue_type, venue_latest or None,
                 event_street, event_city, event_state, event_zip,
                 exact_delivery, delivery_location,
@@ -7660,7 +7681,7 @@ def admin_dashboard():
             # Tab counts
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
-                WHERE setup_date = %s
+                WHERE COALESCE(delivery_date, setup_date, event_start_date) = %s
                   AND status NOT IN ('cancelled','denied')
                   AND (archived IS NULL OR archived = FALSE)
             """, (today_dt.isoformat(),))
@@ -7676,8 +7697,8 @@ def admin_dashboard():
 
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
-                WHERE COALESCE(setup_date, event_start_date) > %s
-                  AND COALESCE(setup_date, event_start_date) <= %s
+                WHERE COALESCE(delivery_date, setup_date, event_start_date) > %s
+                  AND COALESCE(delivery_date, setup_date, event_start_date) <= %s
                   AND status NOT IN ('cancelled','denied')
                   AND (archived IS NULL OR archived = FALSE)
             """, (today_dt.isoformat(), in_8_days))
@@ -7685,8 +7706,8 @@ def admin_dashboard():
 
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
-                WHERE COALESCE(setup_date, event_start_date) >= %s
-                  AND COALESCE(setup_date, event_start_date) <= %s
+                WHERE COALESCE(delivery_date, setup_date, event_start_date) >= %s
+                  AND COALESCE(delivery_date, setup_date, event_start_date) <= %s
                   AND (archived IS NULL OR archived = FALSE)
                   AND (
                     status = 'pending'
@@ -7713,7 +7734,7 @@ def admin_dashboard():
             wheres = []
             params = []
             if tab == "going_out":
-                wheres.append("COALESCE(setup_date, event_start_date) = %s"); params.append(today_dt.isoformat())
+                wheres.append("COALESCE(delivery_date, setup_date, event_start_date) = %s"); params.append(today_dt.isoformat())
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "coming_back":
@@ -7721,13 +7742,13 @@ def admin_dashboard():
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "upcoming":
-                wheres.append("COALESCE(setup_date, event_start_date) > %s"); params.append(today_dt.isoformat())
-                wheres.append("COALESCE(setup_date, event_start_date) <= %s"); params.append(in_8_days)
+                wheres.append("COALESCE(delivery_date, setup_date, event_start_date) > %s"); params.append(today_dt.isoformat())
+                wheres.append("COALESCE(delivery_date, setup_date, event_start_date) <= %s"); params.append(in_8_days)
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "still_waiting":
-                wheres.append("COALESCE(setup_date, event_start_date) >= %s"); params.append(today_dt.isoformat())
-                wheres.append("COALESCE(setup_date, event_start_date) <= %s"); params.append(in_8_days)
+                wheres.append("COALESCE(delivery_date, setup_date, event_start_date) >= %s"); params.append(today_dt.isoformat())
+                wheres.append("COALESCE(delivery_date, setup_date, event_start_date) <= %s"); params.append(in_8_days)
                 wheres.append("(archived IS NULL OR archived = FALSE)")
                 wheres.append("(status = 'pending' OR (status = 'accepted' AND (payment_status IS NULL OR payment_status = 'waiting')))")
             elif tab == "delivered":
@@ -7778,12 +7799,12 @@ def admin_dashboard():
             }
             tab_default_sort = {
                 "all":           "created_at DESC",
-                "going_out":     "COALESCE(setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
+                "going_out":     "COALESCE(delivery_date, setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
                 "coming_back":   "event_end_date ASC NULLS LAST, created_at DESC",
-                "upcoming":      "COALESCE(setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
+                "upcoming":      "COALESCE(delivery_date, setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
                 "delivered":     "delivered_at DESC NULLS LAST",
                 "picked_up":     "picked_up_at DESC NULLS LAST",
-                "still_waiting": "COALESCE(setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
+                "still_waiting": "COALESCE(delivery_date, setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
             }
             if sort_by and sort_by in sort_map:
                 order_clause = sort_map[sort_by]
@@ -7848,7 +7869,7 @@ def admin_dashboard():
                 b["avatar_color"]    = _avatar_colors[ord(name[0].lower()) % len(_avatar_colors)]
                 b["avatar_initials"] = name[0].upper()
                 # Red flag: delivery within 5 days and not paid/agreed
-                _setup = b.get("setup_date")
+                _setup = b.get("delivery_date") or b.get("setup_date")
                 _pst   = b.get("payment_status") or ""
                 _st    = b.get("status") or ""
                 if _setup:
@@ -7923,12 +7944,14 @@ def admin_dashboard():
             cur2 = conn2.cursor(cursor_factory=psycopg2.extras.DictCursor)
             today_iso = date.today().isoformat()
             cur2.execute("""
-                SELECT id, full_name, email, setup_time AS event_start_time, items_json, status
+                SELECT id, full_name, email,
+                       COALESCE(delivery_time, setup_time) AS event_start_time,
+                       items_json, status
                 FROM bookings
-                WHERE setup_date = %s
+                WHERE COALESCE(delivery_date, setup_date) = %s
                   AND status NOT IN ('denied','cancelled','concluded')
                   AND (archived IS NULL OR archived = FALSE)
-                ORDER BY setup_time ASC NULLS LAST, id ASC
+                ORDER BY COALESCE(delivery_time, setup_time) ASC NULLS LAST, id ASC
             """, (today_iso,))
             for row in cur2.fetchall():
                 b2 = dict(row)
@@ -9175,7 +9198,7 @@ def apply_weekend_schedule(booking_id):
                     # Event Start, Event End, and Setup fields are left untouched
                     cur.execute("""
                         UPDATE bookings SET
-                          setup_date=%s, setup_time=%s,
+                          delivery_date=%s, delivery_time=%s,
                           event_end_date=%s, event_end_time=%s
                         WHERE id=%s
                     """, (friday, "16:00", pickup_date, "10:00", booking_id))
@@ -10958,17 +10981,19 @@ def admin_route():
                 cur.execute("""
                     SELECT id, full_name, phone, email, delivery_location,
                            event_street, event_city, event_state, event_zip,
-                           setup_time AS event_start_time, items_json, status, grand_total,
-                           setup_date AS route_date_field, route_override
+                           COALESCE(delivery_time, setup_time) AS event_start_time,
+                           items_json, status, grand_total,
+                           COALESCE(delivery_date, setup_date) AS route_date_field,
+                           route_override
                     FROM bookings
-                    WHERE setup_date = %s
+                    WHERE COALESCE(delivery_date, setup_date) = %s
                       AND (
                         (status = 'accepted' AND payment_status IN ('paid','partial'))
                         OR route_override = TRUE
                       )
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
-                    ORDER BY setup_time ASC NULLS LAST, id ASC
+                    ORDER BY COALESCE(delivery_time, setup_time) ASC NULLS LAST, id ASC
                 """, (route_date,))
             for row in cur.fetchall():
                 b = dict(row)
@@ -11001,7 +11026,7 @@ def admin_route():
             cur_ct = conn_ct.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur_ct.execute("""
                 SELECT id, full_name, items_json FROM bookings
-                WHERE setup_date = %s
+                WHERE COALESCE(delivery_date, setup_date) = %s
                   AND status NOT IN ('denied','cancelled','concluded')
                   AND (archived IS NULL OR archived = FALSE)
             """, (route_date,))
@@ -11217,14 +11242,14 @@ def public_delivery_sheet(sheet_date, token):
             cur.execute("""
                 SELECT id, full_name, phone, delivery_location,
                        event_street, event_city, event_state, event_zip,
-                       setup_time AS event_start_time, items_json, notes,
-                       delivery_status
+                       COALESCE(delivery_time, setup_time) AS event_start_time,
+                       items_json, notes, delivery_status
                 FROM bookings
-                WHERE setup_date = %s
+                WHERE COALESCE(delivery_date, setup_date) = %s
                   AND status = 'accepted'
                   AND payment_status IN ('paid','partial')
                   AND (archived IS NULL OR archived = FALSE)
-                ORDER BY setup_time ASC NULLS LAST, id ASC
+                ORDER BY COALESCE(delivery_time, setup_time) ASC NULLS LAST, id ASC
             """, (sheet_date,))
             for row in cur.fetchall():
                 s = dict(row)
