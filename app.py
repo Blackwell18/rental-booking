@@ -3349,6 +3349,7 @@ ADMIN_DASH_HTML = """
       <a href="/admin/dashboard?tab=upcoming" class="tab {% if tab=='upcoming' %}active{% endif %}" style="{% if tab=='upcoming' %}color:#f97316;border-bottom-color:#f97316;{% endif %}">🔔 Upcoming{% if stats.upcoming > 0 %} <span style="background:#f97316;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.upcoming }}</span>{% endif %}</a>
       <a href="/admin/dashboard?tab=delivered" class="tab {% if tab=='delivered' %}active{% endif %}" style="{% if tab=='delivered' %}color:#d97706;border-bottom-color:#d97706;{% endif %}">📦 Still Out{% if stats.delivered > 0 %} <span style="background:#d97706;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.delivered }}</span>{% endif %}</a>
       <a href="/admin/dashboard?tab=picked_up" class="tab {% if tab=='picked_up' %}active{% endif %}" style="{% if tab=='picked_up' %}color:#2563eb;border-bottom-color:#2563eb;{% endif %}">✅ Picked Up{% if stats.picked_up > 0 %} <span style="background:#2563eb;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.picked_up }}</span>{% endif %}</a>
+      <a href="/admin/dashboard?tab=still_waiting" class="tab {% if tab=='still_waiting' %}active{% endif %}" style="{% if tab=='still_waiting' %}color:#dc2626;border-bottom-color:#dc2626;{% endif %}">⚠️ Still Waiting{% if stats.still_waiting > 0 %} <span style="background:#dc2626;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.2rem">{{ stats.still_waiting }}</span>{% endif %}</a>
       <a href="/admin/dashboard?archived=1" class="tab {% if archived_filter %}active{% endif %}" style="{% if archived_filter %}color:#9ca3af;border-bottom-color:#9ca3af;{% endif %}">📦 Archived</a>
     </div>
 
@@ -7617,7 +7618,7 @@ def admin_dashboard():
     tab             = request.args.get("tab", "all")        # all | going_out | upcoming | delivered | picked_up
     conn = get_db()
     bookings = []
-    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "partial": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0, "going_out": 0, "coming_back": 0, "delivered": 0, "picked_up": 0}
+    stats = {"total": 0, "pending": 0, "accepted": 0, "confirmed": 0, "partial": 0, "revenue": 0, "amount_due": 0, "upcoming": 0, "past": 0, "going_out": 0, "coming_back": 0, "delivered": 0, "picked_up": 0, "still_waiting": 0}
     inventory_status = []
 
     if conn:
@@ -7661,6 +7662,17 @@ def admin_dashboard():
             """, (today_dt.isoformat(), in_8_days))
             stats["upcoming"] = cur.fetchone()[0]
 
+            cur.execute("""
+                SELECT COUNT(*) FROM bookings
+                WHERE setup_date >= %s AND setup_date <= %s
+                  AND (archived IS NULL OR archived = FALSE)
+                  AND (
+                    status = 'pending'
+                    OR (status = 'accepted' AND (payment_status IS NULL OR payment_status = 'waiting'))
+                  )
+            """, (today_dt.isoformat(), in_8_days))
+            stats["still_waiting"] = cur.fetchone()[0]
+
             cur.execute("SELECT COUNT(*) FROM bookings WHERE delivery_status = 'delivered'")
             stats["delivered"] = cur.fetchone()[0]
 
@@ -7691,6 +7703,11 @@ def admin_dashboard():
                 wheres.append("setup_date <= %s"); params.append(in_8_days)
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
+            elif tab == "still_waiting":
+                wheres.append("setup_date >= %s"); params.append(today_dt.isoformat())
+                wheres.append("setup_date <= %s"); params.append(in_8_days)
+                wheres.append("(archived IS NULL OR archived = FALSE)")
+                wheres.append("(status = 'pending' OR (status = 'accepted' AND (payment_status IS NULL OR payment_status = 'waiting')))")
             elif tab == "delivered":
                 wheres.append("delivery_status = 'delivered'")
             elif tab == "picked_up":
@@ -7738,12 +7755,13 @@ def admin_dashboard():
                 "created_asc": "created_at ASC",
             }
             tab_default_sort = {
-                "all":        "created_at DESC",
-                "going_out":  "setup_date ASC NULLS LAST, created_at DESC",
-                "coming_back": "event_end_date ASC NULLS LAST, created_at DESC",
-                "upcoming":   "setup_date ASC NULLS LAST, created_at DESC",
-                "delivered":  "delivered_at DESC NULLS LAST",
-                "picked_up":  "picked_up_at DESC NULLS LAST",
+                "all":           "created_at DESC",
+                "going_out":     "setup_date ASC NULLS LAST, created_at DESC",
+                "coming_back":   "event_end_date ASC NULLS LAST, created_at DESC",
+                "upcoming":      "setup_date ASC NULLS LAST, created_at DESC",
+                "delivered":     "delivered_at DESC NULLS LAST",
+                "picked_up":     "picked_up_at DESC NULLS LAST",
+                "still_waiting": "setup_date ASC NULLS LAST, created_at DESC",
             }
             if sort_by and sort_by in sort_map:
                 order_clause = sort_map[sort_by]
