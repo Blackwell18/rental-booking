@@ -1891,14 +1891,14 @@ FORM_HTML = r"""
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#2563eb">
+  <link rel="manifest" href="/admin-manifest.json">
+  <meta name="theme-color" content="#1a365d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <meta name="apple-mobile-web-app-title" content="Admin">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
-  <title>Book a Rental — {{ business_name }}</title>
+  <title>New Booking — {{ business_name }}</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a202c;min-height:100vh;display:flex}
@@ -4070,11 +4070,26 @@ ADMIN_NEW_BOOKING_HTML = r"""
   <title>Book a Rental — {{ business_name }}</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
-    header{background:linear-gradient(135deg,#1a365d 0%,#2b6cb0 100%);color:white;padding:2.5rem 1.5rem;text-align:center}
-    header h1{font-size:2rem;font-weight:700}
-    header p{margin-top:.5rem;opacity:.85;font-size:1.05rem}
-    .container{max-width:720px;margin:0 auto;padding:2rem 1rem 4rem}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a202c;min-height:100vh;display:flex}
+    .sidebar{width:200px;min-height:100vh;background:#1e1e2e;display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;transition:transform .2s}
+    .sb-brand{padding:1.1rem 1rem .9rem;display:flex;align-items:center;gap:.55rem;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+    .sb-brand-name{font-size:.82rem;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+    .sb-new-btn{display:block;margin:.85rem .85rem .5rem;padding:.55rem .75rem;background:#16a34a;color:white;border-radius:8px;font-size:.84rem;font-weight:700;text-decoration:none;text-align:center}
+    .sb-new-btn:hover{background:#15803d}
+    .sb-nav{display:flex;flex-direction:column;padding:.25rem 0;flex:1}
+    .sb-link{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.84rem;font-weight:500;color:rgba(255,255,255,.55);text-decoration:none;transition:all .1s;border-left:3px solid transparent}
+    .sb-link:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.9)}
+    .sb-icon{width:1.1rem;text-align:center;font-size:.95rem}
+    .sb-divider{height:1px;background:rgba(255,255,255,.07);margin:.4rem 0}
+    .sb-bottom{border-top:1px solid rgba(255,255,255,.08);padding:.5rem 0}
+    .page-content{margin-left:200px;flex:1;min-height:100vh;display:flex;flex-direction:column}
+    .page-header{background:white;border-bottom:1px solid #e5e7eb;padding:.85rem 1.5rem;display:flex;align-items:center;gap:1rem;position:sticky;top:0;z-index:50}
+    .page-header h1{font-size:1.3rem;font-weight:700;color:#111827;flex:1}
+    .mobile-menu-btn{display:none;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#374151;padding:.25rem}
+    .page-body{padding:1.5rem;flex:1}
+    @media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0);box-shadow:6px 0 30px rgba(0,0,0,.4)}.page-content{margin-left:0}.mobile-menu-btn{display:block}}
+    .container{max-width:720px;margin:0 auto;padding:0 0 4rem}
     .card{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:1.75rem;margin-bottom:1.5rem}
     .card h2{font-size:1rem;font-weight:700;color:#2b6cb0;border-bottom:2px solid #ebf4ff;padding-bottom:.6rem;margin-bottom:1.25rem;text-transform:uppercase;letter-spacing:.5px}
     .field{margin-bottom:1rem}
