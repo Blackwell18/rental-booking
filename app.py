@@ -87,6 +87,20 @@ _ICON_512_B64 = "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAOd0lEQVR4nO3dMY5
 _ICON_192 = _b64.b64decode(_ICON_192_B64)
 _ICON_512 = _b64.b64decode(_ICON_512_B64)
 
+def _log_payment(booking_id, amount, method="stripe", note=None, recorded_by="system"):
+    """Record a payment event in payment_logs."""
+    conn = get_db()
+    if not conn: return
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO payment_logs (booking_id, amount, method, note, recorded_by) VALUES (%s,%s,%s,%s,%s)",
+            (booking_id, round(float(amount), 2), method, note, recorded_by)
+        )
+        conn.commit(); cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"_log_payment error: {e}")
+
 def _row(row):
     """Convert a psycopg2 DictRow to a plain dict, converting Decimal→float."""
     if row is None:
@@ -259,6 +273,16 @@ def init_db():
             # New status/payment system
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30) DEFAULT NULL",
+            """CREATE TABLE IF NOT EXISTS payment_logs (
+                id          SERIAL PRIMARY KEY,
+                booking_id  INTEGER NOT NULL,
+                paid_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                amount      DECIMAL(10,2) NOT NULL DEFAULT 0,
+                method      VARCHAR(50) NOT NULL DEFAULT 'stripe',
+                note        TEXT,
+                recorded_by VARCHAR(50) DEFAULT 'system'
+            )""",
+            "CREATE INDEX IF NOT EXISTS payment_logs_booking_idx ON payment_logs(booking_id)",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS route_override BOOLEAN DEFAULT FALSE",
             # Migrate: confirmed → accepted + paid
             "UPDATE bookings SET status='accepted', payment_status='paid' WHERE status='confirmed' AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid >= grand_total - 0.50",
@@ -5944,6 +5968,34 @@ ADMIN_BOOKING_HTML = """
     </div>
     {% endif %}
 
+    <!-- Payment History Log -->
+    {% if payment_history %}
+    <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;margin-bottom:.85rem">
+      <div style="font-size:.7rem;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#eff6ff;border-radius:6px">📋 Payment History</div>
+      {% for p in payment_history %}
+      {% if p.amount|float > 0 %}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.45rem .55rem;border-radius:7px;background:{% if loop.index is odd %}#f8faff{% else %}#fff{% endif %};margin-bottom:.2rem;gap:.5rem;border:1px solid #e5e7eb">
+        <div style="flex:1;min-width:0">
+          <span style="font-weight:700;color:#15803d;font-size:.9rem">${{ "%.2f"|format(p.amount|float) }}</span>
+          <span style="color:#6b7280;font-size:.75rem;margin-left:.35rem;text-transform:capitalize">via {{ p.method }}</span>
+          {% if p.note %}<div style="color:#9ca3af;font-size:.7rem;margin-top:.1rem">{{ p.note }}</div>{% endif %}
+        </div>
+        <div style="text-align:right;white-space:nowrap;flex-shrink:0;font-size:.75rem">
+          <div style="font-weight:600;color:#374151">{{ p.paid_at.strftime('%b %-d, %Y') if p.paid_at else '' }}</div>
+          <div style="color:#9ca3af">{{ p.paid_at.strftime('%-I:%M %p') if p.paid_at else '' }}</div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% set ns = namespace(tot=0) %}{% for p in payment_history %}{% if p.amount|float > 0 %}{% set ns.tot = ns.tot + p.amount|float %}{% endif %}{% endfor %}
+      {% if ns.tot > 0 %}
+      <div style="display:flex;justify-content:space-between;padding:.4rem .55rem;font-size:.8rem;font-weight:700;color:#059669;border-top:1px solid #e5e7eb;margin-top:.3rem">
+        <span>Total Logged</span><span>${{ "%.2f"|format(ns.tot) }}</span>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Delivery -->
     {% if b.status not in ('denied','cancelled') %}
     <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;margin-bottom:.85rem">
@@ -8041,6 +8093,16 @@ def admin_booking(booking_id):
     except Exception as e:
         log.error(f"Calendar bookings fetch error: {e}")
 
+    payment_history = []
+    _ph_conn = get_db()
+    if _ph_conn:
+        try:
+            _ph_cur = _ph_conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            _ph_cur.execute("SELECT * FROM payment_logs WHERE booking_id=%s ORDER BY paid_at ASC", (booking_id,))
+            payment_history = [dict(r) for r in _ph_cur.fetchall()]
+            _ph_cur.close(); _ph_conn.close()
+        except Exception as _phe:
+            log.error(f"payment_history error: {_phe}")
     try:
         return render_template_string(ADMIN_BOOKING_HTML,
             business_name=BUSINESS_NAME, b=b, items=items, days_until=days_until,
@@ -8048,7 +8110,8 @@ def admin_booking(booking_id):
             matched_customer=matched_customer, weekend_residential=weekend_residential,
             booking_inv_issues=booking_inv_issues,
             booking_inv_status=booking_inv_status,
-            cal_bookings=cal_bookings)
+            cal_bookings=cal_bookings,
+            payment_history=payment_history)
     except Exception as e:
         log.error(f"Booking {booking_id} render error: {e}")
         return "Error rendering booking — please contact support.", 500
@@ -8179,6 +8242,7 @@ def agree_to_pay_booking(booking_id):
             cur.close()
             conn.close()
             log.info(f"Booking #{booking_id} set to agree_to_pay ({pay_method})")
+            _log_payment(booking_id, 0, method=pay_method, note="Agreed to pay at delivery — inventory reserved", recorded_by="admin")
         except Exception as e:
             log.error(f"agree_to_pay error: {e}")
     return redirect(url_for("admin_booking", booking_id=booking_id))
@@ -8351,6 +8415,7 @@ def record_payment(booking_id):
                     f"Payment Recorded — Booking #{booking_id}: ${amount:.2f} via {method}",
                 )
                 log.info(f"Booking #{booking_id}: ${amount:.2f} recorded via {method}, payment_status={new_pmt_status_manual}")
+                _log_payment(booking_id, amount, method=method, note=f"Manually recorded. Balance after: ${max(balance,0):.2f}", recorded_by="admin")
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"Record payment error: {e}")
@@ -9434,6 +9499,7 @@ def stripe_webhook():
                                 b["payment_status"]  = new_pmt_status
                                 send_receipt_email(b)
                                 log.info(f"Booking #{booking_id} payment received → {new_pmt_status} (${amount_paid_dollars:.2f})")
+                                _log_payment(booking_id, amount_paid_dollars, method="stripe", note=f"Stripe checkout. Session: {sess_id}", recorded_by="stripe")
 
                             elif current_status in ("pending", "accepted"):
                                 # Additional payment
