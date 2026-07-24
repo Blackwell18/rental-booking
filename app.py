@@ -11999,6 +11999,16 @@ function markDelivered(id, btn){
 """
 
 
+
+@app.route("/driver/")
+@app.route("/driver")
+def driver_today():
+    """Redirect /driver/ to today's date."""
+    token = request.args.get("token", "")
+    suffix = f"?token={token}" if token else ""
+    return redirect(f"/driver/{date.today().isoformat()}{suffix}")
+
+
 @app.route("/driver/<date_str>")
 def driver_view(date_str):
     """Mobile driver sheet — accessible without admin login if CALENDAR_TOKEN matches, or if admin session active."""
