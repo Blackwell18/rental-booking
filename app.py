@@ -752,6 +752,73 @@ def calc_delivery_fee(miles):
     return fee, f"{miles} mi x ${DELIVERY_RATE:.2f}/mi"
 
 
+def optimize_route_server(depot, stops):
+    """
+    Server-side open-path TSP using Distance Matrix API + nearest-neighbor.
+    stops: list of dicts with 'id' and 'addr' keys.
+    Returns list of stop dicts in optimized order.
+    """
+    valid = [s for s in stops if s.get("addr")]
+    no_addr = [s for s in stops if not s.get("addr")]
+    if len(valid) < 2:
+        return stops  # nothing to optimize
+
+    if not GOOGLE_MAPS_KEY:
+        return stops  # no key, can't optimize
+
+    all_addrs = [depot] + [s["addr"] for s in valid]
+    n = len(all_addrs)
+
+    try:
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            params={
+                "origins":      "|".join(all_addrs),
+                "destinations": "|".join(all_addrs),
+                "units":        "imperial",
+                "key":          GOOGLE_MAPS_KEY,
+            },
+            timeout=15,
+        )
+        data = resp.json()
+        if data.get("status") != "OK":
+            log.warning(f"Route optimize: Distance Matrix returned {data.get('status')}")
+            return stops
+
+        # Build drive-time matrix (seconds); depot = index 0
+        times = []
+        for i, row in enumerate(data["rows"]):
+            times.append([])
+            for el in row["elements"]:
+                if el.get("status") == "OK":
+                    times[i].append(el["duration"]["value"])
+                else:
+                    times[i].append(999999)
+
+        # Nearest-neighbor greedy from depot (index 0), open path (no return)
+        visited = {0}
+        route = [0]
+        while len(route) < n:
+            last = route[-1]
+            best, best_t = -1, float("inf")
+            for j in range(1, n):
+                if j not in visited and times[last][j] < best_t:
+                    best, best_t = j, times[last][j]
+            if best == -1:
+                break
+            visited.add(best)
+            route.append(best)
+
+        # Map indices back to stop dicts (route[0]=depot, route[1..]=stops by index)
+        reordered = [valid[i - 1] for i in route[1:]]
+        log.info(f"Route optimized: {[s['id'] for s in reordered]}")
+        return reordered + no_addr
+
+    except Exception as e:
+        log.error(f"optimize_route_server error: {e}")
+        return stops
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  STRIPE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -11345,7 +11412,7 @@ def admin_route():
     )
 
     # Bookings on this date that are NOT on the route (pending / waiting / not overridden)
-    # Apply custom stop order if provided in URL
+    # Apply custom stop order if provided in URL; otherwise server-optimize
     custom_order = request.args.get("order", "")
     if custom_order:
         try:
@@ -11354,6 +11421,13 @@ def admin_route():
             route_bookings.sort(key=lambda b: id_to_rank.get(b["id"], 999))
         except Exception as e:
             log.error(f"Custom order error: {e}")
+    elif len(route_bookings) >= 2 and GOOGLE_MAPS_KEY:
+        # Server-side optimization: run nearest-neighbor and redirect with order
+        _stops_for_opt = [{"id": b["id"], "addr": b["nav_address"]} for b in route_bookings]
+        _optimized = optimize_route_server(DEPOT_ADDRESS, _stops_for_opt)
+        _opt_ids = ",".join(str(s["id"]) for s in _optimized)
+        _redir_url = request.url + ("&" if "?" in request.url else "?") + f"order={_opt_ids}"
+        return redirect(_redir_url)
 
     excluded_bookings = []
     date_col = "event_end_date" if view == "pickup" else "setup_date"
