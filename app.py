@@ -9910,7 +9910,7 @@ ADMIN_ROUTE_HTML = """
 <div class="page-content">
 <div class="pg-hdr">
   <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
-  <h1>{% if view == 'pickup' %}Pickup Route{% else %}Delivery Route{% endif %}</h1>
+  <h1>{% if view == 'pickup' %}Pickup Route{% elif view == 'count' %}Delivery Count{% else %}Delivery Route{% endif %}</h1>
 </div>
 <div class="main">
   <form method="GET" action="/admin/route" class="date-row">
@@ -9932,10 +9932,10 @@ ADMIN_ROUTE_HTML = """
     {% endif %}
   </form>
 
-  <div style="display:flex;gap:.5rem;margin-bottom:1.1rem;border-bottom:2px solid #e5e7eb;padding-bottom:.5rem">
+  <div style="display:flex;gap:.5rem;margin-bottom:1.1rem;border-bottom:2px solid #e5e7eb;padding-bottom:.5rem;flex-wrap:wrap">
     <a href="/admin/route?date={{ route_date }}&view=delivery"
        style="padding:.4rem .9rem;border-radius:8px 8px 0 0;font-size:.85rem;font-weight:600;text-decoration:none;border:1px solid #e5e7eb;border-bottom:none;
-       {% if view != 'pickup' %}background:#2563eb;color:#fff;border-color:#2563eb{% else %}background:#f9fafb;color:#374151{% endif %}">
+       {% if view == 'delivery' %}background:#2563eb;color:#fff;border-color:#2563eb{% else %}background:#f9fafb;color:#374151{% endif %}">
       🚚 Deliveries
     </a>
     <a href="/admin/route?date={{ route_date }}&view=pickup"
@@ -9943,7 +9943,79 @@ ADMIN_ROUTE_HTML = """
        {% if view == 'pickup' %}background:#7c3aed;color:#fff;border-color:#7c3aed{% else %}background:#f9fafb;color:#374151{% endif %}">
       🔄 Pickups
     </a>
+    <a href="/admin/route?date={{ route_date }}&view=count"
+       style="padding:.4rem .9rem;border-radius:8px 8px 0 0;font-size:.85rem;font-weight:600;text-decoration:none;border:1px solid #e5e7eb;border-bottom:none;
+       {% if view == 'count' %}background:#059669;color:#fff;border-color:#059669{% else %}background:#f9fafb;color:#374151{% endif %}">
+      📦 Delivery Count
+    </a>
   </div>
+
+  {# ════════════════ DELIVERY COUNT TAB ════════════════ #}
+  {% if view == 'count' %}
+    {% if item_totals %}
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:1.5rem">
+      <div style="background:#059669;color:#fff;padding:.75rem 1.25rem;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-weight:700;font-size:1rem">📦 Total Items Going Out — {{ route_date }}</span>
+        <span style="font-size:.82rem;opacity:.85">{{ item_totals|length }} item type{{ 's' if item_totals|length != 1 }}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f0fdf4;border-bottom:2px solid #bbf7d0">
+            <th style="text-align:left;padding:.6rem 1.25rem;font-size:.78rem;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.05em">Item</th>
+            <th style="text-align:right;padding:.6rem 1.25rem;font-size:.78rem;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.05em">Total Qty</th>
+            <th style="text-align:left;padding:.6rem 1.25rem;font-size:.78rem;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.05em;display:none" class="bk-col">Bookings</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in item_totals %}
+          <tr style="border-bottom:1px solid #e5e7eb{% if loop.last %};border-bottom:none{% endif %}"
+              onclick="toggleBreakdown(this)" style="cursor:pointer">
+            <td style="padding:.75rem 1.25rem;font-weight:600;font-size:.92rem;color:#111827;cursor:pointer">
+              {{ row.item }}
+            </td>
+            <td style="padding:.75rem 1.25rem;text-align:right">
+              <span style="background:#dcfce7;color:#166534;font-weight:800;font-size:1.05rem;padding:.2rem .7rem;border-radius:8px">
+                {{ row.qty }}
+              </span>
+            </td>
+            <td style="padding:.75rem 1.25rem">
+              <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                {% for bk in row.bookings %}
+                <a href="/admin/booking/{{ bk.id }}"
+                   style="font-size:.75rem;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:.15rem .5rem;text-decoration:none;white-space:nowrap"
+                   onclick="event.stopPropagation()">
+                  #{{ bk.id }} {{ bk.name }} ({{ bk.qty }})
+                </a>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:#f0fdf4;border-top:2px solid #bbf7d0">
+            <td style="padding:.65rem 1.25rem;font-weight:700;color:#065f46;font-size:.88rem">TOTAL PIECES</td>
+            <td style="padding:.65rem 1.25rem;text-align:right">
+              <span style="background:#059669;color:#fff;font-weight:800;font-size:1.1rem;padding:.25rem .8rem;border-radius:8px">
+                {{ item_totals | sum(attribute='qty') }}
+              </span>
+            </td>
+            <td style="padding:.65rem 1.25rem"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <style>
+      @media(min-width:520px){ .bk-col{display:table-cell!important} }
+      table tr:hover td{background:#f9fafb;cursor:pointer}
+    </style>
+    {% else %}
+    <div class="empty">No deliveries scheduled for {{ route_date }}.</div>
+    {% endif %}
+  {% endif %}
+
+  {# Show delivery/pickup content only when NOT on count tab #}
+  {% if view != 'count' %}
 
   {% if route_bookings %}
   {% set addrs = route_bookings|selectattr('nav_address')|map(attribute='nav_address')|list %}
@@ -10072,7 +10144,9 @@ ADMIN_ROUTE_HTML = """
   <div class="empty">{% if view == "pickup" %}No pickups scheduled for {{ route_date }}.{% else %}No deliveries scheduled for {{ route_date }}.{% endif %}</div>
   {% endif %}
 
-  {% if excluded_bookings %}
+  {% endif %}{# /if view != count #}
+
+  {% if excluded_bookings and view != 'count' %}
   <div style="margin-top:2rem;padding:1rem 1.25rem;background:#f9fafb;border:1.5px dashed #d1d5db;border-radius:10px">
     <div style="font-size:.82rem;font-weight:700;color:#6b7280;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em">
       📋 Not on route — {{ excluded_bookings|length }} booking{{ 's' if excluded_bookings|length != 1 }} scheduled this day
@@ -10759,6 +10833,50 @@ def admin_route():
         for b in route_bookings
     ])
 
+    # Aggregate item totals across all delivery bookings for this date
+    item_totals_map = {}   # name → {qty, bookings: [{"id":..,"name":..}]}
+    conn_ct = get_db()
+    if conn_ct:
+        try:
+            cur_ct = conn_ct.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur_ct.execute("""
+                SELECT id, full_name, items_json FROM bookings
+                WHERE setup_date = %s
+                  AND (
+                    (status = 'accepted' AND payment_status IN ('paid','partial'))
+                    OR status = 'agree_to_pay'
+                    OR route_override = TRUE
+                  )
+                  AND status NOT IN ('denied','cancelled','concluded')
+                  AND (archived IS NULL OR archived = FALSE)
+            """, (route_date,))
+            for row in cur_ct.fetchall():
+                b2 = dict(row)
+                try:
+                    for itm in json.loads(b2.get('items_json') or '[]'):
+                        nm  = (itm.get('name') or '').strip()
+                        qty = int(itm.get('qty') or 1)
+                        if not nm:
+                            continue
+                        if nm not in item_totals_map:
+                            item_totals_map[nm] = {'qty': 0, 'bookings': []}
+                        item_totals_map[nm]['qty'] += qty
+                        item_totals_map[nm]['bookings'].append({
+                            'id': b2['id'],
+                            'name': b2.get('full_name') or f"#{b2['id']}",
+                            'qty': qty,
+                        })
+                except Exception:
+                    pass
+            cur_ct.close(); conn_ct.close()
+        except Exception as e:
+            log.error(f"item_totals error: {e}")
+    # Sort by qty descending
+    item_totals = sorted(
+        [{'item': k, **v} for k, v in item_totals_map.items()],
+        key=lambda x: x['qty'], reverse=True
+    )
+
     # Bookings on this date that are NOT on the route (pending / waiting / not overridden)
     # Apply custom stop order if provided in URL
     custom_order = request.args.get("order", "")
@@ -10809,6 +10927,7 @@ def admin_route():
         sheet_token=_sheet_token(route_date),
         google_maps_key=GOOGLE_MAPS_KEY,
         has_custom_order=bool(request.args.get("order", "")),
+        item_totals=item_totals,
     )
 
 
