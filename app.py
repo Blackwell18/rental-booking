@@ -2024,13 +2024,14 @@ FORM_HTML = r"""
       </div>
     </div>
     <div class="row">
-      <div class="field"><label>Setup / Delivery Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl" onchange="checkDeliveryBeforeEvent()"></div>
-      <div class="field"><label>Setup / Delivery Time <span class="required">*</span></label>
+      <div class="field"><label>Setup Date <span class="required">*</span></label><input name="setup_date" type="date" required value="{{ form.setup_date or '' }}" id="setupDateEl" onchange="checkDeliveryBeforeEvent()"></div>
+      <div class="field"><label>Setup Time <span class="required">*</span></label>
         <select name="setup_time" required style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#fff;color:#1a202c">
           {{ time_opts }}
         </select>
       </div>
     </div>
+
 
     <!-- Early delivery acknowledgment — shown only when delivery date is before event date -->
     <div id="early-delivery-notice" style="display:none;background:#fff7ed;border:2px solid #f97316;border-radius:10px;padding:1rem 1.15rem;margin-bottom:1rem">
@@ -2641,12 +2642,6 @@ document.getElementById('bookingForm').addEventListener('submit', function(e) {
   const setupDateEl = document.getElementById('setupDateEl');
   const setupSameDay = setupDateEl && setupDateEl.value && sd && setupDateEl.value === sd;
   if (setupSameDay && sut && st && sut >= st) errors.push('Setup / delivery time must be before the event start time when delivery is on the same day.');
-  // Block if early delivery not acknowledged
-  const earlyNotice = document.getElementById('early-delivery-notice');
-  const earlyAck = document.getElementById('early_delivery_ack');
-  if (earlyNotice && earlyNotice.style.display !== 'none' && earlyAck && !earlyAck.checked) {
-    errors.push('Please check the box acknowledging your early delivery date before submitting.');
-  }
 
   if (errors.length) {
     e.preventDefault();
