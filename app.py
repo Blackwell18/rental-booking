@@ -4226,7 +4226,9 @@ ADMIN_NEW_BOOKING_HTML = r"""
           var dtEl=document.getElementById('deliveryTimeEl');
           if(dtEl){for(var i=0;i<dtEl.options.length;i++){if(dtEl.options[i].value==='16:00'){dtEl.value='16:00';break;}}}
           var edEl=document.getElementById('event_end_date');
-          if(edEl&&!edEl.value)edEl.value=fmt(pu);
+          if(edEl)edEl.value=fmt(pu);
+          var etEl=document.querySelector('[name="event_end_time"]');
+          if(etEl){for(var i=0;i<etEl.options.length;i++){if(etEl.options[i].value==='10:00'){etEl.value='10:00';break;}}}
           var msg=document.getElementById('weekend-msg');
           if(msg){msg.textContent='✓ '+label;msg.style.display='inline';}
         })()">
