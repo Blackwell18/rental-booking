@@ -11790,7 +11790,7 @@ ADMIN_REPORTS_HTML = """
 
 
 @app.route("/admin/reports")
-@require_admin
+@admin_required
 def admin_reports():
     import calendar as cal_mod
     sel_year = int(request.args.get("year", date.today().year))
@@ -12035,7 +12035,7 @@ function showDay(ds, label){
 
 
 @app.route("/admin/calendar")
-@require_admin
+@admin_required
 def admin_calendar():
     import calendar as cal_mod
     import json as _json
@@ -12510,7 +12510,7 @@ def booking_sign(booking_id, token):
 
 
 @app.route("/admin/booking/<int:booking_id>/send-agreement", methods=["POST"])
-@require_admin
+@admin_required
 def admin_send_agreement(booking_id):
     """Send the e-sign link to the customer via email."""
     conn = get_db()
