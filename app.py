@@ -11412,9 +11412,13 @@ def admin_route():
     )
 
     # Bookings on this date that are NOT on the route (pending / waiting / not overridden)
-    # Apply custom stop order if provided in URL; otherwise server-optimize
+    # Route ordering:
+    # - If ?auto=1 is in URL, this is our own optimization redirect → trust ?order=
+    # - Otherwise always re-optimize (ignores stale ?order= from browser history/old JS)
+    is_auto = request.args.get("auto", "")
     custom_order = request.args.get("order", "")
-    if custom_order:
+    if is_auto and custom_order:
+        # Already-optimized redirect from server — use the order directly
         try:
             order_ids = [int(x) for x in custom_order.split(",") if x.strip()]
             id_to_rank = {bid: i for i, bid in enumerate(order_ids)}
@@ -11422,12 +11426,19 @@ def admin_route():
         except Exception as e:
             log.error(f"Custom order error: {e}")
     elif len(route_bookings) >= 2 and GOOGLE_MAPS_KEY:
-        # Server-side optimization: run nearest-neighbor and redirect with order
+        # Server-side optimization — always runs (overwrites stale ?order= in URL)
         _stops_for_opt = [{"id": b["id"], "addr": b["nav_address"]} for b in route_bookings]
         _optimized = optimize_route_server(DEPOT_ADDRESS, _stops_for_opt)
         _opt_ids = ",".join(str(s["id"]) for s in _optimized)
-        _redir_url = request.url + ("&" if "?" in request.url else "?") + f"order={_opt_ids}"
-        return redirect(_redir_url)
+        # Rebuild URL preserving date/view but replacing order and setting auto=1
+        import urllib.parse as _up2
+        _parsed = _up2.urlparse(request.url)
+        _params = _up2.parse_qs(_parsed.query, keep_blank_values=True)
+        _params.pop("order", None)
+        _params.pop("auto", None)
+        _base_qs = _up2.urlencode({k: v[0] for k, v in _params.items()})
+        _new_qs = (_base_qs + "&" if _base_qs else "") + f"order={_opt_ids}&auto=1"
+        return redirect(f"{_parsed.path}?{_new_qs}")
 
     excluded_bookings = []
     date_col = "event_end_date" if view == "pickup" else "setup_date"
