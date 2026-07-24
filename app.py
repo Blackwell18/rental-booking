@@ -7659,7 +7659,8 @@ def admin_dashboard():
 
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
-                WHERE setup_date > %s AND setup_date <= %s
+                WHERE COALESCE(setup_date, event_start_date) > %s
+                  AND COALESCE(setup_date, event_start_date) <= %s
                   AND status NOT IN ('cancelled','denied')
                   AND (archived IS NULL OR archived = FALSE)
             """, (today_dt.isoformat(), in_8_days))
@@ -7667,7 +7668,8 @@ def admin_dashboard():
 
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
-                WHERE setup_date >= %s AND setup_date <= %s
+                WHERE COALESCE(setup_date, event_start_date) >= %s
+                  AND COALESCE(setup_date, event_start_date) <= %s
                   AND (archived IS NULL OR archived = FALSE)
                   AND (
                     status = 'pending'
@@ -7694,7 +7696,7 @@ def admin_dashboard():
             wheres = []
             params = []
             if tab == "going_out":
-                wheres.append("setup_date = %s"); params.append(today_dt.isoformat())
+                wheres.append("COALESCE(setup_date, event_start_date) = %s"); params.append(today_dt.isoformat())
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "coming_back":
@@ -7702,13 +7704,13 @@ def admin_dashboard():
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "upcoming":
-                wheres.append("setup_date > %s"); params.append(today_dt.isoformat())
-                wheres.append("setup_date <= %s"); params.append(in_8_days)
+                wheres.append("COALESCE(setup_date, event_start_date) > %s"); params.append(today_dt.isoformat())
+                wheres.append("COALESCE(setup_date, event_start_date) <= %s"); params.append(in_8_days)
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "still_waiting":
-                wheres.append("setup_date >= %s"); params.append(today_dt.isoformat())
-                wheres.append("setup_date <= %s"); params.append(in_8_days)
+                wheres.append("COALESCE(setup_date, event_start_date) >= %s"); params.append(today_dt.isoformat())
+                wheres.append("COALESCE(setup_date, event_start_date) <= %s"); params.append(in_8_days)
                 wheres.append("(archived IS NULL OR archived = FALSE)")
                 wheres.append("(status = 'pending' OR (status = 'accepted' AND (payment_status IS NULL OR payment_status = 'waiting')))")
             elif tab == "delivered":
@@ -7759,12 +7761,12 @@ def admin_dashboard():
             }
             tab_default_sort = {
                 "all":           "created_at DESC",
-                "going_out":     "setup_date ASC NULLS LAST, created_at DESC",
+                "going_out":     "COALESCE(setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
                 "coming_back":   "event_end_date ASC NULLS LAST, created_at DESC",
-                "upcoming":      "setup_date ASC NULLS LAST, created_at DESC",
+                "upcoming":      "COALESCE(setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
                 "delivered":     "delivered_at DESC NULLS LAST",
                 "picked_up":     "picked_up_at DESC NULLS LAST",
-                "still_waiting": "setup_date ASC NULLS LAST, created_at DESC",
+                "still_waiting": "COALESCE(setup_date, event_start_date) ASC NULLS LAST, created_at DESC",
             }
             if sort_by and sort_by in sort_map:
                 order_clause = sort_map[sort_by]
