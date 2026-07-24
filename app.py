@@ -6402,6 +6402,28 @@ def _submit_inner():
     setup_date       = f.get("setup_date",       "").strip()
     venue_type       = f.get("venue_type",       "venue").strip()
     venue_latest     = f.get("venue_latest_pickup","").strip()
+
+    # Auto-apply weekend residential schedule if setup_date not provided
+    # Saturday event → deliver Friday, pickup Sunday
+    # Sunday event   → deliver Friday, pickup Monday
+    if not setup_date and event_start_date and venue_type.lower() == "residential":
+        try:
+            _esd = datetime.strptime(event_start_date[:10], "%Y-%m-%d").date()
+            _wd  = _esd.weekday()  # 5=Saturday, 6=Sunday
+            if _wd == 5:  # Saturday
+                setup_date = (_esd - timedelta(days=1)).strftime("%Y-%m-%d")
+                if not event_end_date:
+                    event_end_date = (_esd + timedelta(days=1)).strftime("%Y-%m-%d")
+                if not setup_time:
+                    setup_time = "16:00"
+            elif _wd == 6:  # Sunday
+                setup_date = (_esd - timedelta(days=2)).strftime("%Y-%m-%d")
+                if not event_end_date:
+                    event_end_date = (_esd + timedelta(days=1)).strftime("%Y-%m-%d")
+                if not setup_time:
+                    setup_time = "16:00"
+        except Exception:
+            pass
     event_street     = f.get("event_street",     "").strip()
     event_city       = f.get("event_city",       "").strip()
     event_state      = f.get("event_state",      "").strip()
