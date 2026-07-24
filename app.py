@@ -4192,17 +4192,23 @@ ADMIN_NEW_BOOKING_HTML = r"""
     <div class="row">
       <div class="field">
         <label>🚚 Delivery Date</label>
-        <input name="delivery_date" type="date" value="{{ form.delivery_date or '' }}"
+        <input name="delivery_date" id="deliveryDateEl" type="date" value="{{ form.delivery_date or '' }}"
                style="width:100%;border:1px solid #93c5fd;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#eff6ff">
-        <div style="font-size:.75rem;color:#2563eb;margin-top:.25rem">Drives route page &amp; delivery tabs. Auto-set for weekend residential.</div>
       </div>
       <div class="field">
         <label>🚚 Delivery Time</label>
-        <select name="delivery_time" style="width:100%;border:1px solid #93c5fd;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#eff6ff;color:#1a202c">
+        <select name="delivery_time" id="deliveryTimeEl" style="width:100%;border:1px solid #93c5fd;border-radius:8px;padding:.55rem .75rem;font-size:1rem;background:#eff6ff;color:#1a202c">
           <option value="">-- Select --</option>
           {{ time_opts }}
         </select>
       </div>
+    </div>
+    <div style="margin-bottom:1.25rem">
+      <button type="button" onclick="applyWeekendDelivery()"
+              style="background:#1d4ed8;color:white;border:none;border-radius:7px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer">
+        📅 Apply Weekend Schedule
+      </button>
+      <span id="weekend-msg" style="margin-left:.75rem;font-size:.8rem;color:#059669;display:none"></span>
     </div>
 
     <!-- Early delivery acknowledgment — shown only when delivery date is before event date -->
