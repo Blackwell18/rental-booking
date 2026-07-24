@@ -8971,10 +8971,10 @@ def admin_rebook(booking_id):
     import urllib.parse as _up
     fields = {
         "prefill": "1",
-        "customer_name": src.get("customer_name") or "",
-        "email": src.get("customer_email") or src.get("email") or "",
+        "customer_name": src.get("full_name") or "",
+        "email": src.get("email") or "",
         "phone": src.get("phone") or "",
-        "setup_address": src.get("setup_address") or "",
+        "setup_address": src.get("delivery_location") or "",
         "notes": f"[Rebook from #{booking_id}] ",
     }
     return redirect(url_for("new_booking") + "?" + _up.urlencode(fields))
@@ -11813,11 +11813,11 @@ def admin_reports():
         SELECT
             EXTRACT(MONTH FROM COALESCE(delivery_date, setup_date, event_start_date))::int AS month,
             COUNT(*) AS count,
-            COALESCE(SUM(CASE WHEN status NOT IN ('denied','cancelled') THEN total_cost ELSE 0 END), 0) AS revenue,
-            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_cost
-                              WHEN payment_status = 'partial' THEN deposit_amount ELSE 0 END), 0) AS collected,
+            COALESCE(SUM(CASE WHEN status NOT IN ('denied','cancelled') THEN grand_total ELSE 0 END), 0) AS revenue,
+            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN grand_total
+                              WHEN payment_status = 'partial' THEN COALESCE(amount_paid, 0) ELSE 0 END), 0) AS collected,
             COALESCE(SUM(CASE WHEN status = 'accepted' AND (payment_status IS NULL OR payment_status = 'waiting')
-                              THEN total_cost ELSE 0 END), 0) AS outstanding
+                              THEN grand_total ELSE 0 END), 0) AS outstanding
         FROM bookings
         WHERE EXTRACT(YEAR FROM COALESCE(delivery_date, setup_date, event_start_date)) = %s
           AND status NOT IN ('denied','cancelled')
@@ -11847,17 +11847,17 @@ def admin_reports():
 
     # Top customers
     cur.execute("""
-        SELECT customer_name, COUNT(*) AS count,
-               COALESCE(SUM(total_cost), 0) AS total
+        SELECT full_name, COUNT(*) AS count,
+               COALESCE(SUM(grand_total), 0) AS total
         FROM bookings
         WHERE EXTRACT(YEAR FROM COALESCE(delivery_date, setup_date, event_start_date)) = %s
           AND status NOT IN ('denied','cancelled')
           AND (archived IS NULL OR archived = FALSE)
-        GROUP BY customer_name
+        GROUP BY full_name
         ORDER BY total DESC
         LIMIT 10
     """, (sel_year,))
-    top_customers = [{"customer_name": r["customer_name"], "count": r["count"], "total": float(r["total"])}
+    top_customers = [{"customer_name": r["full_name"], "count": r["count"], "total": float(r["total"])}
                      for r in cur.fetchall()]
 
     cur.close()
@@ -12038,11 +12038,11 @@ def driver_view(date_str):
     conn = get_db()
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        SELECT id, customer_name, phone,
+        SELECT id, full_name, phone,
                COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
                COALESCE(delivery_time, setup_time) AS del_time,
-               setup_address, items_requested, status,
-               delivered_at
+               delivery_location, event_street, event_city, event_state, event_zip,
+               items_json, status, delivered_at
         FROM bookings
         WHERE COALESCE(delivery_date, setup_date, event_start_date) = %s
           AND status IN ('accepted','concluded')
@@ -12061,15 +12061,29 @@ def driver_view(date_str):
                 time_display = t.strftime("%-I:%M %p")
             except Exception:
                 time_display = b["del_time"]
-        items_raw = b.get("items_requested") or ""
-        # Truncate long item list for display
+        # Build address from delivery_location or event address fields
+        addr = (b.get("delivery_location") or
+                ", ".join(filter(None, [
+                    b.get("event_street",""), b.get("event_city",""),
+                    b.get("event_state",""), b.get("event_zip","")
+                ])))
+        # Parse items from JSON
+        try:
+            import json as _j
+            items_list = _j.loads(b.get("items_json") or "[]")
+            items_raw = ", ".join(
+                f"{it.get('qty','1')}x {it.get('name','')}" for it in items_list
+                if it.get('name')
+            )
+        except Exception:
+            items_raw = ""
         if len(items_raw) > 120:
             items_raw = items_raw[:117] + "…"
         stops.append({
             "id": b["id"],
-            "customer_name": b["customer_name"],
+            "customer_name": b["full_name"],
             "phone": b["phone"] or "",
-            "address": b["setup_address"] or "",
+            "address": addr,
             "time_display": time_display,
             "items_summary": items_raw,
             "delivered": bool(b.get("delivered_at")),
@@ -12175,14 +12189,14 @@ AGREEMENT_HTML = """
 <div class="signed-banner">
   <div class="icon">✅</div>
   <h2>Agreement Signed</h2>
-  <p>Signed by <strong>{{ b.agreement_signer_name }}</strong><br>
+  <p>Signed by <strong>{{ b.agreement_signer_name or '' }}</strong><br>
   {% if b.agreement_signed_at %}on {{ b.agreement_signed_at.strftime('%B %-d, %Y at %-I:%M %p') }}{% endif %}</p>
 </div>
 {% endif %}
 
 <div class="booking-box">
   <h2>Booking Details</h2>
-  <div class="row"><span class="lbl">Customer</span><span class="val">{{ b.customer_name }}</span></div>
+  <div class="row"><span class="lbl">Customer</span><span class="val">{{ b.full_name }}</span></div>
   <div class="row"><span class="lbl">Event Date</span><span class="val">{{ b.event_start_date.strftime('%B %-d, %Y') if b.event_start_date else '—' }}</span></div>
   <div class="row"><span class="lbl">Location</span><span class="val">{{ b.setup_address or '—' }}</span></div>
   <div class="row"><span class="lbl">Total</span><span class="val">${{ "%.2f"|format(b.total_cost or 0) }}</span></div>
@@ -12268,16 +12282,16 @@ def admin_send_agreement(booking_id):
     sign_url = f"{base}/booking/sign/{booking_id}/{token}"
 
     # Send email
-    if b.get("customer_email") and GMAIL_USER:
+    if b.get("email") and GMAIL_USER:
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = f"Please Sign Your Rental Agreement — {BUSINESS_NAME}"
             msg["From"]    = GMAIL_USER
-            msg["To"]      = b["customer_email"]
+            msg["To"]      = b["email"]
             html_body = f"""
             <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:2rem">
               <h2 style="color:#111827">Rental Agreement Ready to Sign</h2>
-              <p style="color:#374151">Hi {b['customer_name'].split()[0]},</p>
+              <p style="color:#374151">Hi {b['full_name'].split()[0]},</p>
               <p style="color:#374151;margin-top:.75rem">Your booking with {BUSINESS_NAME} is almost confirmed.
               Please review and sign your rental agreement to complete the process.</p>
               <div style="text-align:center;margin:2rem 0">
@@ -12296,7 +12310,7 @@ def admin_send_agreement(booking_id):
 
     # Also send SMS if phone
     if b.get("phone"):
-        send_sms(b["phone"], f"Hi {b['customer_name'].split()[0]}! Please sign your rental agreement for {BUSINESS_NAME}: {sign_url}")
+        send_sms(b["phone"], f"Hi {b['full_name'].split()[0]}! Please sign your rental agreement for {BUSINESS_NAME}: {sign_url}")
 
     return redirect(url_for("admin_booking_detail", booking_id=booking_id))
 
@@ -14349,7 +14363,7 @@ def cron_send_reminders():
 
         # ── 1. Payment reminders (delivery in 5 days, unpaid) ────────────────
         cur.execute("""
-            SELECT id, customer_name, phone,
+            SELECT id, full_name, phone,
                    COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
                    COALESCE(delivery_time, setup_time) AS del_time
             FROM bookings
@@ -14362,7 +14376,7 @@ def cron_send_reminders():
         """, (in_5.isoformat(), today.isoformat()))
         for b in cur.fetchall():
             msg = (
-                f"Hi {b['customer_name'].split()[0]}! "
+                f"Hi {b['full_name'].split()[0]}! "
                 f"This is {BUSINESS_NAME}. Your rental delivery is scheduled for "
                 f"{b['del_date'].strftime('%A, %B %-d')}. "
                 f"We haven't received your deposit yet — please pay to confirm your booking. "
@@ -14371,16 +14385,16 @@ def cron_send_reminders():
             ok = send_sms(b["phone"], msg)
             if ok:
                 cur.execute("UPDATE bookings SET reminder_sent_at = NOW() WHERE id = %s", (b["id"],))
-                sent.append(f"payment-reminder → #{b['id']} {b['customer_name']}")
+                sent.append(f"payment-reminder → #{b['id']} {b['full_name']}")
             else:
                 errors.append(f"payment-reminder FAIL #{b['id']}")
 
         # ── 2. Delivery confirmation (delivery tomorrow) ─────────────────────
         cur.execute("""
-            SELECT id, customer_name, phone,
+            SELECT id, full_name, phone,
                    COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
                    COALESCE(delivery_time, setup_time) AS del_time,
-                   event_start_date, setup_address
+                   event_start_date
             FROM bookings
             WHERE COALESCE(delivery_date, setup_date, event_start_date) = %s
               AND status = 'accepted'
@@ -14397,7 +14411,7 @@ def cron_send_reminders():
                 except Exception:
                     pass
             msg = (
-                f"Hi {b['customer_name'].split()[0]}! "
+                f"Hi {b['full_name'].split()[0]}! "
                 f"Your {BUSINESS_NAME} delivery is tomorrow"
                 f"{time_str}. "
                 f"Please make sure someone is available at the setup location. "
@@ -14406,13 +14420,13 @@ def cron_send_reminders():
             ok = send_sms(b["phone"], msg)
             if ok:
                 cur.execute("UPDATE bookings SET confirmation_sent_at = NOW() WHERE id = %s", (b["id"],))
-                sent.append(f"delivery-confirm → #{b['id']} {b['customer_name']}")
+                sent.append(f"delivery-confirm → #{b['id']} {b['full_name']}")
             else:
                 errors.append(f"delivery-confirm FAIL #{b['id']}")
 
         # ── 3. Pickup reminder (pickup tomorrow) ─────────────────────────────
         cur.execute("""
-            SELECT id, customer_name, phone, pickup_date, pickup_time
+            SELECT id, full_name, phone, pickup_date, pickup_time
             FROM bookings
             WHERE pickup_date = %s
               AND status = 'accepted'
@@ -14429,7 +14443,7 @@ def cron_send_reminders():
                 except Exception:
                     pass
             msg = (
-                f"Hi {b['customer_name'].split()[0]}! "
+                f"Hi {b['full_name'].split()[0]}! "
                 f"A reminder that {BUSINESS_NAME} will be picking up your rental equipment tomorrow"
                 f"{time_str}. "
                 f"Please have everything accessible. Thank you for renting with us!"
@@ -14437,7 +14451,7 @@ def cron_send_reminders():
             ok = send_sms(b["phone"], msg)
             if ok:
                 cur.execute("UPDATE bookings SET pickup_reminder_sent_at = NOW() WHERE id = %s", (b["id"],))
-                sent.append(f"pickup-reminder → #{b['id']} {b['customer_name']}")
+                sent.append(f"pickup-reminder → #{b['id']} {b['full_name']}")
             else:
                 errors.append(f"pickup-reminder FAIL #{b['id']}")
 
