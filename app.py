@@ -4205,43 +4205,6 @@ ADMIN_NEW_BOOKING_HTML = r"""
         </select>
       </div>
     </div>
-    <div style="margin-bottom:1.25rem">
-      <button type="button" style="background:#1d4ed8;color:white;border:none;border-radius:7px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer"
-        onclick="(function(){
-          var s=document.getElementById('event_start_date');
-          if(!s||!s.value){alert('Enter Event Start Date first.');return;}
-          var d=new Date(s.value+'T00:00:00');
-          var w=d.getDay();
-          var label='';
-          if(w===6){
-            var dd=new Date(d);dd.setDate(d.getDate()-1);
-            var pu=new Date(d);pu.setDate(d.getDate()+1);
-            label='Saturday event: Deliver Friday, Pickup Sunday';
-          }else if(w===0){
-            var dd=new Date(d);dd.setDate(d.getDate()-2);
-            var pu=new Date(d);pu.setDate(d.getDate()+1);
-            label='Sunday event: Deliver Friday, Pickup Monday';
-          }else{alert('Event start is not Saturday or Sunday.');return;}
-          var fmt=function(x){return x.toISOString().split('T')[0];};
-          var ddEl=document.getElementById('deliveryDateEl');
-          if(ddEl)ddEl.value=fmt(dd);
-          var dtEl=document.getElementById('deliveryTimeEl');
-          if(dtEl){for(var i=0;i<dtEl.options.length;i++){if(dtEl.options[i].value==='16:00'){dtEl.value='16:00';break;}}}
-          var edEl=document.getElementById('event_end_date');
-          if(edEl)edEl.value=fmt(pu);
-          var etEl=document.querySelector('[name="event_end_time"]');
-          if(etEl){for(var i=0;i<etEl.options.length;i++){if(etEl.options[i].value==='10:00'){etEl.value='10:00';break;}}}
-          var puEl=document.getElementById('pickupDateEl');
-          if(puEl)puEl.value=fmt(pu);
-          var ptEl=document.getElementById('pickupTimeEl');
-          if(ptEl){for(var i=0;i<ptEl.options.length;i++){if(ptEl.options[i].value==='10:00'){ptEl.value='10:00';break;}}}
-          var msg=document.getElementById('weekend-msg');
-          if(msg){msg.textContent='✓ '+label;msg.style.display='inline';}
-        })()">
-        📅 Apply Weekend Schedule
-      </button>
-      <span id="weekend-msg" style="margin-left:.75rem;font-size:.8rem;color:#059669;display:none"></span>
-    </div>
     <div class="row">
       <div class="field">
         <label>📦 Pickup Date</label>
@@ -4255,6 +4218,44 @@ ADMIN_NEW_BOOKING_HTML = r"""
           {{ time_opts }}
         </select>
       </div>
+    </div>
+    <script>
+    function doWeekendSchedule(){
+      var s=document.getElementById('event_start_date');
+      if(!s||!s.value){alert('Enter Event Start Date first.');return;}
+      var d=new Date(s.value+'T00:00:00');
+      var w=d.getDay();
+      var dd,pu,label;
+      if(w===6){
+        dd=new Date(d);dd.setDate(d.getDate()-1);
+        pu=new Date(d);pu.setDate(d.getDate()+1);
+        label='Saturday event: Deliver Friday, Pickup Sunday';
+      }else if(w===0){
+        dd=new Date(d);dd.setDate(d.getDate()-2);
+        pu=new Date(d);pu.setDate(d.getDate()+1);
+        label='Sunday event: Deliver Friday, Pickup Monday';
+      }else{alert('Event start is not Saturday or Sunday.');return;}
+      var fmt=function(x){return x.toISOString().split('T')[0];};
+      var ddEl=document.getElementById('deliveryDateEl');
+      if(ddEl)ddEl.value=fmt(dd);
+      var dtEl=document.getElementById('deliveryTimeEl');
+      if(dtEl){for(var i=0;i<dtEl.options.length;i++){if(dtEl.options[i].value==='16:00'){dtEl.value='16:00';break;}}}
+      var puEl=document.getElementById('pickupDateEl');
+      if(puEl)puEl.value=fmt(pu);
+      var ptEl=document.getElementById('pickupTimeEl');
+      if(ptEl){for(var i=0;i<ptEl.options.length;i++){if(ptEl.options[i].value==='10:00'){ptEl.value='10:00';break;}}}
+      var edEl=document.getElementById('event_end_date');
+      if(edEl)edEl.value=fmt(pu);
+      var msg=document.getElementById('weekend-msg');
+      if(msg){msg.textContent='✓ '+label;msg.style.display='inline';}
+    }
+    </script>
+    <div style="margin-bottom:1.25rem">
+      <button type="button" onclick="doWeekendSchedule()"
+              style="background:#1d4ed8;color:white;border:none;border-radius:7px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer">
+        📅 Apply Weekend Schedule
+      </button>
+      <span id="weekend-msg" style="margin-left:.75rem;font-size:.8rem;color:#059669;display:none"></span>
     </div>
 
     <!-- Early delivery acknowledgment — shown only when delivery date is before event date -->
