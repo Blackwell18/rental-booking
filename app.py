@@ -2554,6 +2554,37 @@ function checkDeliveryBeforeEvent(){
 function checkDeliveryAck(){
   // no-op, submit handler checks state
 }
+function applyWeekendDelivery(){
+  const startDate = document.getElementById('event_start_date');
+  if (!startDate || !startDate.value) {
+    alert('Please enter the Event Start Date first.');
+    return;
+  }
+  const esd = new Date(startDate.value + 'T00:00:00');
+  const wd = esd.getDay(); // 0=Sun, 6=Sat
+  let deliveryDate, pickupDate, label;
+  if (wd === 6) { // Saturday
+    deliveryDate = new Date(esd); deliveryDate.setDate(esd.getDate() - 1);
+    pickupDate   = new Date(esd); pickupDate.setDate(esd.getDate() + 1);
+    label = 'Saturday event → Deliver Friday, Pickup Sunday';
+  } else if (wd === 0) { // Sunday
+    deliveryDate = new Date(esd); deliveryDate.setDate(esd.getDate() - 2);
+    pickupDate   = new Date(esd); pickupDate.setDate(esd.getDate() + 1);
+    label = 'Sunday event → Deliver Friday, Pickup Monday';
+  } else {
+    alert('Event start date is not a Saturday or Sunday. Weekend schedule only applies to weekend events.');
+    return;
+  }
+  const fmt = d => d.toISOString().split('T')[0];
+  const ddEl = document.getElementById('deliveryDateEl');
+  if (ddEl) ddEl.value = fmt(deliveryDate);
+  const dtEl = document.getElementById('deliveryTimeEl');
+  if (dtEl) { for (let o of dtEl.options) { if (o.value === '16:00') { dtEl.value = '16:00'; break; } } }
+  const endDateEl = document.getElementById('event_end_date');
+  if (endDateEl && !endDateEl.value) endDateEl.value = fmt(pickupDate);
+  const msg = document.getElementById('weekend-msg');
+  if (msg) { msg.textContent = '✓ ' + label; msg.style.display = 'inline'; }
+}
 let distTimer;
 let _calcDeliveryFee=0;
 function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';_calcDeliveryFee=d.fee;updateTotals();}).catch(()=>{});}},800);}
