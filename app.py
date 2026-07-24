@@ -5969,29 +5969,48 @@ ADMIN_BOOKING_HTML = """
     {% endif %}
 
     <!-- Payment History Log -->
-    {% if payment_history %}
+    {% set _paid_amt = (b.amount_paid or 0)|float %}
+    {% if payment_history or _paid_amt > 0 %}
     <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;margin-bottom:.85rem">
       <div style="font-size:.7rem;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#eff6ff;border-radius:6px">📋 Payment History</div>
-      {% for p in payment_history %}
-      {% if p.amount|float > 0 %}
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.45rem .55rem;border-radius:7px;background:{% if loop.index is odd %}#f8faff{% else %}#fff{% endif %};margin-bottom:.2rem;gap:.5rem;border:1px solid #e5e7eb">
-        <div style="flex:1;min-width:0">
-          <span style="font-weight:700;color:#15803d;font-size:.9rem">${{ "%.2f"|format(p.amount|float) }}</span>
-          <span style="color:#6b7280;font-size:.75rem;margin-left:.35rem;text-transform:capitalize">via {{ p.method }}</span>
-          {% if p.note %}<div style="color:#9ca3af;font-size:.7rem;margin-top:.1rem">{{ p.note }}</div>{% endif %}
+
+      {% if payment_history %}
+        {% for p in payment_history %}
+        {% if p.amount|float > 0 %}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.45rem .55rem;border-radius:7px;background:{{ '#f8faff' if loop.index is odd else '#fff' }};margin-bottom:.2rem;gap:.5rem;border:1px solid #e5e7eb">
+          <div style="flex:1;min-width:0">
+            <span style="font-weight:700;color:#15803d;font-size:.9rem">${{ "%.2f"|format(p.amount|float) }}</span>
+            <span style="color:#6b7280;font-size:.75rem;margin-left:.35rem;text-transform:capitalize">via {{ p.method }}</span>
+            {% if p.note %}<div style="color:#9ca3af;font-size:.7rem;margin-top:.1rem">{{ p.note }}</div>{% endif %}
+          </div>
+          <div style="text-align:right;white-space:nowrap;flex-shrink:0;font-size:.75rem">
+            <div style="font-weight:600;color:#374151">{{ p.paid_at.strftime('%b %-d, %Y') if p.paid_at else '' }}</div>
+            <div style="color:#9ca3af">{{ p.paid_at.strftime('%-I:%M %p') if p.paid_at else '' }}</div>
+          </div>
         </div>
-        <div style="text-align:right;white-space:nowrap;flex-shrink:0;font-size:.75rem">
-          <div style="font-weight:600;color:#374151">{{ p.paid_at.strftime('%b %-d, %Y') if p.paid_at else '' }}</div>
-          <div style="color:#9ca3af">{{ p.paid_at.strftime('%-I:%M %p') if p.paid_at else '' }}</div>
+        {% endif %}
+        {% endfor %}
+        {% set ns = namespace(tot=0) %}{% for p in payment_history %}{% if p.amount|float > 0 %}{% set ns.tot = ns.tot + p.amount|float %}{% endif %}{% endfor %}
+        {% if ns.tot > 0 %}
+        <div style="display:flex;justify-content:space-between;padding:.4rem .55rem;font-size:.8rem;font-weight:700;color:#059669;border-top:1px solid #e5e7eb;margin-top:.3rem">
+          <span>Total Logged</span><span>${{ "%.2f"|format(ns.tot) }}</span>
         </div>
-      </div>
-      {% endif %}
-      {% endfor %}
-      {% set ns = namespace(tot=0) %}{% for p in payment_history %}{% if p.amount|float > 0 %}{% set ns.tot = ns.tot + p.amount|float %}{% endif %}{% endfor %}
-      {% if ns.tot > 0 %}
-      <div style="display:flex;justify-content:space-between;padding:.4rem .55rem;font-size:.8rem;font-weight:700;color:#059669;border-top:1px solid #e5e7eb;margin-top:.3rem">
-        <span>Total Logged</span><span>${{ "%.2f"|format(ns.tot) }}</span>
-      </div>
+        {% endif %}
+      {% elif _paid_amt > 0 %}
+        {# Legacy booking — amount_paid exists but no log entries yet #}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem .55rem;border-radius:7px;background:#f8faff;border:1px solid #e5e7eb;margin-bottom:.2rem;gap:.5rem">
+          <div>
+            <span style="font-weight:700;color:#15803d;font-size:.9rem">${{ "%.2f"|format(_paid_amt) }}</span>
+            <span style="color:#6b7280;font-size:.75rem;margin-left:.35rem">recorded</span>
+            <div style="color:#9ca3af;font-size:.7rem;margin-top:.1rem">Payment received before detailed logging was enabled</div>
+          </div>
+          <div style="font-size:.72rem;color:#d1d5db;white-space:nowrap">date unknown</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:.4rem .55rem;font-size:.8rem;font-weight:700;color:#059669;border-top:1px solid #e5e7eb;margin-top:.3rem">
+          <span>Total Logged</span><span>${{ "%.2f"|format(_paid_amt) }}</span>
+        </div>
+      {% else %}
+        <div style="color:#9ca3af;font-size:.8rem;padding:.4rem .55rem">No payments recorded yet.</div>
       {% endif %}
     </div>
     {% endif %}
