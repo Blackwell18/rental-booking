@@ -11962,7 +11962,7 @@ DRIVER_VIEW_HTML = """
     {% endif %}
     <div class="stop-actions">
       {% if s.address %}
-      <a class="btn-map" href="https://maps.google.com/?q={{ s.address|urlencode }}" target="_blank">🗺 Maps</a>
+      {% if s.maps_url %}<a class="btn-map" href="{{ s.maps_url }}" target="_blank">🗺 Maps</a>{% endif %}
       {% endif %}
       {% if s.phone %}
       <a class="btn-call" href="tel:{{ s.phone }}">Call</a>
@@ -12079,11 +12079,15 @@ def driver_view(date_str):
             items_raw = ""
         if len(items_raw) > 120:
             items_raw = items_raw[:117] + "…"
+        maps_url = ""
+        if addr:
+            maps_url = "https://www.google.com/maps/search/?api=1&query=" + urllib.parse.quote_plus(addr)
         stops.append({
             "id": b["id"],
             "customer_name": b["full_name"],
             "phone": b["phone"] or "",
             "address": addr,
+            "maps_url": maps_url,
             "time_display": time_display,
             "items_summary": items_raw,
             "delivered": bool(b.get("delivered_at")),
