@@ -3407,14 +3407,17 @@ ADMIN_DASH_HTML = """
           {% set _bc = conflict_map.get(b.id, []) %}
           <tr id="row-{{ b.id }}" data-search="{{ (b.full_name or '')|lower }} {{ (b.email or '')|lower }} {{ (b.phone or '')|lower }} {{ (b.event_start_date or '') }} {{ (b.items_summary or '')|lower }}"
             class="{% if _bc %}row-conflict{% elif b.status == 'pending' %}row-pending{% elif b.status == 'agree_to_pay' %}row-accepted{% elif b.delivery_status == 'picked_up' %}row-picked-up{% elif b.delivery_status == 'delivered' %}row-delivered{% elif b.status == 'accepted' %}row-accepted{% elif b.status == 'denied' %}row-denied{% elif b.status == 'cancelled' %}row-cancelled{% endif %}"
-            {% if _bc %}style="background:#fff5f5;border-left:4px solid #e53e3e;"{% endif %}>
+            {% if _bc %}style="background:#fff5f5;border-left:4px solid #e53e3e;"{% elif b.red_flag %}style="background:#fffbfb;border-left:4px solid #dc2626;"{% endif %}>
             <td style="padding-left:.75rem"><input type="checkbox" class="row-cb" value="{{ b.id }}" onchange="updateBulkBar()" style="cursor:pointer;width:15px;height:15px;accent-color:#2563eb"></td>
             <td style="font-weight:700;color:#2563eb;font-size:.83rem"><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;text-decoration:none">#{{ b.id }}</a></td>
             <td>
               <div class="client-cell">
                 <div class="avatar" style="background:{{ b.avatar_color }}">{{ b.avatar_initials }}</div>
                 <div>
-                  <div class="client-name"><a href="/admin/booking/{{ b.id }}" style="color:#111827;text-decoration:none;font-weight:600" title="View booking">{{ b.full_name }}</a></div>
+                  <div class="client-name" style="display:flex;align-items:center;gap:.35rem">
+                    <a href="/admin/booking/{{ b.id }}" style="color:#111827;text-decoration:none;font-weight:600" title="View booking">{{ b.full_name }}</a>
+                    {% if b.red_flag %}<span title="Delivery within 5 days — payment not received!" style="display:inline-flex;align-items:center;gap:.2rem;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;padding:.08rem .38rem;font-size:.7rem;font-weight:700;white-space:nowrap">🚩 UNPAID</span>{% endif %}
+                  </div>
                   <div class="client-email">{{ b.email }}</div>
                   {% if b.phone %}<div style="font-size:.74rem;color:#6b7280;margin-top:.05rem"><a href="tel:{{ b.phone }}" style="color:#6b7280;text-decoration:none">📞 {{ b.phone }}</a></div>{% endif %}
                 </div>
@@ -7825,6 +7828,23 @@ def admin_dashboard():
                 name = b.get("full_name") or "?"
                 b["avatar_color"]    = _avatar_colors[ord(name[0].lower()) % len(_avatar_colors)]
                 b["avatar_initials"] = name[0].upper()
+                # Red flag: delivery within 5 days and not paid/agreed
+                _setup = b.get("setup_date")
+                _pst   = b.get("payment_status") or ""
+                _st    = b.get("status") or ""
+                if _setup:
+                    try:
+                        _days_out = (_setup - today_dt).days
+                        b["red_flag"] = (
+                            0 <= _days_out <= 5
+                            and _st not in ("denied", "cancelled", "concluded")
+                            and _st != "agree_to_pay"
+                            and _pst != "paid"
+                        )
+                    except Exception:
+                        b["red_flag"] = False
+                else:
+                    b["red_flag"] = False
                 bookings.append(b)
 
             today_str = date.today().isoformat()
