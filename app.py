@@ -12029,7 +12029,7 @@ def driver_view(date_str):
         SELECT id, full_name, phone,
                COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
                COALESCE(delivery_time, setup_time) AS del_time,
-               delivery_location, event_street, event_city, event_state, event_zip,
+               event_street, event_city, event_state, event_zip,
                items_json, status, delivered_at
         FROM bookings
         WHERE COALESCE(delivery_date, setup_date, event_start_date) = %s
@@ -12049,12 +12049,14 @@ def driver_view(date_str):
                 time_display = t.strftime("%-I:%M %p")
             except Exception:
                 time_display = b["del_time"]
-        # Build address from delivery_location or event address fields
-        addr = (b.get("delivery_location") or
-                ", ".join(filter(None, [
-                    b.get("event_street",""), b.get("event_city",""),
-                    b.get("event_state",""), b.get("event_zip","")
-                ])))
+        # Build address from event location fields (delivery_location is a description, not address)
+        addr_parts = [
+            b.get("event_street",""),
+            b.get("event_city",""),
+            b.get("event_state",""),
+            b.get("event_zip",""),
+        ]
+        addr = ", ".join(p for p in addr_parts if p)
         # Parse items from JSON
         try:
             import json as _j
