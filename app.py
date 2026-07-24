@@ -10617,14 +10617,17 @@ ADMIN_ROUTE_HTML = """
 </div>
 </div>
 <script>
-// ── Google Maps DirectionsService optimizer ───────────────────────────────
-// Called automatically on load (when no custom order yet) and by the button
+// ── Route optimizer: Distance Matrix + Nearest Neighbor ─────────────────
+// Uses full pairwise drive times so any stop can be last (open-path TSP).
+// Previous approach fixed the last stop as destination — this one doesn't.
 function optimizeRoute(isAuto){
-  if(STOPS.length < 2) return;
+  const validStops = STOPS.filter(s => s.addr);
+  const noAddr     = STOPS.filter(s => !s.addr);
+  if(validStops.length < 2){ return; }
+
   const btn = document.getElementById('opt-btn');
   if(btn){ btn.disabled=true; btn.innerHTML='⏳ Optimizing…'; }
 
-  // Show a subtle banner while optimizing
   if(isAuto){
     const banner = document.createElement('div');
     banner.id = 'opt-banner';
@@ -10633,38 +10636,59 @@ function optimizeRoute(isAuto){
     document.body.appendChild(banner);
   }
 
-  const svc = new google.maps.DirectionsService();
-  const validStops = STOPS.filter(s => s.addr);
-  const noAddr     = STOPS.filter(s => !s.addr);
+  // Build full (N+1) × (N+1) drive-time matrix: depot + all valid stops
+  const svc  = new google.maps.DistanceMatrixService();
+  const addrs = [DEPOT, ...validStops.map(s => s.addr)];
+  const n     = addrs.length; // n = stops + 1 (depot at index 0)
 
-  const waypoints = validStops.slice(0, -1).map(s => ({
-    location: s.addr,
-    stopover: true,
-  }));
-  const destination = validStops[validStops.length - 1].addr;
-
-  svc.route({
-    origin: DEPOT,
-    destination: destination,
-    waypoints: waypoints,
-    optimizeWaypoints: true,   // ← Google solves TSP for us
-    travelMode: google.maps.TravelMode.DRIVING,
-  }, function(result, status){
+  svc.getDistanceMatrix({
+    origins:      addrs,
+    destinations: addrs,
+    travelMode:   google.maps.TravelMode.DRIVING,
+  }, function(resp, status){
     const banner = document.getElementById('opt-banner');
     if(banner) banner.remove();
     if(btn){ btn.disabled=false; btn.innerHTML='✨ Re-optimize Route'; }
 
     if(status !== 'OK'){
-      if(!isAuto) alert('Could not optimize route: ' + status);
+      if(!isAuto) alert('Route optimization failed: ' + status);
       return;
     }
-    // result.routes[0].waypoint_order is the reordered indices into validStops[0..-2]
-    const order = result.routes[0].waypoint_order;
-    const reordered = order.map(i => validStops[i]).concat([validStops[validStops.length - 1]]);
-    // Add stops with no address at the end
-    const all = [...reordered, ...noAddr];
-    const ids = all.map(s => s.id).filter(Boolean).join(',');
-    const url = new URL(window.location.href);
+
+    // Parse drive-time matrix (seconds)
+    const times = [];
+    for(let i = 0; i < n; i++){
+      times.push([]);
+      for(let j = 0; j < n; j++){
+        const el = resp.rows[i] && resp.rows[i].elements[j];
+        times[i].push((el && el.status === 'OK') ? el.duration.value : 9999999);
+      }
+    }
+
+    // Nearest-neighbor greedy from depot (index 0)
+    // This gives a good open-path solution: start at depot, end at best last stop
+    const visited = new Set([0]);
+    const route   = [0];
+    while(route.length < n){
+      const last     = route[route.length - 1];
+      let   best     = -1;
+      let   bestTime = Infinity;
+      for(let j = 1; j < n; j++){
+        if(!visited.has(j) && times[last][j] < bestTime){
+          best     = j;
+          bestTime = times[last][j];
+        }
+      }
+      if(best === -1) break;
+      visited.add(best);
+      route.push(best);
+    }
+
+    // route = [0, i1, i2, …] where indices 1..N map to validStops[i-1]
+    const reordered = route.slice(1).map(i => validStops[i - 1]);
+    const all       = [...reordered, ...noAddr];
+    const ids       = all.map(s => s.id).filter(Boolean).join(',');
+    const url       = new URL(window.location.href);
     url.searchParams.set('order', ids);
     window.location.href = url.toString();
   });
