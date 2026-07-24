@@ -5056,14 +5056,14 @@ ADMIN_BOOKING_HTML = """
 <!-- ══ LEFT COLUMN ══ -->
 <div style="display:flex;flex-direction:column;gap:1.1rem">
 
-  {% if b.status == 'accepted' %}
+  {% if b.status == 'accepted' and b.payment_status in ('waiting', None, '') %}
   <div class="payment-link-box">
-    <div style="font-weight:700;color:#276749;margin-bottom:.4rem">Awaiting Deposit Payment</div>
+    <div style="font-weight:700;color:#276749;margin-bottom:.4rem">⏳ Awaiting Deposit Payment</div>
     {% if b.stripe_payment_link %}
     <p style="font-size:.9rem;color:#4a5568;margin-bottom:.5rem">Payment link sent to {{ b.email }}:</p>
     <a href="{{ b.stripe_payment_link }}" target="_blank" style="word-break:break-all;font-size:.85rem">{{ b.stripe_payment_link }}</a>
     {% else %}
-    <p style="font-size:.9rem;color:#744210">No payment link generated. Use the Mark as Paid button below once payment is received.</p>
+    <p style="font-size:.9rem;color:#744210">No payment link generated yet. Use "Send Invoice + Payment Link" to email one.</p>
     {% endif %}
   </div>
   {% endif %}
@@ -5883,15 +5883,25 @@ ADMIN_BOOKING_HTML = """
       <!-- Stripe payment link if accepted -->
       {% if b.status == 'accepted' and b.stripe_payment_link %}
       <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280">
-        Invoice link: <a href="{{ b.stripe_payment_link }}" target="_blank" style="color:#2563eb;word-break:break-all">Open ↗</a>
+        Invoice link:
+        {% if b.payment_status in ('paid', 'partial') %}
+        <span style="color:#059669;font-weight:600">✓ Used</span>
+        <a href="{{ b.stripe_payment_link }}" target="_blank" style="color:#9ca3af;font-size:.75rem;margin-left:.35rem">Open ↗</a>
+        {% else %}
+        <a href="{{ b.stripe_payment_link }}" target="_blank" style="color:#2563eb">Open ↗</a>
+        {% endif %}
       </div>
       {% endif %}
       {% if payment_links %}
       <div style="margin-top:.65rem">
         {% for pl in payment_links %}
+        {% set _pl_paid = b.payment_status in ('paid', 'partial') %}
         <div style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-top:1px solid #f1f5f9;font-size:.8rem">
           <span style="flex:1;color:#374151;font-weight:500">{{ pl.label or 'Link' }} — ${{ "%.2f"|format(pl.amount or 0) }}</span>
-          {% if pl.status == 'active' %}
+          {% if _pl_paid %}
+          <span style="color:#059669;font-weight:600;font-size:.78rem">✓ Paid</span>
+          <a href="{{ pl.url }}" target="_blank" style="color:#9ca3af;font-size:.75rem">Open ↗</a>
+          {% elif pl.status == 'active' %}
           <a href="{{ pl.url }}" target="_blank" style="color:#2563eb;font-size:.78rem">Open ↗</a>
           <form method="POST" action="/admin/payment-link/{{ pl.id }}/cancel" style="margin:0">
             <button type="submit" onclick="return confirm('Cancel this link?')"
