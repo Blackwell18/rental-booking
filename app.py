@@ -4962,7 +4962,15 @@ ADMIN_BOOKING_HTML = """
       <div style="font-size:.75rem;color:#9ca3af;margin-top:.1rem">{{ b.created_at|string|truncate(19,True,'') }}</div>
     </div>
     <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
-      <span class="badge badge-{{ b.status }}" style="margin:0">{% if b.status == "agree_to_pay" %}AGREE TO PAY{% else %}{{ b.status|upper }}{% endif %}</span>
+      {% if b.status == "agree_to_pay" %}
+        <span class="badge badge-agree_to_pay" style="margin:0">AGREE TO PAY</span>
+      {% elif b.status == "accepted" and b.payment_status == "paid" %}
+        <span class="badge badge-accepted" style="margin:0;background:#dcfce7;color:#166534">✅ PAID IN FULL</span>
+      {% elif b.status == "accepted" and b.payment_status == "partial" %}
+        <span class="badge badge-accepted" style="margin:0;background:#fef9c3;color:#854d0e">💳 DEPOSIT PAID</span>
+      {% else %}
+        <span class="badge badge-{{ b.status }}" style="margin:0">{{ b.status|upper }}</span>
+      {% endif %}
       {% if b.delivery_status == 'delivered' %}
       <span style="background:#fffbeb;color:#92400e;border:1.5px solid #fcd34d;border-radius:20px;padding:.2rem .75rem;font-size:.75rem;font-weight:700">🚚 DELIVERED</span>
       {% elif b.delivery_status == 'picked_up' %}
@@ -10842,11 +10850,6 @@ def admin_route():
             cur_ct.execute("""
                 SELECT id, full_name, items_json FROM bookings
                 WHERE setup_date = %s
-                  AND (
-                    (status = 'accepted' AND payment_status IN ('paid','partial'))
-                    OR status = 'agree_to_pay'
-                    OR route_override = TRUE
-                  )
                   AND status NOT IN ('denied','cancelled','concluded')
                   AND (archived IS NULL OR archived = FALSE)
             """, (route_date,))
