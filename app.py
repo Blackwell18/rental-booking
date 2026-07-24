@@ -141,6 +141,10 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 BASE_URL              = os.getenv("BASE_URL", "").rstrip("/")
 CRON_SECRET           = os.getenv("CRON_SECRET", "")
 WEBAUTHN_RP_ID        = os.getenv("WEBAUTHN_RP_ID", "")
+TWILIO_ACCOUNT_SID    = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN     = os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER    = os.getenv("TWILIO_FROM_NUMBER", "")
+CRON_SECRET_KEY       = os.getenv("CRON_SECRET_KEY", CRON_SECRET)
 
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
@@ -288,6 +292,13 @@ def init_db():
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_time VARCHAR(10) DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pickup_date DATE DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pickup_time VARCHAR(10) DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMP DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS confirmation_sent_at TIMESTAMP DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS pickup_reminder_sent_at TIMESTAMP DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS agreement_signed BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS agreement_signed_at TIMESTAMP DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS agreement_signer_name VARCHAR(200) DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP DEFAULT NULL",
             # Migrate: confirmed → accepted + paid
             "UPDATE bookings SET status='accepted', payment_status='paid' WHERE status='confirmed' AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid >= grand_total - 0.50",
             "UPDATE bookings SET status='accepted', payment_status='waiting' WHERE status='confirmed' AND (amount_paid IS NULL OR amount_paid < 0.50)",
@@ -955,6 +966,39 @@ def _send_email(to, subject, html, plain, reply_to=None):
         log.info(f"Email sent → {to} (bcc: {OWNER_BCC})")
     except Exception as e:
         log.error(f"Email error: {e}")
+
+
+def send_sms(to_number, message):
+    """Send an SMS via Twilio. Returns True on success, False on failure."""
+    if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER):
+        log.warning("Twilio not configured — SMS not sent")
+        return False
+    if not to_number:
+        return False
+    # Normalize number: strip non-digits, add +1 if 10-digit US
+    digits = re.sub(r"\D", "", to_number)
+    if len(digits) == 10:
+        digits = "1" + digits
+    if not digits.startswith("1") or len(digits) != 11:
+        log.warning(f"SMS skipped — bad number: {to_number}")
+        return False
+    to_e164 = "+" + digits
+    try:
+        resp = requests.post(
+            f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json",
+            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+            data={"From": TWILIO_FROM_NUMBER, "To": to_e164, "Body": message},
+            timeout=10,
+        )
+        if resp.status_code in (200, 201):
+            log.info(f"SMS sent → {to_e164}")
+            return True
+        else:
+            log.error(f"Twilio error {resp.status_code}: {resp.text[:200]}")
+            return False
+    except Exception as e:
+        log.error(f"SMS exception: {e}")
+        return False
 
 
 def send_push(title, body, click_url=""):
@@ -3261,7 +3305,9 @@ ADMIN_DASH_HTML = """
     <a href="/admin/customers" class="sb-link"><span class="sb-icon">👥</span> Clients</a>
     <a href="/admin/inventory" class="sb-link"><span class="sb-icon">📦</span> Inventory</a>
     <a href="/admin/calendar" class="sb-link"><span class="sb-icon">📅</span> Calendar</a>
+    <a href="/admin/reports" class="sb-link"><span class="sb-icon">📊</span> Reports</a>
     <a href="/admin/route" class="sb-link"><span class="sb-icon">🗺</span> Route</a>
+    <a href="/driver/{{ today }}" class="sb-link"><span class="sb-icon">🚚</span> Driver View</a>
     <a href="/admin/formsite-import" class="sb-link"><span class="sb-icon">📥</span> Import</a>
     <a href="/admin/tax-report" class="sb-link"><span class="sb-icon">💰</span> Tax Report</a>
   </nav>
@@ -3768,7 +3814,9 @@ ADMIN_BOOKING_EDIT_HTML = """
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
   </nav>
@@ -4149,7 +4197,9 @@ ADMIN_NEW_BOOKING_HTML = r"""
     <a href="/admin/customers" class="sb-link"><span class="sb-icon">👥</span> Clients</a>
     <a href="/admin/inventory" class="sb-link"><span class="sb-icon">📦</span> Inventory</a>
     <a href="/admin/calendar" class="sb-link"><span class="sb-icon">📅</span> Calendar</a>
+    <a href="/admin/reports" class="sb-link"><span class="sb-icon">📊</span> Reports</a>
     <a href="/admin/route" class="sb-link"><span class="sb-icon">🗺</span> Route</a>
+    <a href="/driver/{{ today }}" class="sb-link"><span class="sb-icon">🚚</span> Driver View</a>
     <a href="/admin/formsite-import" class="sb-link"><span class="sb-icon">📥</span> Import</a>
     <a href="/admin/tax-report" class="sb-link"><span class="sb-icon">💰</span> Tax Report</a>
   </nav>
@@ -5154,7 +5204,9 @@ ADMIN_BOOKING_HTML = """
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
   </nav>
@@ -6153,6 +6205,20 @@ ADMIN_BOOKING_HTML = """
           <button style="background:#f8fafc;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">📄 Receipt</button>
         </form>
         {% endif %}
+        <!-- Send Agreement -->
+        {% if b.status not in ('denied','cancelled') %}
+        <form method="POST" action="/admin/booking/{{ b.id }}/send-agreement"
+              onsubmit="return confirm('Send rental agreement link to {{ b.customer_name }}?')">
+          <button style="background:{% if b.agreement_signed %}#dcfce7;color:#15803d;border:1px solid #86efac{% else %}#fef3c7;color:#92400e;border:1px solid #fcd34d{% endif %};border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">
+            {% if b.agreement_signed %}✅ Agreement Signed{% else %}✍️ Send Agreement{% endif %}
+          </button>
+        </form>
+        {% endif %}
+        <!-- Rebook -->
+        <a href="/admin/booking/rebook/{{ b.id }}"
+           style="background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center">
+          🔁 Rebook
+        </a>
         {% if b.status == 'accepted' and b.payment_status in ('paid','partial') %}
         <form id="final-form" method="POST" action="/admin/booking/{{ b.id }}/send-final-reminder"
               onsubmit="return confirm('Send final payment link for ${{ "%.2f"|format([((b.grand_total or 0)|float - (b.amount_paid or 0)|float), 0]|max) }} to {{ b.email }}?')">
@@ -7020,7 +7086,9 @@ ADMIN_INVENTORY_HTML = """
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link active">📦 Inventory</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
   </nav>
@@ -8888,15 +8956,44 @@ def customer_search():
         return jsonify([])
 
 
+@app.route("/admin/booking/rebook/<int:booking_id>")
+@admin_required
+def admin_rebook(booking_id):
+    """Pre-fill the new booking form with an existing customer's data."""
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+    src = cur.fetchone()
+    cur.close()
+    if not src:
+        return redirect(url_for("admin_dashboard"))
+    # Pass relevant fields as query params so the form auto-fills
+    import urllib.parse as _up
+    fields = {
+        "prefill": "1",
+        "customer_name": src.get("customer_name") or "",
+        "email": src.get("customer_email") or src.get("email") or "",
+        "phone": src.get("phone") or "",
+        "setup_address": src.get("setup_address") or "",
+        "notes": f"[Rebook from #{booking_id}] ",
+    }
+    return redirect(url_for("new_booking") + "?" + _up.urlencode(fields))
+
+
 @app.route("/admin/booking/new", methods=["GET", "POST"])
 @admin_required
 def new_booking():
     if request.method == "GET":
+        # Support rebook prefill via query params
+        prefill_form = {}
+        if request.args.get("prefill"):
+            prefill_form = {k: request.args.get(k, "") for k in
+                ("customer_name","email","phone","setup_address","notes")}
         return render_template_string(ADMIN_NEW_BOOKING_HTML,
             business_name=BUSINESS_NAME, products=get_products(),
             google_maps_key=GOOGLE_MAPS_KEY,
             exact_time_fee=EXACT_TIME_FEE,
-            error=None, form={})
+            error=None, form=prefill_form)
     # POST — delegate to _submit_inner() which handles all pricing + DB insert
     # admin_create=1 is set in the form so _submit_inner redirects to admin booking page
     try:
@@ -9962,9 +10059,11 @@ ADMIN_CALENDAR_HTML = """<!DOCTYPE html>
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link">&#128101; Clients</a>
     <a href="/admin/inventory" class="sb-link">&#128230; Inventory</a>
-    <a href="/admin/calendar" class="sb-link active">&#128197; Calendar</a>
-    <a href="/admin/route" class="sb-link">&#128508; Route</a>
-    <a href="/admin/formsite-import" class="sb-link">&#128442; Import</a>
+    <a href="/admin/calendar" class="sb-link active">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
   </nav>
   <div class="sb-bottom">
@@ -10256,7 +10355,9 @@ ADMIN_ROUTE_HTML = """
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link active">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
   </nav>
@@ -11506,6 +11607,958 @@ def admin_formsite_import():
     return redirect(url_for("admin_dashboard"))
 
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  REVENUE REPORTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+ADMIN_REPORTS_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/admin-manifest.json">
+  <title>Reports — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a202c;min-height:100vh;display:flex}
+    .sidebar{width:200px;min-height:100vh;background:#1e1e2e;display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;transition:transform .2s}
+    .sb-brand{padding:1.1rem 1rem .9rem;display:flex;align-items:center;gap:.55rem;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+    .sb-brand-name{font-size:.82rem;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+    .sb-new-btn{display:block;margin:.85rem .85rem .5rem;padding:.55rem .75rem;background:#16a34a;color:white;border-radius:8px;font-size:.84rem;font-weight:700;text-decoration:none;text-align:center}
+    .sb-new-btn:hover{background:#15803d}
+    .sb-nav{display:flex;flex-direction:column;padding:.25rem 0;flex:1}
+    .sb-link{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.84rem;font-weight:500;color:rgba(255,255,255,.55);text-decoration:none;transition:all .1s;border-left:3px solid transparent}
+    .sb-link:hover,.sb-link.active{background:rgba(255,255,255,.07);color:rgba(255,255,255,.9)}
+    .sb-link.active{border-left-color:#3b82f6;color:white}
+    .sb-icon{width:1.1rem;text-align:center;font-size:.95rem}
+    .sb-divider{height:1px;background:rgba(255,255,255,.07);margin:.4rem 0}
+    .sb-bottom{border-top:1px solid rgba(255,255,255,.08);padding:.5rem 0}
+    .page-content{margin-left:200px;flex:1;min-height:100vh;display:flex;flex-direction:column}
+    .page-header{background:white;border-bottom:1px solid #e5e7eb;padding:.85rem 1.5rem;display:flex;align-items:center;gap:1rem;position:sticky;top:0;z-index:50}
+    .page-header h1{font-size:1.3rem;font-weight:700;color:#111827;flex:1}
+    .mobile-menu-btn{display:none;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#374151;padding:.25rem}
+    .page-body{padding:1.5rem;flex:1}
+    @media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0);box-shadow:6px 0 30px rgba(0,0,0,.4)}.page-content{margin-left:0}.mobile-menu-btn{display:block}}
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem}
+    .stat-card{background:white;border-radius:12px;padding:1.25rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .stat-label{font-size:.75rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}
+    .stat-value{font-size:1.8rem;font-weight:800;color:#111827;margin-top:.25rem}
+    .stat-sub{font-size:.78rem;color:#9ca3af;margin-top:.15rem}
+    .card{background:white;border-radius:12px;padding:1.25rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:1.25rem}
+    .card h2{font-size:1rem;font-weight:700;color:#111827;margin-bottom:1rem;padding-bottom:.6rem;border-bottom:1px solid #f3f4f6}
+    table{width:100%;border-collapse:collapse}
+    th{text-align:left;font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;padding:.5rem .75rem;border-bottom:2px solid #f3f4f6}
+    td{padding:.65rem .75rem;font-size:.88rem;border-bottom:1px solid #f9fafb;color:#374151}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:#f9fafb}
+    .bar-wrap{background:#f3f4f6;border-radius:99px;height:8px;margin-top:.3rem;overflow:hidden}
+    .bar{background:#3b82f6;height:8px;border-radius:99px;transition:width .4s}
+    .pill{display:inline-block;padding:.15rem .55rem;border-radius:99px;font-size:.72rem;font-weight:700}
+    .pill-green{background:#dcfce7;color:#16a34a}
+    .pill-red{background:#fee2e2;color:#dc2626}
+    .pill-yellow{background:#fef9c3;color:#92400e}
+    .filter-row{display:flex;gap:.75rem;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap}
+    .filter-row select,.filter-row input{padding:.45rem .75rem;border:1px solid #d1d5db;border-radius:8px;font-size:.85rem;background:white}
+  </style>
+</head>
+<body>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand">
+    <img src="/logo.png" alt="">
+    <span class="sb-brand-name">{{ business_name }}</span>
+  </div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link"><span class="sb-icon">🏠</span> Dashboard</a>
+    <a href="/admin/calendar" class="sb-link"><span class="sb-icon">📅</span> Calendar</a>
+    <a href="/admin/reports" class="sb-link"><span class="sb-icon">📊</span> Reports</a>
+    <a href="/admin/reports" class="sb-link active"><span class="sb-icon">📊</span> Reports</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/inventory" class="sb-link"><span class="sb-icon">📦</span> Inventory</a>
+    <a href="/admin/customers" class="sb-link"><span class="sb-icon">👥</span> Customers</a>
+    <div class="sb-divider"></div>
+    <a href="/driver/{{ today }}" class="sb-link"><span class="sb-icon">🚚</span> Driver View</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link"><span class="sb-icon">🚪</span> Log Out</a>
+  </div>
+</aside>
+<div class="page-content">
+  <div class="page-header">
+    <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+    <h1>📊 Revenue Reports</h1>
+    <form method="get" style="display:flex;gap:.5rem;align-items:center">
+      <select name="year" onchange="this.form.submit()">
+        {% for y in years %}<option value="{{ y }}" {% if y==sel_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+  <div class="page-body">
+
+    <!-- Summary cards -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Revenue {{ sel_year }}</div>
+        <div class="stat-value">${{ "{:,.0f}".format(yearly_total) }}</div>
+        <div class="stat-sub">{{ yearly_bookings }} bookings</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Collected</div>
+        <div class="stat-value" style="color:#16a34a">${{ "{:,.0f}".format(collected) }}</div>
+        <div class="stat-sub">paid in full or deposit</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Outstanding</div>
+        <div class="stat-value" style="color:#dc2626">${{ "{:,.0f}".format(outstanding) }}</div>
+        <div class="stat-sub">accepted but unpaid</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Booking Value</div>
+        <div class="stat-value">${{ "{:,.0f}".format(avg_value) }}</div>
+        <div class="stat-sub">{{ sel_year }}</div>
+      </div>
+    </div>
+
+    <!-- Monthly breakdown -->
+    <div class="card">
+      <h2>Monthly Breakdown — {{ sel_year }}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th>Bookings</th>
+            <th>Revenue</th>
+            <th>Collected</th>
+            <th>Outstanding</th>
+            <th style="width:160px">Bar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set max_rev = monthly|map(attribute='revenue')|max|default(1) %}
+          {% for row in monthly %}
+          <tr>
+            <td style="font-weight:600">{{ row.month_name }}</td>
+            <td>{{ row.count }}</td>
+            <td>${{ "{:,.0f}".format(row.revenue) }}</td>
+            <td><span class="pill pill-green">${{ "{:,.0f}".format(row.collected) }}</span></td>
+            <td>{% if row.outstanding > 0 %}<span class="pill pill-red">${{ "{:,.0f}".format(row.outstanding) }}</span>{% else %}<span style="color:#9ca3af">—</span>{% endif %}</td>
+            <td>
+              <div class="bar-wrap"><div class="bar" style="width:{{ (row.revenue / max_rev * 100)|int if max_rev else 0 }}%"></div></div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:2rem">No bookings for {{ sel_year }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Top customers -->
+    <div class="card">
+      <h2>Top Customers — {{ sel_year }}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Customer</th>
+            <th>Bookings</th>
+            <th>Total Spent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in top_customers %}
+          <tr>
+            <td style="color:#9ca3af;font-size:.8rem">{{ loop.index }}</td>
+            <td style="font-weight:600">{{ row.customer_name }}</td>
+            <td>{{ row.count }}</td>
+            <td>${{ "{:,.0f}".format(row.total) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:2rem">No data</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
+"""
+
+
+@app.route("/admin/reports")
+@require_admin
+def admin_reports():
+    import calendar as cal_mod
+    sel_year = int(request.args.get("year", date.today().year))
+
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Year range for selector
+    cur.execute("""
+        SELECT DISTINCT EXTRACT(YEAR FROM COALESCE(delivery_date, setup_date, event_start_date))::int AS y
+        FROM bookings WHERE COALESCE(delivery_date, setup_date, event_start_date) IS NOT NULL
+        ORDER BY y DESC
+    """)
+    years = [r["y"] for r in cur.fetchall() if r["y"]]
+    if sel_year not in years:
+        years = sorted(set(years + [sel_year]), reverse=True)
+
+    # Monthly breakdown
+    cur.execute("""
+        SELECT
+            EXTRACT(MONTH FROM COALESCE(delivery_date, setup_date, event_start_date))::int AS month,
+            COUNT(*) AS count,
+            COALESCE(SUM(CASE WHEN status NOT IN ('denied','cancelled') THEN total_cost ELSE 0 END), 0) AS revenue,
+            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_cost
+                              WHEN payment_status = 'partial' THEN deposit_amount ELSE 0 END), 0) AS collected,
+            COALESCE(SUM(CASE WHEN status = 'accepted' AND (payment_status IS NULL OR payment_status = 'waiting')
+                              THEN total_cost ELSE 0 END), 0) AS outstanding
+        FROM bookings
+        WHERE EXTRACT(YEAR FROM COALESCE(delivery_date, setup_date, event_start_date)) = %s
+          AND status NOT IN ('denied','cancelled')
+          AND (archived IS NULL OR archived = FALSE)
+        GROUP BY month
+        ORDER BY month
+    """, (sel_year,))
+    rows = cur.fetchall()
+    monthly = []
+    for r in rows:
+        m = int(r["month"])
+        monthly.append({
+            "month": m,
+            "month_name": cal_mod.month_name[m],
+            "count": r["count"],
+            "revenue": float(r["revenue"]),
+            "collected": float(r["collected"]),
+            "outstanding": float(r["outstanding"]),
+        })
+
+    # Yearly totals
+    yearly_total   = sum(r["revenue"] for r in monthly)
+    collected      = sum(r["collected"] for r in monthly)
+    outstanding    = sum(r["outstanding"] for r in monthly)
+    yearly_bookings = sum(r["count"] for r in monthly)
+    avg_value      = yearly_total / yearly_bookings if yearly_bookings else 0
+
+    # Top customers
+    cur.execute("""
+        SELECT customer_name, COUNT(*) AS count,
+               COALESCE(SUM(total_cost), 0) AS total
+        FROM bookings
+        WHERE EXTRACT(YEAR FROM COALESCE(delivery_date, setup_date, event_start_date)) = %s
+          AND status NOT IN ('denied','cancelled')
+          AND (archived IS NULL OR archived = FALSE)
+        GROUP BY customer_name
+        ORDER BY total DESC
+        LIMIT 10
+    """, (sel_year,))
+    top_customers = [{"customer_name": r["customer_name"], "count": r["count"], "total": float(r["total"])}
+                     for r in cur.fetchall()]
+
+    cur.close()
+    return render_template_string(ADMIN_REPORTS_HTML,
+        business_name=BUSINESS_NAME,
+        sel_year=sel_year,
+        years=years,
+        monthly=monthly,
+        yearly_total=yearly_total,
+        collected=collected,
+        outstanding=outstanding,
+        yearly_bookings=yearly_bookings,
+        avg_value=avg_value,
+        top_customers=top_customers,
+        today=date.today().isoformat(),
+    )
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CALENDAR VIEW
+# ══════════════════════════════════════════════════════════════════════════════
+
+ADMIN_CALENDAR_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/admin-manifest.json">
+  <title>Calendar — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a202c;min-height:100vh;display:flex}
+    .sidebar{width:200px;min-height:100vh;background:#1e1e2e;display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;transition:transform .2s}
+    .sb-brand{padding:1.1rem 1rem .9rem;display:flex;align-items:center;gap:.55rem;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+    .sb-brand-name{font-size:.82rem;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+    .sb-new-btn{display:block;margin:.85rem .85rem .5rem;padding:.55rem .75rem;background:#16a34a;color:white;border-radius:8px;font-size:.84rem;font-weight:700;text-decoration:none;text-align:center}
+    .sb-new-btn:hover{background:#15803d}
+    .sb-nav{display:flex;flex-direction:column;padding:.25rem 0;flex:1}
+    .sb-link{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.84rem;font-weight:500;color:rgba(255,255,255,.55);text-decoration:none;transition:all .1s;border-left:3px solid transparent}
+    .sb-link:hover,.sb-link.active{background:rgba(255,255,255,.07);color:rgba(255,255,255,.9)}
+    .sb-link.active{border-left-color:#3b82f6;color:white}
+    .sb-icon{width:1.1rem;text-align:center;font-size:.95rem}
+    .sb-divider{height:1px;background:rgba(255,255,255,.07);margin:.4rem 0}
+    .sb-bottom{border-top:1px solid rgba(255,255,255,.08);padding:.5rem 0}
+    .page-content{margin-left:200px;flex:1;min-height:100vh;display:flex;flex-direction:column}
+    .page-header{background:white;border-bottom:1px solid #e5e7eb;padding:.85rem 1.5rem;display:flex;align-items:center;gap:1rem;position:sticky;top:0;z-index:50}
+    .page-header h1{font-size:1.3rem;font-weight:700;color:#111827;flex:1}
+    .mobile-menu-btn{display:none;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#374151;padding:.25rem}
+    .page-body{padding:1.5rem;flex:1}
+    @media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0);box-shadow:6px 0 30px rgba(0,0,0,.4)}.page-content{margin-left:0}.mobile-menu-btn{display:block}}
+    .cal-nav{display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem}
+    .cal-nav a{padding:.45rem 1rem;background:white;border:1px solid #d1d5db;border-radius:8px;font-size:.85rem;color:#374151;text-decoration:none;font-weight:600}
+    .cal-nav a:hover{background:#f9fafb}
+    .cal-title{font-size:1.4rem;font-weight:800;color:#111827;flex:1;text-align:center}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:#e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+    .cal-dow{background:#f9fafb;padding:.55rem;text-align:center;font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}
+    .cal-day{background:white;min-height:90px;padding:.5rem;position:relative;cursor:pointer;transition:background .1s}
+    .cal-day:hover{background:#f0f9ff}
+    .cal-day.today{background:#eff6ff}
+    .cal-day.other-month{background:#fafafa}
+    .cal-day.other-month .day-num{color:#d1d5db}
+    .day-num{font-size:.82rem;font-weight:700;color:#374151;margin-bottom:.3rem}
+    .cal-day.today .day-num{background:#2563eb;color:white;width:1.5rem;height:1.5rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem}
+    .booking-chip{margin-top:.2rem;padding:.15rem .35rem;border-radius:4px;font-size:.68rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+    .chip-delivery{background:#dbeafe;color:#1d4ed8}
+    .chip-pickup{background:#dcfce7;color:#15803d}
+    .chip-pending{background:#fef9c3;color:#92400e}
+    .chip-more{background:#f3f4f6;color:#6b7280;font-size:.65rem}
+    .legend{display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
+    .legend-item{display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:#6b7280}
+    .legend-dot{width:10px;height:10px;border-radius:3px}
+    /* Day detail panel */
+    .day-panel{background:white;border-radius:12px;padding:1.25rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-top:1.25rem;display:none}
+    .day-panel.show{display:block}
+    .day-panel h2{font-size:1rem;font-weight:700;margin-bottom:.85rem;color:#111827}
+    .booking-row{display:flex;align-items:center;justify-content:space-between;padding:.6rem 0;border-bottom:1px solid #f3f4f6}
+    .booking-row:last-child{border-bottom:none}
+    .booking-name{font-weight:600;font-size:.88rem;color:#111827}
+    .booking-meta{font-size:.76rem;color:#6b7280;margin-top:.1rem}
+    .booking-link{font-size:.8rem;color:#2563eb;text-decoration:none;font-weight:600}
+  </style>
+</head>
+<body>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand">
+    <img src="/logo.png" alt="">
+    <span class="sb-brand-name">{{ business_name }}</span>
+  </div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link"><span class="sb-icon">🏠</span> Dashboard</a>
+    <a href="/admin/calendar" class="sb-link active"><span class="sb-icon">📅</span> Calendar</a>
+    <a href="/admin/reports" class="sb-link"><span class="sb-icon">📊</span> Reports</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/inventory" class="sb-link"><span class="sb-icon">📦</span> Inventory</a>
+    <a href="/admin/customers" class="sb-link"><span class="sb-icon">👥</span> Customers</a>
+    <div class="sb-divider"></div>
+    <a href="/driver/{{ today }}" class="sb-link"><span class="sb-icon">🚚</span> Driver View</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link"><span class="sb-icon">🚪</span> Log Out</a>
+  </div>
+</aside>
+<div class="page-content">
+  <div class="page-header">
+    <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+    <h1>📅 Calendar</h1>
+  </div>
+  <div class="page-body">
+    <div class="cal-nav">
+      <a href="/admin/calendar?year={{ prev_year }}&month={{ prev_month }}">← Prev</a>
+      <span class="cal-title">{{ month_name }} {{ cal_year }}</span>
+      <a href="/admin/calendar?year={{ next_year }}&month={{ next_month }}">Next →</a>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#dbeafe"></div>Delivery</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#dcfce7"></div>Pickup</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fef9c3"></div>Pending</div>
+    </div>
+    <div class="cal-grid">
+      <div class="cal-dow">Sun</div>
+      <div class="cal-dow">Mon</div>
+      <div class="cal-dow">Tue</div>
+      <div class="cal-dow">Wed</div>
+      <div class="cal-dow">Thu</div>
+      <div class="cal-dow">Fri</div>
+      <div class="cal-dow">Sat</div>
+      {% for cell in cells %}
+      <div class="cal-day {% if not cell.in_month %}other-month{% endif %} {% if cell.is_today %}today{% endif %}"
+           onclick="showDay('{{ cell.date_str }}','{{ cell.label }}')">
+        <div class="day-num">{{ cell.day }}</div>
+        {% for b in cell.bookings[:3] %}
+          <div class="booking-chip chip-{{ b.chip_type }}" title="{{ b.name }}">{{ b.name }}</div>
+        {% endfor %}
+        {% if cell.bookings|length > 3 %}
+          <div class="booking-chip chip-more">+{{ cell.bookings|length - 3 }} more</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="day-panel" id="dayPanel">
+      <h2 id="dayPanelTitle"></h2>
+      <div id="dayPanelBody"></div>
+    </div>
+  </div>
+</div>
+<script>
+var dayData = {{ day_data_json|safe }};
+function showDay(ds, label){
+  var panel = document.getElementById('dayPanel');
+  var title = document.getElementById('dayPanelTitle');
+  var body  = document.getElementById('dayPanelBody');
+  var bks   = dayData[ds] || [];
+  title.textContent = label;
+  if(!bks.length){ body.innerHTML='<p style="color:#9ca3af;font-size:.88rem">No bookings this day.</p>'; }
+  else {
+    body.innerHTML = bks.map(function(b){
+      return '<div class="booking-row">'
+        +'<div><div class="booking-name">'+b.name+'</div>'
+        +'<div class="booking-meta">'+b.type_label+' · '+b.status+'</div></div>'
+        +'<a class="booking-link" href="/admin/booking/'+b.id+'">View →</a>'
+        +'</div>';
+    }).join('');
+  }
+  panel.classList.add('show');
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/admin/calendar")
+@require_admin
+def admin_calendar():
+    import calendar as cal_mod
+    import json as _json
+
+    today = date.today()
+    cal_year  = int(request.args.get("year",  today.year))
+    cal_month = int(request.args.get("month", today.month))
+
+    # Prev / next month
+    if cal_month == 1:
+        prev_year, prev_month = cal_year - 1, 12
+    else:
+        prev_year, prev_month = cal_year, cal_month - 1
+    if cal_month == 12:
+        next_year, next_month = cal_year + 1, 1
+    else:
+        next_year, next_month = cal_year, cal_month + 1
+
+    month_name_str = cal_mod.month_name[cal_month] 
+
+    # First and last day of month
+    first_day = date(cal_year, cal_month, 1)
+    last_day  = date(cal_year, cal_month, cal_mod.monthrange(cal_year, cal_month)[1])
+
+    # Pad to Sunday-start grid
+    start_grid = first_day - timedelta(days=first_day.weekday() + 1)  # Monday-based, adjust for Sunday
+    # weekday(): Mon=0..Sun=6; we want Sunday=0
+    dow = (first_day.weekday() + 1) % 7  # Sun=0,Mon=1,...Sat=6
+    start_grid = first_day - timedelta(days=dow)
+    # Ensure we have enough rows (6 weeks max)
+    end_grid = start_grid + timedelta(days=41)
+
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # Fetch all bookings that fall in our grid range (deliveries OR pickups)
+    cur.execute("""
+        SELECT id, customer_name, status, payment_status,
+               COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
+               pickup_date
+        FROM bookings
+        WHERE (
+            COALESCE(delivery_date, setup_date, event_start_date) BETWEEN %s AND %s
+            OR pickup_date BETWEEN %s AND %s
+        )
+        AND status NOT IN ('denied','cancelled')
+        AND (archived IS NULL OR archived = FALSE)
+        ORDER BY COALESCE(delivery_date, setup_date, event_start_date)
+    """, (start_grid.isoformat(), end_grid.isoformat(),
+          start_grid.isoformat(), end_grid.isoformat()))
+    bookings = cur.fetchall()
+    cur.close()
+
+    # Build per-day lookup
+    day_map   = {}  # date_str → list of booking dicts
+    full_data = {}  # for JS
+
+    for b in bookings:
+        def add_to_day(ds, chip, type_label):
+            if ds not in day_map:
+                day_map[ds] = []
+            day_map[ds].append({"name": b["customer_name"], "chip_type": chip})
+            if ds not in full_data:
+                full_data[ds] = []
+            full_data[ds].append({
+                "id": b["id"],
+                "name": b["customer_name"],
+                "type_label": type_label,
+                "status": b["status"],
+            })
+
+        del_date = b["del_date"]
+        pick_date = b["pickup_date"]
+        chip = "delivery" if b["status"] == "accepted" else "pending"
+        if del_date:
+            ds = del_date.strftime("%Y-%m-%d") if hasattr(del_date, "strftime") else str(del_date)
+            add_to_day(ds, chip, "Delivery")
+        if pick_date:
+            ps = pick_date.strftime("%Y-%m-%d") if hasattr(pick_date, "strftime") else str(pick_date)
+            add_to_day(ps, "pickup", "Pickup")
+
+    # Build cells
+    cells = []
+    cur_day = start_grid
+    while cur_day <= end_grid:
+        ds = cur_day.strftime("%Y-%m-%d")
+        cells.append({
+            "date_str": ds,
+            "day": cur_day.day,
+            "label": cur_day.strftime("%A, %B %-d, %Y"),
+            "in_month": cur_day.month == cal_month,
+            "is_today": cur_day == today,
+            "bookings": day_map.get(ds, []),
+        })
+        cur_day += timedelta(days=1)
+
+    return render_template_string(ADMIN_CALENDAR_HTML,
+        business_name=BUSINESS_NAME,
+        cal_year=cal_year,
+        cal_month=cal_month,
+        month_name=month_name_str,
+        prev_year=prev_year, prev_month=prev_month,
+        next_year=next_year, next_month=next_month,
+        cells=cells,
+        day_data_json=_json.dumps(full_data),
+        today=today.isoformat(),
+    )
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  DRIVER VIEW  (mobile-optimised, no admin login required but token-protected)
+# ══════════════════════════════════════════════════════════════════════════════
+
+DRIVER_VIEW_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>🚚 Driver Sheet — {{ date_label }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#f1f5f9;min-height:100vh}
+    .topbar{background:#1e293b;padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;border-bottom:1px solid #334155}
+    .topbar h1{font-size:1rem;font-weight:700;color:#f8fafc}
+    .topbar span{font-size:.78rem;color:#94a3b8}
+    .date-nav{display:flex;gap:.5rem;padding:.75rem 1.25rem;background:#1e293b;border-bottom:1px solid #334155}
+    .date-nav a{flex:1;padding:.5rem;text-align:center;background:#334155;color:#cbd5e1;border-radius:8px;font-size:.82rem;font-weight:600;text-decoration:none}
+    .date-nav a:hover{background:#475569}
+    .date-nav span{flex:2;text-align:center;padding:.5rem;font-size:.88rem;font-weight:700;color:#f1f5f9}
+    .empty{text-align:center;padding:3rem 1.5rem;color:#64748b}
+    .empty .icon{font-size:3rem;margin-bottom:.75rem}
+    .stop-card{margin:.75rem 1.25rem;background:#1e293b;border-radius:14px;overflow:hidden;border:1px solid #334155}
+    .stop-card.delivered{opacity:.55;border-color:#1e3a2e}
+    .stop-header{padding:.85rem 1rem;background:#263148;display:flex;align-items:center;gap:.75rem}
+    .stop-num{width:2rem;height:2rem;border-radius:50%;background:#3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.88rem;flex-shrink:0}
+    .stop-card.delivered .stop-num{background:#16a34a}
+    .stop-name{font-size:1rem;font-weight:700;color:#f8fafc;flex:1}
+    .stop-time{font-size:.8rem;color:#94a3b8;font-weight:600}
+    .stop-body{padding:.85rem 1rem}
+    .stop-addr{font-size:.9rem;color:#cbd5e1;margin-bottom:.6rem;line-height:1.4}
+    .stop-phone{font-size:.88rem;color:#60a5fa;margin-bottom:.6rem}
+    .stop-phone a{color:#60a5fa;text-decoration:none;font-weight:600}
+    .stop-items{font-size:.82rem;color:#94a3b8;margin-bottom:.85rem;line-height:1.5}
+    .stop-items strong{color:#cbd5e1}
+    .stop-actions{display:flex;gap:.6rem}
+    .btn-map{flex:1;padding:.65rem;background:#334155;color:#cbd5e1;border-radius:10px;font-size:.82rem;font-weight:700;text-align:center;text-decoration:none;display:block}
+    .btn-map:hover{background:#475569}
+    .btn-call{padding:.65rem 1rem;background:#1d4ed8;color:white;border-radius:10px;font-size:.82rem;font-weight:700;text-decoration:none}
+    .btn-done{flex:1;padding:.65rem;background:#16a34a;color:white;border-radius:10px;font-size:.82rem;font-weight:700;border:none;cursor:pointer;text-align:center}
+    .btn-done:active{background:#15803d}
+    .btn-undone{flex:1;padding:.65rem;background:#374151;color:#9ca3af;border-radius:10px;font-size:.82rem;font-weight:700;border:none;cursor:pointer}
+    .summary{margin:0 1.25rem .75rem;background:#1e293b;border-radius:10px;padding:.75rem 1rem;display:flex;gap:1.5rem;border:1px solid #334155}
+    .summary-item{text-align:center}
+    .summary-item .val{font-size:1.4rem;font-weight:800;color:#f1f5f9}
+    .summary-item .lbl{font-size:.68rem;color:#64748b;text-transform:uppercase;font-weight:600}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <h1>🚚 Driver Sheet</h1>
+  <span>{{ date_label }}</span>
+</div>
+<div class="date-nav">
+  <a href="/driver/{{ prev_date }}">← {{ prev_label }}</a>
+  <span>{{ short_label }}</span>
+  <a href="/driver/{{ next_date }}">{{ next_label }} →</a>
+</div>
+
+{% if stops %}
+<div class="summary" style="margin-top:.75rem">
+  <div class="summary-item"><div class="val">{{ stops|length }}</div><div class="lbl">Stops</div></div>
+  <div class="summary-item"><div class="val">{{ delivered_count }}</div><div class="lbl">Done</div></div>
+  <div class="summary-item"><div class="val">{{ stops|length - delivered_count }}</div><div class="lbl">Left</div></div>
+</div>
+{% for s in stops %}
+<div class="stop-card {% if s.delivered %}delivered{% endif %}" id="card-{{ s.id }}">
+  <div class="stop-header">
+    <div class="stop-num">{% if s.delivered %}✓{% else %}{{ loop.index }}{% endif %}</div>
+    <div class="stop-name">{{ s.customer_name }}</div>
+    {% if s.time_display %}<div class="stop-time">{{ s.time_display }}</div>{% endif %}
+  </div>
+  <div class="stop-body">
+    {% if s.address %}
+    <div class="stop-addr">📍 {{ s.address }}</div>
+    {% endif %}
+    {% if s.phone %}
+    <div class="stop-phone">📞 <a href="tel:{{ s.phone }}">{{ s.phone }}</a></div>
+    {% endif %}
+    {% if s.items_summary %}
+    <div class="stop-items"><strong>Items:</strong> {{ s.items_summary }}</div>
+    {% endif %}
+    <div class="stop-actions">
+      {% if s.address %}
+      <a class="btn-map" href="https://maps.google.com/?q={{ s.address|urlencode }}" target="_blank">🗺 Maps</a>
+      {% endif %}
+      {% if s.phone %}
+      <a class="btn-call" href="tel:{{ s.phone }}">Call</a>
+      {% endif %}
+      {% if not s.delivered %}
+      <button class="btn-done" onclick="markDelivered({{ s.id }}, this)">✓ Mark Done</button>
+      {% else %}
+      <button class="btn-undone" onclick="markDelivered({{ s.id }}, this)">Undo</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty">
+  <div class="icon">📭</div>
+  <div style="font-size:1rem;font-weight:700;color:#cbd5e1;margin-bottom:.4rem">No deliveries today</div>
+  <div>Nothing scheduled for {{ date_label }}</div>
+</div>
+{% endif %}
+
+<script>
+function markDelivered(id, btn){
+  fetch('/driver/' + id + '/toggle', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({date:'{{ date_str }}'})
+  }).then(function(r){return r.json();}).then(function(d){
+    location.reload();
+  }).catch(function(e){alert('Error: '+e);});
+}
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/driver/<date_str>")
+def driver_view(date_str):
+    """Mobile driver sheet — accessible without admin login if CALENDAR_TOKEN matches, or if admin session active."""
+    token = request.args.get("token", "")
+    if not (session.get("admin_logged_in") or token == CALENDAR_TOKEN):
+        # Return a simple token-prompt page
+        return render_template_string("""<!DOCTYPE html><html><body style='font-family:sans-serif;background:#0f172a;color:#f1f5f9;display:flex;align-items:center;justify-content:center;min-height:100vh'>
+        <div style='text-align:center'>
+          <div style='font-size:2rem;margin-bottom:1rem'>🔒</div>
+          <p>Enter access token to view driver sheet.</p>
+          <form method='get'>
+            <input name='token' placeholder='Token' style='padding:.5rem;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#f1f5f9;margin:.5rem'>
+            <input type='hidden' name='' value=''>
+            <button type='submit' style='padding:.5rem 1rem;background:#2563eb;color:white;border:none;border-radius:8px;cursor:pointer;margin:.5rem'>Go</button>
+          </form>
+        </div></body></html>"""), 401
+
+    try:
+        view_date = date.fromisoformat(date_str)
+    except ValueError:
+        view_date = date.today()
+        date_str = view_date.isoformat()
+
+    prev_d = view_date - timedelta(days=1)
+    next_d = view_date + timedelta(days=1)
+
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT id, customer_name, phone,
+               COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
+               COALESCE(delivery_time, setup_time) AS del_time,
+               setup_address, items_requested, status,
+               delivered_at
+        FROM bookings
+        WHERE COALESCE(delivery_date, setup_date, event_start_date) = %s
+          AND status IN ('accepted','concluded')
+          AND (archived IS NULL OR archived = FALSE)
+        ORDER BY COALESCE(delivery_time, setup_time) ASC NULLS LAST
+    """, (date_str,))
+    rows = cur.fetchall()
+    cur.close()
+
+    stops = []
+    for b in rows:
+        time_display = ""
+        if b["del_time"]:
+            try:
+                t = datetime.strptime(b["del_time"], "%H:%M")
+                time_display = t.strftime("%-I:%M %p")
+            except Exception:
+                time_display = b["del_time"]
+        items_raw = b.get("items_requested") or ""
+        # Truncate long item list for display
+        if len(items_raw) > 120:
+            items_raw = items_raw[:117] + "…"
+        stops.append({
+            "id": b["id"],
+            "customer_name": b["customer_name"],
+            "phone": b["phone"] or "",
+            "address": b["setup_address"] or "",
+            "time_display": time_display,
+            "items_summary": items_raw,
+            "delivered": bool(b.get("delivered_at")),
+        })
+
+    delivered_count = sum(1 for s in stops if s["delivered"])
+
+    def fmt_date(d):
+        today = date.today()
+        if d == today:
+            return "Today"
+        if d == today + timedelta(days=1):
+            return "Tomorrow"
+        if d == today - timedelta(days=1):
+            return "Yesterday"
+        return d.strftime("%b %-d")
+
+    token_param = f"?token={token}" if token else ""
+    return render_template_string(DRIVER_VIEW_HTML,
+        date_str=date_str,
+        date_label=view_date.strftime("%A, %B %-d, %Y"),
+        short_label=fmt_date(view_date),
+        prev_date=prev_d.isoformat() + token_param,
+        next_date=next_d.isoformat() + token_param,
+        prev_label=fmt_date(prev_d),
+        next_label=fmt_date(next_d),
+        stops=stops,
+        delivered_count=delivered_count,
+    )
+
+
+@app.route("/driver/<int:booking_id>/toggle", methods=["POST"])
+def driver_toggle_delivered(booking_id):
+    """Toggle delivered_at for a booking from the driver view."""
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT delivered_at FROM bookings WHERE id=%s", (booking_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        return jsonify({"error": "not found"}), 404
+    if row["delivered_at"]:
+        cur.execute("UPDATE bookings SET delivered_at=NULL WHERE id=%s", (booking_id,))
+    else:
+        cur.execute("UPDATE bookings SET delivered_at=NOW() WHERE id=%s", (booking_id,))
+    conn.commit()
+    cur.close()
+    return jsonify({"ok": True})
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  RENTAL AGREEMENT / E-SIGNATURE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _sign_token(booking_id):
+    """Generate a deterministic token for the signing link."""
+    raw = f"{booking_id}:{app.secret_key}:sign"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+AGREEMENT_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Rental Agreement — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c;padding:1.5rem 1rem 3rem;max-width:680px;margin:0 auto}
+    h1{font-size:1.4rem;font-weight:800;margin-bottom:.25rem;color:#111827}
+    .sub{font-size:.9rem;color:#6b7280;margin-bottom:1.75rem}
+    .booking-box{background:white;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;border:1px solid #e5e7eb}
+    .booking-box h2{font-size:.88rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem}
+    .row{display:flex;gap:1rem;margin-bottom:.4rem;font-size:.88rem}
+    .row .lbl{width:130px;color:#9ca3af;flex-shrink:0}
+    .row .val{color:#111827;font-weight:600}
+    .agreement-text{background:white;border-radius:12px;padding:1.25rem 1.5rem;border:1px solid #e5e7eb;margin-bottom:1.5rem;max-height:320px;overflow-y:auto;font-size:.83rem;line-height:1.7;color:#374151}
+    .agreement-text h3{font-size:.9rem;font-weight:700;color:#111827;margin-bottom:.5rem}
+    .agreement-text p{margin-bottom:.75rem}
+    .sign-box{background:white;border-radius:12px;padding:1.5rem;border:1px solid #e5e7eb}
+    .sign-box h2{font-size:1rem;font-weight:700;margin-bottom.75rem;color:#111827;margin-bottom:.75rem}
+    label{display:block;font-size:.82rem;font-weight:600;color:#374151;margin-bottom:.35rem;margin-top:.85rem}
+    input[type=text]{width:100%;padding:.6rem .85rem;border:1px solid #d1d5db;border-radius:8px;font-size:.95rem;color:#111827}
+    input[type=text]:focus{outline:2px solid #2563eb;border-color:#2563eb}
+    .checkbox-row{display:flex;align-items:flex-start;gap:.75rem;margin-top:1rem}
+    .checkbox-row input{width:1.1rem;height:1.1rem;margin-top:.1rem;flex-shrink:0;cursor:pointer}
+    .checkbox-row label{font-size:.85rem;color:#374151;font-weight:400;margin:0}
+    .btn-sign{width:100%;margin-top:1.25rem;padding:.85rem;background:#16a34a;color:white;font-size:1rem;font-weight:700;border:none;border-radius:10px;cursor:pointer}
+    .btn-sign:hover{background:#15803d}
+    .btn-sign:disabled{background:#9ca3af;cursor:not-allowed}
+    .signed-banner{background:#dcfce7;border:1px solid #bbf7d0;border-radius:12px;padding:1.5rem;text-align:center;margin-bottom:1.5rem}
+    .signed-banner .icon{font-size:2.5rem;margin-bottom:.5rem}
+    .signed-banner h2{font-size:1.1rem;font-weight:800;color:#15803d}
+    .signed-banner p{font-size:.85rem;color:#166534;margin-top:.35rem}
+  </style>
+</head>
+<body>
+<h1>📋 Rental Agreement</h1>
+<p class="sub">{{ business_name }} · Booking #{{ b.id }}</p>
+
+{% if b.agreement_signed %}
+<div class="signed-banner">
+  <div class="icon">✅</div>
+  <h2>Agreement Signed</h2>
+  <p>Signed by <strong>{{ b.agreement_signer_name }}</strong><br>
+  {% if b.agreement_signed_at %}on {{ b.agreement_signed_at.strftime('%B %-d, %Y at %-I:%M %p') }}{% endif %}</p>
+</div>
+{% endif %}
+
+<div class="booking-box">
+  <h2>Booking Details</h2>
+  <div class="row"><span class="lbl">Customer</span><span class="val">{{ b.customer_name }}</span></div>
+  <div class="row"><span class="lbl">Event Date</span><span class="val">{{ b.event_start_date.strftime('%B %-d, %Y') if b.event_start_date else '—' }}</span></div>
+  <div class="row"><span class="lbl">Location</span><span class="val">{{ b.setup_address or '—' }}</span></div>
+  <div class="row"><span class="lbl">Total</span><span class="val">${{ "%.2f"|format(b.total_cost or 0) }}</span></div>
+</div>
+
+<div class="agreement-text">
+  <h3>Terms & Conditions — {{ business_name }}</h3>
+  <p><strong>1. Rental Period.</strong> Equipment is rented for the dates specified in this booking. Late returns may incur additional fees.</p>
+  <p><strong>2. Deposit & Payment.</strong> A deposit is required to secure your booking. The remaining balance is due prior to or on the delivery date. Failure to pay may result in cancellation without refund of the deposit.</p>
+  <p><strong>3. Damage & Loss.</strong> The renter is responsible for any damage to or loss of equipment during the rental period. Normal wear and tear is excluded. Replacement costs will be charged for lost or severely damaged items.</p>
+  <p><strong>4. Setup & Conditions.</strong> The renter must ensure a safe and accessible setup area. {{ business_name }} reserves the right to decline setup if conditions are unsafe.</p>
+  <p><strong>5. Cancellation.</strong> Cancellations made less than 7 days before the event are non-refundable. Cancellations 7+ days in advance may receive a credit toward a future booking.</p>
+  <p><strong>6. Weather.</strong> Outdoor rentals are subject to weather conditions. {{ business_name }} may cancel or modify delivery in cases of severe weather. No refunds are issued for weather events outside our control.</p>
+  <p><strong>7. Indemnification.</strong> The renter agrees to hold {{ business_name }} harmless from any injury, loss, or liability arising from the use of rented equipment.</p>
+  <p><strong>8. Governing Law.</strong> This agreement is governed by the laws of the state in which {{ business_name }} operates.</p>
+</div>
+
+{% if not b.agreement_signed %}
+<div class="sign-box">
+  <h2>Sign to Confirm</h2>
+  <form method="post">
+    <label>Your Full Name</label>
+    <input type="text" name="signer_name" placeholder="Type your full legal name" required>
+    <div class="checkbox-row">
+      <input type="checkbox" id="agree_check" required>
+      <label for="agree_check">I have read and agree to the Rental Agreement terms above. I understand this is a legally binding agreement.</label>
+    </div>
+    <button type="submit" class="btn-sign">✍️ I Agree &amp; Sign</button>
+  </form>
+</div>
+{% endif %}
+</body>
+</html>
+"""
+
+
+@app.route("/booking/sign/<int:booking_id>/<token>", methods=["GET","POST"])
+def booking_sign(booking_id, token):
+    if token != _sign_token(booking_id):
+        return "Invalid or expired link.", 403
+
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+    b = cur.fetchone()
+    if not b:
+        cur.close()
+        return "Booking not found.", 404
+
+    if request.method == "POST" and not b["agreement_signed"]:
+        signer_name = request.form.get("signer_name", "").strip()
+        if signer_name:
+            cur.execute("""
+                UPDATE bookings
+                SET agreement_signed=TRUE, agreement_signed_at=NOW(), agreement_signer_name=%s
+                WHERE id=%s
+            """, (signer_name, booking_id))
+            conn.commit()
+            cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+            b = cur.fetchone()
+
+    cur.close()
+    return render_template_string(AGREEMENT_HTML,
+        business_name=BUSINESS_NAME,
+        b=b,
+    )
+
+
+@app.route("/admin/booking/<int:booking_id>/send-agreement", methods=["POST"])
+@require_admin
+def admin_send_agreement(booking_id):
+    """Send the e-sign link to the customer via email."""
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+    b = cur.fetchone()
+    cur.close()
+    if not b:
+        return "Not found", 404
+
+    token = _sign_token(booking_id)
+    base  = os.environ.get("APP_BASE_URL", BASE_URL).rstrip("/")
+    sign_url = f"{base}/booking/sign/{booking_id}/{token}"
+
+    # Send email
+    if b.get("customer_email") and GMAIL_USER:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = f"Please Sign Your Rental Agreement — {BUSINESS_NAME}"
+            msg["From"]    = GMAIL_USER
+            msg["To"]      = b["customer_email"]
+            html_body = f"""
+            <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:2rem">
+              <h2 style="color:#111827">Rental Agreement Ready to Sign</h2>
+              <p style="color:#374151">Hi {b['customer_name'].split()[0]},</p>
+              <p style="color:#374151;margin-top:.75rem">Your booking with {BUSINESS_NAME} is almost confirmed.
+              Please review and sign your rental agreement to complete the process.</p>
+              <div style="text-align:center;margin:2rem 0">
+                <a href="{sign_url}" style="background:#16a34a;color:white;padding:.85rem 2rem;border-radius:10px;font-weight:700;text-decoration:none;font-size:1rem">
+                  ✍️ Review &amp; Sign Agreement
+                </a>
+              </div>
+              <p style="color:#6b7280;font-size:.85rem">This link is unique to your booking. If you have questions, reply to this email or call {BUSINESS_PHONE or BUSINESS_NAME}.</p>
+            </div>"""
+            msg.attach(MIMEText(html_body, "html"))
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+                s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+                s.send_message(msg)
+        except Exception as e:
+            log.error(f"Agreement email error: {e}")
+
+    # Also send SMS if phone
+    if b.get("phone"):
+        send_sms(b["phone"], f"Hi {b['customer_name'].split()[0]}! Please sign your rental agreement for {BUSINESS_NAME}: {sign_url}")
+
+    return redirect(url_for("admin_booking_detail", booking_id=booking_id))
+
+
 ADMIN_CUSTOMERS_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -11620,7 +12673,9 @@ ADMIN_CUSTOMERS_HTML = """
     <a href="/admin/customers" class="sb-link active">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
   </nav>
@@ -12000,7 +13055,9 @@ ADMIN_CUSTOMER_IMPORT_HTML = """
     <a href="/admin/customers" class="sb-link active">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
   </nav>
@@ -12318,7 +13375,9 @@ ADMIN_CUSTOMER_EDIT_HTML = """
     <a href="/admin/customers" class="sb-link active">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
   </nav>
@@ -12898,7 +13957,9 @@ ADMIN_TAX_HTML = """
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link active">💰 Tax Report</a>
   </nav>
@@ -13517,6 +14578,139 @@ def admin_email_backup():
     except Exception as e:
         log.error(f"email_backup error: {e}")
         return redirect(url_for("admin_dashboard") + "?backup_err=1")
+
+
+@app.route("/cron/send-reminders")
+def cron_send_reminders():
+    """
+    Called daily by an external cron (e.g. cron-job.org or Render cron).
+    Sends three types of automated SMS:
+      1. Payment reminder  — delivery in 5 days, still unpaid / not agreed
+      2. Delivery confirmation — delivery is tomorrow, accepted
+      3. Pickup reminder   — pickup is tomorrow
+    Protect with ?secret=CRON_SECRET_KEY
+    """
+    secret = request.args.get("secret", "")
+    if CRON_SECRET_KEY and secret != CRON_SECRET_KEY:
+        return "Unauthorized", 401
+
+    today = date.today()
+    in_5  = today + timedelta(days=5)
+    tmrw  = today + timedelta(days=1)
+
+    sent   = []
+    errors = []
+
+    try:
+        conn = get_db()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # ── 1. Payment reminders (delivery in 5 days, unpaid) ────────────────
+        cur.execute("""
+            SELECT id, customer_name, phone,
+                   COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
+                   COALESCE(delivery_time, setup_time) AS del_time
+            FROM bookings
+            WHERE COALESCE(delivery_date, setup_date, event_start_date) = %s
+              AND status = 'accepted'
+              AND (payment_status IS NULL OR payment_status NOT IN ('paid'))
+              AND (archived IS NULL OR archived = FALSE)
+              AND (reminder_sent_at IS NULL
+                   OR reminder_sent_at::date < %s - INTERVAL '3 days')
+        """, (in_5.isoformat(), today.isoformat()))
+        for b in cur.fetchall():
+            msg = (
+                f"Hi {b['customer_name'].split()[0]}! "
+                f"This is {BUSINESS_NAME}. Your rental delivery is scheduled for "
+                f"{b['del_date'].strftime('%A, %B %-d')}. "
+                f"We haven't received your deposit yet — please pay to confirm your booking. "
+                f"Questions? Call {BUSINESS_PHONE or 'us'}."
+            )
+            ok = send_sms(b["phone"], msg)
+            if ok:
+                cur.execute("UPDATE bookings SET reminder_sent_at = NOW() WHERE id = %s", (b["id"],))
+                sent.append(f"payment-reminder → #{b['id']} {b['customer_name']}")
+            else:
+                errors.append(f"payment-reminder FAIL #{b['id']}")
+
+        # ── 2. Delivery confirmation (delivery tomorrow) ─────────────────────
+        cur.execute("""
+            SELECT id, customer_name, phone,
+                   COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
+                   COALESCE(delivery_time, setup_time) AS del_time,
+                   event_start_date, setup_address
+            FROM bookings
+            WHERE COALESCE(delivery_date, setup_date, event_start_date) = %s
+              AND status = 'accepted'
+              AND (archived IS NULL OR archived = FALSE)
+              AND (confirmation_sent_at IS NULL
+                   OR confirmation_sent_at::date < %s)
+        """, (tmrw.isoformat(), today.isoformat()))
+        for b in cur.fetchall():
+            time_str = ""
+            if b["del_time"]:
+                try:
+                    t = datetime.strptime(b["del_time"], "%H:%M")
+                    time_str = f" around {t.strftime('%-I:%M %p')}"
+                except Exception:
+                    pass
+            msg = (
+                f"Hi {b['customer_name'].split()[0]}! "
+                f"Your {BUSINESS_NAME} delivery is tomorrow"
+                f"{time_str}. "
+                f"Please make sure someone is available at the setup location. "
+                f"Questions? Call {BUSINESS_PHONE or 'us'}. See you tomorrow!"
+            )
+            ok = send_sms(b["phone"], msg)
+            if ok:
+                cur.execute("UPDATE bookings SET confirmation_sent_at = NOW() WHERE id = %s", (b["id"],))
+                sent.append(f"delivery-confirm → #{b['id']} {b['customer_name']}")
+            else:
+                errors.append(f"delivery-confirm FAIL #{b['id']}")
+
+        # ── 3. Pickup reminder (pickup tomorrow) ─────────────────────────────
+        cur.execute("""
+            SELECT id, customer_name, phone, pickup_date, pickup_time
+            FROM bookings
+            WHERE pickup_date = %s
+              AND status = 'accepted'
+              AND (archived IS NULL OR archived = FALSE)
+              AND (pickup_reminder_sent_at IS NULL
+                   OR pickup_reminder_sent_at::date < %s)
+        """, (tmrw.isoformat(), today.isoformat()))
+        for b in cur.fetchall():
+            time_str = ""
+            if b["pickup_time"]:
+                try:
+                    t = datetime.strptime(b["pickup_time"], "%H:%M")
+                    time_str = f" around {t.strftime('%-I:%M %p')}"
+                except Exception:
+                    pass
+            msg = (
+                f"Hi {b['customer_name'].split()[0]}! "
+                f"A reminder that {BUSINESS_NAME} will be picking up your rental equipment tomorrow"
+                f"{time_str}. "
+                f"Please have everything accessible. Thank you for renting with us!"
+            )
+            ok = send_sms(b["phone"], msg)
+            if ok:
+                cur.execute("UPDATE bookings SET pickup_reminder_sent_at = NOW() WHERE id = %s", (b["id"],))
+                sent.append(f"pickup-reminder → #{b['id']} {b['customer_name']}")
+            else:
+                errors.append(f"pickup-reminder FAIL #{b['id']}")
+
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        log.error(f"cron_send_reminders error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({
+        "date": today.isoformat(),
+        "sent": sent,
+        "errors": errors,
+        "total_sent": len(sent),
+    })
 
 
 @app.route("/cron/daily-backup")
