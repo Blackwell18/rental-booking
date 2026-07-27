@@ -312,6 +312,9 @@ def init_db():
             # Fix bookings already migrated to 'waiting' that actually have amount_paid
             "UPDATE bookings SET payment_status='paid'    WHERE status='accepted' AND payment_status='waiting' AND amount_paid >= grand_total - 0.50 AND grand_total > 0 AND amount_paid > 0",
             "UPDATE bookings SET payment_status='partial' WHERE status='accepted' AND payment_status='waiting' AND amount_paid > 0 AND amount_paid < grand_total - 0.50 AND grand_total > 0",
+            # Fix payment_status='paid' where amount_paid < grand_total (stale data)
+            "UPDATE bookings SET payment_status='partial' WHERE payment_status='paid' AND grand_total > 0 AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid < grand_total - 0.50",
+            "UPDATE bookings SET payment_status='waiting' WHERE payment_status='paid' AND (amount_paid IS NULL OR amount_paid <= 0) AND grand_total > 0",
             # Auto-conclude: picked up 2+ days ago
             """UPDATE bookings SET status='concluded'
                WHERE delivery_status='picked_up'
@@ -5281,9 +5284,9 @@ ADMIN_BOOKING_HTML = """
     <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
       {% if b.status == "agree_to_pay" %}
         <span class="badge badge-agree_to_pay" style="margin:0">AGREE TO PAY</span>
-      {% elif b.status == "accepted" and b.payment_status == "paid" %}
+      {% elif b.status == "accepted" and b.payment_status == "paid" and ((b.amount_paid or 0)|float >= (b.grand_total or 0)|float - 0.50) %}
         <span class="badge badge-accepted" style="margin:0;background:#dcfce7;color:#166534">✅ PAID IN FULL</span>
-      {% elif b.status == "accepted" and b.payment_status == "partial" %}
+      {% elif b.status == "accepted" and (b.payment_status == "partial" or (b.payment_status == "paid" and (b.amount_paid or 0)|float < (b.grand_total or 0)|float - 0.50)) %}
         <span class="badge badge-accepted" style="margin:0;background:#fef9c3;color:#854d0e">💳 DEPOSIT PAID</span>
       {% else %}
         <span class="badge badge-{{ b.status }}" style="margin:0">{{ b.status|upper }}</span>
@@ -5906,7 +5909,7 @@ ADMIN_BOOKING_HTML = """
           <td colspan="4" style="color:#276749;font-weight:700;text-align:center">✅ Paid In Full</td>
         </tr>
         {% endif %}
-        {% elif b.status == 'accepted' and b.payment_status == 'paid' %}
+        {% elif b.status == 'accepted' and b.payment_status == 'paid' and ((b.amount_paid or 0)|float >= (b.grand_total or 0)|float - 0.50) %}
         <tr style="background:#f0fff4">
           <td colspan="4" style="color:#276749;font-weight:700;text-align:center">✅ Paid In Full</td>
         </tr>
