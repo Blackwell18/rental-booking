@@ -312,6 +312,8 @@ def init_db():
             # Fix bookings already migrated to 'waiting' that actually have amount_paid
             "UPDATE bookings SET payment_status='paid'    WHERE status='accepted' AND payment_status='waiting' AND amount_paid >= grand_total - 0.50 AND grand_total > 0 AND amount_paid > 0",
             "UPDATE bookings SET payment_status='partial' WHERE status='accepted' AND payment_status='waiting' AND amount_paid > 0 AND amount_paid < grand_total - 0.50 AND grand_total > 0",
+            # tax_transfers account_type column
+            "ALTER TABLE tax_transfers ADD COLUMN IF NOT EXISTS account_type VARCHAR(20) DEFAULT 'sales_tax'",
             # Fix payment_status='paid' where amount_paid < grand_total (stale data)
             "UPDATE bookings SET payment_status='partial' WHERE payment_status='paid' AND grand_total > 0 AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid < grand_total - 0.50",
             "UPDATE bookings SET payment_status='waiting' WHERE payment_status='paid' AND (amount_paid IS NULL OR amount_paid <= 0) AND grand_total > 0",
@@ -13738,11 +13740,10 @@ ADMIN_TAX_HTML = """
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Tax Report — {{ business_name }}</title>
+  <title>Tax Tracker — {{ business_name }}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
-    /* Sidebar */
     .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
     .sb-overlay.show{display:block}
     .sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
@@ -13761,51 +13762,64 @@ ADMIN_TAX_HTML = """
     .pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
     .pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
     .mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
-    @media(max-width:768px){
-      .sidebar{transform:translateX(-210px)}
-      .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
-      .page-content{margin-left:0!important}
-      .mobile-menu-btn{display:block}
-    }
-    /* Page content */
-    .main{max-width:900px;margin:0 auto;padding:1.5rem}
+    @media(max-width:768px){.sidebar{transform:translateX(-210px)}.sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}.page-content{margin-left:0!important}.mobile-menu-btn{display:block}}
+    .main{max-width:980px;margin:0 auto;padding:1.5rem}
     .flash{padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem;font-weight:500}
     .flash-ok{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
     .flash-err{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
-    /* Period tabs */
-    .period-tabs{display:flex;gap:.4rem;margin-bottom:1.25rem;flex-wrap:wrap}
-    .ptab{padding:.4rem .9rem;border-radius:8px;font-size:.83rem;font-weight:600;text-decoration:none;border:1px solid #d1d5db;color:#374151;background:#fff;cursor:pointer}
-    .ptab:hover{background:#f3f4f6}
-    .ptab.active{background:#166534;color:#fff;border-color:#166534}
+    /* Quarter nav */
+    .qnav{display:flex;align-items:center;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap}
+    .yr-btn{background:#fff;border:1px solid #d1d5db;border-radius:7px;padding:.3rem .7rem;font-size:.85rem;font-weight:600;color:#374151;text-decoration:none;cursor:pointer}
+    .yr-btn:hover{background:#f3f4f6}
+    .yr-label{font-size:1rem;font-weight:700;color:#111827;min-width:3.5rem;text-align:center}
+    .qtabs{display:flex;gap:.35rem;margin-left:.75rem}
+    .qtab{padding:.38rem .9rem;border-radius:8px;font-size:.84rem;font-weight:600;text-decoration:none;border:1px solid #d1d5db;color:#374151;background:#fff}
+    .qtab:hover{background:#f3f4f6}
+    .qtab.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+    /* Transfer guide */
+    .guide-box{background:linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 100%);color:#fff;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.5rem}
+    .guide-box h2{font-size:1rem;font-weight:700;margin-bottom:.9rem;opacity:.9}
+    .guide-accounts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+    .gacc{background:rgba(255,255,255,.12);border-radius:10px;padding:1rem 1.1rem}
+    .gacc-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;opacity:.8;margin-bottom:.4rem}
+    .gacc-amount{font-size:1.75rem;font-weight:800}
+    .gacc-sub{font-size:.75rem;opacity:.7;margin-top:.25rem}
+    .gacc.green{background:rgba(22,163,74,.25)}
+    .gacc.yellow{background:rgba(234,179,8,.2)}
+    .gacc.teal{background:rgba(20,184,166,.2)}
     /* Summary cards */
-    .summary-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem}
-    .scard{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1.1rem 1.25rem}
-    .scard-label{font-size:.75rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:.35rem}
-    .scard-value{font-size:1.6rem;font-weight:700;color:#111827}
-    .scard-value.green{color:#16a34a}
-    .scard-value.red{color:#dc2626}
-    .scard-value.blue{color:#2563eb}
-    /* Transfer form */
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:1.5rem}
-    .card-hdr{padding:.75rem 1.25rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:.88rem;color:#374151;display:flex;justify-content:space-between;align-items:center}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.9rem;margin-bottom:1.5rem}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:1rem 1.2rem}
+    .card-label{font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:.3rem}
+    .card-value{font-size:1.45rem;font-weight:700;color:#111827}
+    .card-value.green{color:#16a34a}
+    .card-value.red{color:#dc2626}
+    .card-value.blue{color:#2563eb}
+    .card-value.orange{color:#d97706}
+    /* Year table */
+    .section{background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:1.5rem}
+    .sec-hdr{padding:.7rem 1.2rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:.88rem;color:#374151;display:flex;justify-content:space-between;align-items:center}
+    table{width:100%;border-collapse:collapse}
+    th{padding:.55rem 1rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e5e7eb;background:#f9fafb;white-space:nowrap}
+    td{padding:.7rem 1rem;border-bottom:1px solid #f3f4f6;font-size:.85rem;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tbody tr:hover td{background:#fafafa}
+    .tbl-wrap{overflow-x:auto}
+    .empty{padding:2.5rem;text-align:center;color:#9ca3af;font-size:.9rem}
+    /* Record form */
     .xfer-form{padding:1rem 1.25rem;display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end}
     .fg{display:flex;flex-direction:column;gap:.3rem}
     .fg label{font-size:.75rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.4px}
-    .fg input,.fg select,.fg textarea{padding:.42rem .65rem;border:1px solid #d1d5db;border-radius:6px;font-size:.86rem;color:#111827}
-    .fg input:focus,.fg select:focus{outline:none;border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.1)}
+    .fg input,.fg select{padding:.42rem .65rem;border:1px solid #d1d5db;border-radius:6px;font-size:.86rem;color:#111827}
+    .fg input:focus,.fg select:focus{outline:none;border-color:#16a34a}
     .btn-green{background:#16a34a;color:#fff;border:none;border-radius:7px;padding:.45rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer}
     .btn-green:hover{background:#15803d}
     .btn-danger-sm{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:6px;padding:.25rem .6rem;font-size:.75rem;font-weight:600;cursor:pointer}
-    .btn-danger-sm:hover{background:#fecaca}
-    /* Table */
-    table{width:100%;border-collapse:collapse}
-    th{padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e5e7eb;background:#f9fafb;white-space:nowrap}
-    td{padding:.75rem 1rem;border-bottom:1px solid #f3f4f6;font-size:.85rem;vertical-align:middle}
-    tr:last-child td{border-bottom:none}
-    tbody tr:hover td{background:#fafafa}
-    .empty{padding:2.5rem;text-align:center;color:#9ca3af;font-size:.9rem}
-    .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-    @media(max-width:600px){.xfer-form{flex-direction:column}.main{padding:1rem}}
+    .acc-pill{display:inline-block;padding:.15rem .55rem;border-radius:10px;font-size:.72rem;font-weight:700}
+    .pill-sales{background:#dcfce7;color:#166534}
+    .pill-income{background:#fef3c7;color:#92400e}
+    tr.q-current td{background:#eff6ff}
+    @media(max-width:600px){.xfer-form{flex-direction:column}.main{padding:1rem}.gacc-amount{font-size:1.4rem}}
   </style>
 </head>
 <body>
@@ -13825,90 +13839,156 @@ ADMIN_TAX_HTML = """
     <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
     <a href="/admin/tax-report" class="sb-link active">💰 Tax Report</a>
   </nav>
-  <div class="sb-bottom">
-    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
-  </div>
+  <div class="sb-bottom"><a href="/admin/logout" class="sb-link">🚪 Sign Out</a></div>
 </aside>
 <div class="page-content">
 <div class="pg-hdr">
   <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
-  <h1>💰 Tax Report</h1>
+  <h1>💰 Quarterly Tax Tracker</h1>
 </div>
 <div class="main">
 
   {% if flash_ok %}<div class="flash flash-ok">✓ {{ flash_ok }}</div>{% endif %}
   {% if flash_err %}<div class="flash flash-err">⚠ {{ flash_err }}</div>{% endif %}
 
-  <!-- Period selector -->
-  <div class="period-tabs">
-    <a href="?period=this_month" class="ptab {% if period=='this_month' %}active{% endif %}">This Month</a>
-    <a href="?period=last_month" class="ptab {% if period=='last_month' %}active{% endif %}">Last Month</a>
-    <a href="?period=this_year"  class="ptab {% if period=='this_year'  %}active{% endif %}">This Year</a>
-    <a href="?period=all_time"   class="ptab {% if period=='all_time'   %}active{% endif %}">All Time</a>
+  <!-- Quarter / Year nav -->
+  <div class="qnav">
+    <a class="yr-btn" href="?year={{ year - 1 }}&q={{ quarter }}">‹</a>
+    <span class="yr-label">{{ year }}</span>
+    <a class="yr-btn" href="?year={{ year + 1 }}&q={{ quarter }}">›</a>
+    <div class="qtabs">
+      <a class="qtab {% if quarter=='Q1' %}active{% endif %}" href="?year={{ year }}&q=Q1">Q1<span style="font-size:.7rem;opacity:.7;margin-left:.2rem">Jan–Mar</span></a>
+      <a class="qtab {% if quarter=='Q2' %}active{% endif %}" href="?year={{ year }}&q=Q2">Q2<span style="font-size:.7rem;opacity:.7;margin-left:.2rem">Apr–Jun</span></a>
+      <a class="qtab {% if quarter=='Q3' %}active{% endif %}" href="?year={{ year }}&q=Q3">Q3<span style="font-size:.7rem;opacity:.7;margin-left:.2rem">Jul–Sep</span></a>
+      <a class="qtab {% if quarter=='Q4' %}active{% endif %}" href="?year={{ year }}&q=Q4">Q4<span style="font-size:.7rem;opacity:.7;margin-left:.2rem">Oct–Dec</span></a>
+    </div>
+    <span style="font-size:.82rem;color:#6b7280;margin-left:.5rem">{{ q_label }} {{ year }}</span>
+  </div>
+
+  <!-- Transfer guide (the main point) -->
+  <div class="guide-box">
+    <h2>🏦 Transfer to Your Bank Accounts — {{ quarter }} {{ year }}</h2>
+    <div class="guide-accounts">
+      <div class="gacc green">
+        <div class="gacc-label">→ CT Sales Tax Account</div>
+        <div class="gacc-amount">${{ '%.2f'|format(sales_tax_owed) }}</div>
+        <div class="gacc-sub">6.35% tax collected · {{ '%.2f'|format(sales_tax_collected) }} total — {{ '%.2f'|format(sales_tax_xfer) }} already moved</div>
+      </div>
+      <div class="gacc yellow">
+        <div class="gacc-label">→ Income Tax Account</div>
+        <div class="gacc-amount">${{ '%.2f'|format(income_tax_owed) }}</div>
+        <div class="gacc-sub">{{ (income_tax_rate * 100)|int }}% of net revenue · {{ '%.2f'|format(income_tax_setaside) }} total — {{ '%.2f'|format(income_tax_xfer) }} already moved</div>
+      </div>
+      <div class="gacc teal">
+        <div class="gacc-label">✓ Your Take-Home</div>
+        <div class="gacc-amount">${{ '%.2f'|format(take_home) }}</div>
+        <div class="gacc-sub">Net revenue after taxes · {{ (income_tax_rate * 100)|int }}% rate assumed</div>
+      </div>
+    </div>
   </div>
 
   <!-- Summary cards -->
-  <div class="summary-row">
-    <div class="scard">
-      <div class="scard-label">Tax Collected</div>
-      <div class="scard-value green">${{ '%.2f'|format(tax_collected) }}</div>
-      <div style="font-size:.75rem;color:#6b7280;margin-top:.3rem">{{ booking_count }} booking{{ 's' if booking_count != 1 }}</div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Total Collected</div>
+      <div class="card-value">${{ '%.2f'|format(total_collected) }}</div>
     </div>
-    <div class="scard">
-      <div class="scard-label">Transferred Out</div>
-      <div class="scard-value blue">${{ '%.2f'|format(tax_transferred) }}</div>
-      <div style="font-size:.75rem;color:#6b7280;margin-top:.3rem">{{ transfer_count }} transfer{{ 's' if transfer_count != 1 }}</div>
+    <div class="card">
+      <div class="card-label">CT Sales Tax (6.35%)</div>
+      <div class="card-value red">${{ '%.2f'|format(sales_tax_collected) }}</div>
     </div>
-    <div class="scard">
-      <div class="scard-label">Still Owed</div>
-      <div class="scard-value {% if tax_owed > 0 %}red{% else %}green{% endif %}">${{ '%.2f'|format(tax_owed) }}</div>
-      <div style="font-size:.75rem;color:#6b7280;margin-top:.3rem">move to tax account</div>
+    <div class="card">
+      <div class="card-label">Net Revenue</div>
+      <div class="card-value blue">${{ '%.2f'|format(net_revenue) }}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Income Tax ({{ (income_tax_rate*100)|int }}%)</div>
+      <div class="card-value orange">${{ '%.2f'|format(income_tax_setaside) }}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Bookings</div>
+      <div class="card-value">{{ booking_count }}</div>
+    </div>
+  </div>
+
+  <!-- Year at a glance -->
+  <div class="section">
+    <div class="sec-hdr"><span>{{ year }} — All Quarters</span></div>
+    <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th>Quarter</th><th>Collected</th><th>Sales Tax</th><th>Net Revenue</th><th>Income Tax ({{ (income_tax_rate*100)|int }}%)</th><th>Take-Home</th>
+      </tr></thead>
+      <tbody>
+      {% for row in year_summary %}
+      <tr {% if row.q == quarter %}class="q-current"{% endif %}>
+        <td style="font-weight:700">{{ row.q }}<span style="color:#9ca3af;font-weight:400;font-size:.78rem;margin-left:.4rem">{{ row.label }}</span></td>
+        <td>${{ '%.2f'|format(row.collected) }}</td>
+        <td style="color:#dc2626">${{ '%.2f'|format(row.sales_tax) }}</td>
+        <td style="color:#2563eb">${{ '%.2f'|format(row.net) }}</td>
+        <td style="color:#d97706">${{ '%.2f'|format(row.income_tax) }}</td>
+        <td style="color:#16a34a;font-weight:700">${{ '%.2f'|format(row.take_home) }}</td>
+      </tr>
+      {% endfor %}
+      <tr style="background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb">
+        <td>Full Year</td>
+        <td>${{ '%.2f'|format(year_summary|sum(attribute='collected')) }}</td>
+        <td style="color:#dc2626">${{ '%.2f'|format(year_summary|sum(attribute='sales_tax')) }}</td>
+        <td style="color:#2563eb">${{ '%.2f'|format(year_summary|sum(attribute='net')) }}</td>
+        <td style="color:#d97706">${{ '%.2f'|format(year_summary|sum(attribute='income_tax')) }}</td>
+        <td style="color:#16a34a">${{ '%.2f'|format(year_summary|sum(attribute='take_home')) }}</td>
+      </tr>
+      </tbody>
+    </table>
     </div>
   </div>
 
   <!-- Record a transfer -->
-  <div class="card">
-    <div class="card-hdr">✅ Record a Tax Transfer</div>
+  <div class="section">
+    <div class="sec-hdr">📤 Record a Transfer (when you move money to your bank)</div>
     <form method="POST" action="/admin/tax-report/transfer" class="xfer-form">
+      <input type="hidden" name="q" value="{{ quarter }}">
+      <input type="hidden" name="year" value="{{ year }}">
+      <div class="fg">
+        <label>Account</label>
+        <select name="account_type" style="width:160px">
+          <option value="sales_tax">CT Sales Tax</option>
+          <option value="income_tax">Income Tax</option>
+        </select>
+      </div>
       <div class="fg">
         <label>Amount ($)</label>
-        <input type="number" name="amount" step="0.01" min="0.01" placeholder="0.00"
-               value="{{ '%.2f'|format(tax_owed) if tax_owed > 0 else '' }}"
-               style="width:130px" required>
+        <input type="number" name="amount" step="0.01" min="0.01" placeholder="0.00" style="width:120px" required>
       </div>
       <div class="fg">
         <label>Note (optional)</label>
-        <input type="text" name="note" placeholder="e.g. Q2 tax transfer" style="width:220px">
+        <input type="text" name="note" placeholder="e.g. Q3 sales tax" style="width:200px">
       </div>
-      <div class="fg">
-        <label>Period Label</label>
-        <input type="text" name="period_label" value="{{ period_label }}" style="width:140px">
-      </div>
-      <button type="submit" class="btn-green">💾 Record Transfer</button>
+      <button type="submit" class="btn-green">💾 Record</button>
     </form>
   </div>
 
   <!-- Transfer history -->
-  <div class="card">
-    <div class="card-hdr">
-      <span>Transfer History</span>
-      <span style="font-size:.8rem;color:#6b7280;font-weight:400">all transfers on record</span>
+  <div class="section">
+    <div class="sec-hdr">
+      <span>Transfer History — {{ quarter }} {{ year }}</span>
+      <span style="font-size:.8rem;color:#6b7280;font-weight:400">{{ transfer_count }} transfer{{ 's' if transfer_count != 1 }}</span>
     </div>
     {% if transfers %}
     <div class="tbl-wrap">
     <table>
-      <thead><tr>
-        <th>Date</th><th>Amount</th><th>Period</th><th>Note</th><th></th>
-      </tr></thead>
+      <thead><tr><th>Date</th><th>Account</th><th>Amount</th><th>Note</th><th></th></tr></thead>
       <tbody>
       {% for t in transfers %}
       <tr>
         <td style="color:#6b7280">{{ t.created_at.strftime('%m/%d/%Y') if t.created_at else '' }}</td>
+        <td><span class="acc-pill {% if t.account_type == 'income_tax' %}pill-income{% else %}pill-sales{% endif %}">{{ 'Income Tax' if t.account_type == 'income_tax' else 'CT Sales Tax' }}</span></td>
         <td style="font-weight:700;color:#2563eb">${{ '%.2f'|format(t.amount) }}</td>
-        <td>{{ t.period_label or '—' }}</td>
         <td style="color:#6b7280">{{ t.note or '—' }}</td>
         <td>
           <form method="POST" action="/admin/tax-report/transfer/{{ t.id }}/delete" style="display:inline">
+            <input type="hidden" name="q" value="{{ quarter }}">
+            <input type="hidden" name="year" value="{{ year }}">
             <button type="submit" class="btn-danger-sm" onclick="return confirm('Delete this transfer record?')">✕</button>
           </form>
         </td>
@@ -13918,38 +13998,36 @@ ADMIN_TAX_HTML = """
     </table>
     </div>
     {% else %}
-    <div class="empty">No transfers recorded yet</div>
+    <div class="empty">No transfers recorded for {{ quarter }} {{ year }}</div>
     {% endif %}
   </div>
 
-  <!-- Bookings with tax -->
-  <div class="card">
-    <div class="card-hdr">
-      <span>Bookings with Tax — {{ period_label }}</span>
-      <span style="font-size:.8rem;color:#16a34a;font-weight:700">${{ '%.2f'|format(tax_collected) }} collected</span>
+  <!-- Bookings in quarter -->
+  <div class="section">
+    <div class="sec-hdr">
+      <span>Bookings — {{ q_label }} {{ year }}</span>
+      <span style="font-size:.8rem;color:#16a34a;font-weight:700">{{ booking_count }} booking{{ 's' if booking_count != 1 }}</span>
     </div>
     {% if tax_bookings %}
     <div class="tbl-wrap">
     <table>
-      <thead><tr>
-        <th>#</th><th>Client</th><th>Event Date</th><th>Status</th><th>Grand Total</th><th>Tax (6.35%)</th>
-      </tr></thead>
+      <thead><tr><th>#</th><th>Client</th><th>Event Date</th><th>Collected</th><th>Sales Tax</th><th>Net</th></tr></thead>
       <tbody>
       {% for b in tax_bookings %}
       <tr>
         <td><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;text-decoration:none;font-weight:600">#{{ b.id }}</a></td>
         <td>{{ b.full_name }}</td>
         <td style="color:#6b7280">{{ b.event_start_date or '—' }}</td>
-        <td><span style="font-size:.75rem;font-weight:600;text-transform:capitalize;padding:.15rem .5rem;border-radius:10px;background:#f3f4f6;color:#374151">{{ b.status }}</span></td>
-        <td>${{ '%.2f'|format(b.grand_total or 0) }}</td>
-        <td style="font-weight:700;color:#16a34a">${{ '%.2f'|format(b.tax_amount or 0) }}</td>
+        <td>${{ '%.2f'|format(b.revenue_collected) }}</td>
+        <td style="color:#dc2626">${{ '%.2f'|format(b.tax_in_payment) }}</td>
+        <td style="color:#2563eb">${{ '%.2f'|format(b.net_revenue) }}</td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
     </div>
     {% else %}
-    <div class="empty">No bookings with tax in this period</div>
+    <div class="empty">No bookings with payments in {{ q_label }} {{ year }}</div>
     {% endif %}
   </div>
 
@@ -13959,198 +14037,172 @@ ADMIN_TAX_HTML = """
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 </script>
-<button id="back-fab" title="Go back (drag to move)" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:grab;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35);touch-action:none;user-select:none;transition:box-shadow .15s">&#8592;</button>
-<script>
-(function(){
-  var btn = document.getElementById('back-fab');
-  if(!btn) return;
-  var SK = 'back_fab_pos';
-  var dragging = false, didDrag = false;
-  var startX, startY, origLeft, origBottom;
-
-  // Restore saved position
-  try {
-    var saved = JSON.parse(localStorage.getItem(SK));
-    if(saved) { btn.style.left = saved.left; btn.style.bottom = saved.bottom; btn.style.top = ''; }
-  } catch(e){}
-
-  function savePos() {
-    try { localStorage.setItem(SK, JSON.stringify({left: btn.style.left, bottom: btn.style.bottom})); } catch(e){}
-  }
-
-  function startDrag(cx, cy) {
-    dragging = true; didDrag = false;
-    var rect = btn.getBoundingClientRect();
-    startX = cx; startY = cy;
-    origLeft = rect.left;
-    origBottom = window.innerHeight - rect.bottom;
-    btn.style.cursor = 'grabbing';
-    btn.style.boxShadow = '0 6px 24px rgba(0,0,0,.45)';
-    btn.style.transition = 'none';
-  }
-
-  function moveDrag(cx, cy) {
-    if(!dragging) return;
-    var dx = cx - startX, dy = cy - startY;
-    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
-    var newLeft = Math.max(4, Math.min(window.innerWidth - 50, origLeft + dx));
-    var newBottom = Math.max(4, Math.min(window.innerHeight - 50, origBottom - dy));
-    btn.style.left = newLeft + 'px';
-    btn.style.bottom = newBottom + 'px';
-    btn.style.top = '';
-  }
-
-  function endDrag() {
-    if(!dragging) return;
-    dragging = false;
-    btn.style.cursor = 'grab';
-    btn.style.boxShadow = '0 3px 12px rgba(0,0,0,.35)';
-    btn.style.transition = 'box-shadow .15s';
-    savePos();
-  }
-
-  // Mouse
-  btn.addEventListener('mousedown', function(e){ e.preventDefault(); startDrag(e.clientX, e.clientY); });
-  document.addEventListener('mousemove', function(e){ moveDrag(e.clientX, e.clientY); });
-  document.addEventListener('mouseup', function(e){
-    if(!dragging) return;
-    var wasDrag = didDrag; endDrag();
-    if(!wasDrag) history.back();
-  });
-
-  // Touch
-  btn.addEventListener('touchstart', function(e){ e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-  document.addEventListener('touchmove', function(e){ if(dragging){ e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, {passive:false});
-  document.addEventListener('touchend', function(){
-    if(!dragging) return;
-    var wasDrag = didDrag; endDrag();
-    if(!wasDrag) history.back();
-  });
-})();
-</script>
+<button id="back-fab" title="Go back" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;width:46px;height:46px;border-radius:50%;background:#1e40af;color:white;border:none;cursor:pointer;font-size:1.4rem;line-height:1;box-shadow:0 3px 12px rgba(0,0,0,.35)" onclick="history.back()">&#8592;</button>
 </body></html>
 """
+
+
+
 
 
 @app.route("/admin/tax-report")
 @admin_required
 def admin_tax_report():
+    import urllib.parse as _up3
     from datetime import date as _date
-    today = _date.today()
-    period = request.args.get("period", "this_month")
+    _today = _date.today()
+
+    # Current quarter default
+    _qmap = {1:"Q1",2:"Q1",3:"Q1",4:"Q2",5:"Q2",6:"Q2",7:"Q3",8:"Q3",9:"Q3",10:"Q4",11:"Q4",12:"Q4"}
+    year    = int(request.args.get("year", _today.year))
+    quarter = request.args.get("q", _qmap[_today.month])
     flash_ok  = request.args.get("flash_ok", "")
     flash_err = request.args.get("flash_err", "")
 
-    # Date range for selected period
-    if period == "this_month":
-        start = today.replace(day=1)
-        end   = today
-        period_label = today.strftime("%B %Y")
-    elif period == "last_month":
-        first_this = today.replace(day=1)
-        last_last  = first_this - timedelta(days=1)
-        start = last_last.replace(day=1)
-        end   = last_last
-        period_label = last_last.strftime("%B %Y")
-    elif period == "this_year":
-        start = today.replace(month=1, day=1)
-        end   = today
-        period_label = str(today.year)
-    else:  # all_time
-        start = None
-        end   = None
-        period_label = "All Time"
+    INCOME_TAX_RATE = float(os.getenv("INCOME_TAX_RATE", "0.25"))
+    CT_TAX_RATE     = 0.0635
 
-    conn = get_db()
-    tax_bookings   = []
-    tax_collected  = 0.0
-    transfers      = []
-    tax_transferred = 0.0
+    QUARTER_DATES = {
+        "Q1": (f"{year}-01-01", f"{year}-03-31", "Jan – Mar"),
+        "Q2": (f"{year}-04-01", f"{year}-06-30", "Apr – Jun"),
+        "Q3": (f"{year}-07-01", f"{year}-09-30", "Jul – Sep"),
+        "Q4": (f"{year}-10-01", f"{year}-12-31", "Oct – Dec"),
+    }
+    q_start, q_end, q_label = QUARTER_DATES[quarter]
 
-    if conn:
+    def _calc_quarter(qs, qe):
+        """Return (collected, sales_tax, net, income_tax, take_home, bookings)."""
+        conn2 = get_db()
+        bks = []
+        if not conn2:
+            return 0,0,0,0,0,[]
         try:
-            cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
-            # Tax from bookings in period
-            if start and end:
-                cur.execute("""
-                    SELECT id, full_name, event_start_date, status, grand_total, tax_amount
-                    FROM bookings
-                    WHERE status NOT IN ('denied','cancelled')
-                      AND (archived IS NULL OR archived = FALSE)
-                      AND tax_amount > 0
-                      AND created_at::date BETWEEN %s AND %s
-                    ORDER BY created_at DESC
-                """, (start.isoformat(), end.isoformat()))
-            else:
-                cur.execute("""
-                    SELECT id, full_name, event_start_date, status, grand_total, tax_amount
-                    FROM bookings
-                    WHERE status NOT IN ('denied','cancelled')
-                      AND (archived IS NULL OR archived = FALSE)
-                      AND tax_amount > 0
-                    ORDER BY created_at DESC
-                """)
-            tax_bookings = [dict(r) for r in cur.fetchall()]
-            tax_collected = sum(float(b.get("tax_amount") or 0) for b in tax_bookings)
-
-            # All transfers (always show full history)
-            cur.execute("SELECT * FROM tax_transfers ORDER BY created_at DESC")
-            transfers = [dict(r) for r in cur.fetchall()]
-            tax_transferred = sum(float(t.get("amount") or 0) for t in transfers)
-
-            cur.close(); conn.close()
+            cur2 = conn2.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur2.execute("""
+                SELECT id, full_name, event_start_date, amount_paid, grand_total, tax_amount, payment_status
+                FROM bookings
+                WHERE status NOT IN ('denied','cancelled')
+                  AND (archived IS NULL OR archived=FALSE)
+                  AND amount_paid > 0
+                  AND COALESCE(event_start_date, setup_date, created_at::date) BETWEEN %s AND %s
+                ORDER BY COALESCE(event_start_date, setup_date, created_at::date) DESC
+            """, (qs, qe))
+            rows = [dict(r) for r in cur2.fetchall()]
+            cur2.close(); conn2.close()
         except Exception as e:
-            log.error(f"admin_tax_report error: {e}")
+            log.error(f"tax quarter calc error: {e}")
+            return 0,0,0,0,0,[]
 
-    tax_owed = max(0.0, round(tax_collected - tax_transferred, 2))
+        for b in rows:
+            ap = float(b.get("amount_paid") or 0)
+            gt = float(b.get("grand_total") or 0)
+            ta = float(b.get("tax_amount") or 0)
+            # Proportional tax: if partial payment, only portion of tax collected
+            if gt > 0 and ta > 0:
+                tax_in = round(ta * min(ap / gt, 1.0), 2)
+            else:
+                tax_in = round(ap * (CT_TAX_RATE / (1 + CT_TAX_RATE)), 2)
+            net = round(ap - tax_in, 2)
+            b["revenue_collected"] = ap
+            b["tax_in_payment"]    = tax_in
+            b["net_revenue"]       = net
+            bks.append(b)
+
+        collected  = round(sum(b["revenue_collected"] for b in bks), 2)
+        sales_tax  = round(sum(b["tax_in_payment"]    for b in bks), 2)
+        net_rev    = round(sum(b["net_revenue"]        for b in bks), 2)
+        income_tax = round(net_rev * INCOME_TAX_RATE, 2)
+        take_home  = round(net_rev - income_tax, 2)
+        return collected, sales_tax, net_rev, income_tax, take_home, bks
+
+    # Current quarter
+    total_collected, sales_tax_collected, net_revenue, income_tax_setaside, take_home, tax_bookings =         _calc_quarter(q_start, q_end)
+
+    # Year summary (all 4 quarters)
+    year_summary = []
+    for qk, (qs2, qe2, ql2) in QUARTER_DATES.items():
+        c2,st2,n2,it2,th2,_ = _calc_quarter(qs2, qe2)
+        year_summary.append({"q":qk,"label":ql2,"collected":c2,"sales_tax":st2,"net":n2,"income_tax":it2,"take_home":th2})
+
+    # Transfers for this quarter
+    conn3 = get_db()
+    transfers = []; sales_tax_xfer = 0.0; income_tax_xfer = 0.0
+    if conn3:
+        try:
+            cur3 = conn3.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cur3.execute("""
+                SELECT * FROM tax_transfers
+                WHERE period_label = %s
+                ORDER BY created_at DESC
+            """, (f"{quarter} {year}",))
+            transfers = [dict(r) for r in cur3.fetchall()]
+            sales_tax_xfer  = round(sum(float(t.get("amount") or 0) for t in transfers if t.get("account_type","sales_tax") == "sales_tax"), 2)
+            income_tax_xfer = round(sum(float(t.get("amount") or 0) for t in transfers if t.get("account_type") == "income_tax"), 2)
+            cur3.close(); conn3.close()
+        except Exception as e:
+            log.error(f"tax_transfers fetch error: {e}")
+
+    sales_tax_owed  = round(max(0, sales_tax_collected  - sales_tax_xfer),  2)
+    income_tax_owed = round(max(0, income_tax_setaside - income_tax_xfer), 2)
 
     return render_template_string(ADMIN_TAX_HTML,
         business_name=BUSINESS_NAME,
-        period=period,
-        period_label=period_label,
-        tax_collected=round(tax_collected, 2),
-        tax_transferred=round(tax_transferred, 2),
-        tax_owed=tax_owed,
-        booking_count=len(tax_bookings),
-        transfer_count=len(transfers),
+        today=_today.isoformat(),
+        year=year, quarter=quarter, q_label=q_label,
+        total_collected=total_collected,
+        sales_tax_collected=sales_tax_collected,
+        net_revenue=net_revenue,
+        income_tax_setaside=income_tax_setaside,
+        income_tax_rate=INCOME_TAX_RATE,
+        take_home=take_home,
+        sales_tax_xfer=sales_tax_xfer,
+        income_tax_xfer=income_tax_xfer,
+        sales_tax_owed=sales_tax_owed,
+        income_tax_owed=income_tax_owed,
         tax_bookings=tax_bookings,
+        booking_count=len(tax_bookings),
         transfers=transfers,
-        flash_ok=flash_ok,
-        flash_err=flash_err,
+        transfer_count=len(transfers),
+        year_summary=year_summary,
+        flash_ok=flash_ok, flash_err=flash_err,
     )
 
 
 @app.route("/admin/tax-report/transfer", methods=["POST"])
 @admin_required
 def admin_tax_transfer():
-    amount = request.form.get("amount", "").strip()
-    note   = request.form.get("note", "").strip()
-    period_label = request.form.get("period_label", "").strip()
+    amount       = request.form.get("amount", "").strip()
+    note         = request.form.get("note", "").strip()
+    account_type = request.form.get("account_type", "sales_tax").strip()
+    q            = request.form.get("q", "Q1")
+    yr           = request.form.get("year", "")
+    period_label = f"{q} {yr}" if yr else q
     try:
         amt = round(float(amount), 2)
         if amt <= 0:
             raise ValueError("amount must be positive")
     except Exception:
-        return redirect(url_for("admin_tax_report", flash_err="Invalid amount"))
+        return redirect(url_for("admin_tax_report", flash_err="Invalid amount", q=q, year=yr))
     conn = get_db()
     if conn:
         try:
             cur = conn.cursor()
             cur.execute(
-                "INSERT INTO tax_transfers (amount, note, period_label) VALUES (%s, %s, %s)",
-                (amt, note or None, period_label or None)
+                "INSERT INTO tax_transfers (amount, note, period_label, account_type) VALUES (%s, %s, %s, %s)",
+                (amt, note or None, period_label, account_type)
             )
             conn.commit(); cur.close(); conn.close()
         except Exception as e:
             log.error(f"tax_transfer insert error: {e}")
-            return redirect(url_for("admin_tax_report", flash_err="Error saving transfer"))
-    return redirect(url_for("admin_tax_report", flash_ok=f"Transfer of ${amt:.2f} recorded"))
+            return redirect(url_for("admin_tax_report", flash_err="Error saving transfer", q=q, year=yr))
+    return redirect(url_for("admin_tax_report", flash_ok=f"Transfer of ${amt:.2f} recorded", q=q, year=yr))
 
 
 @app.route("/admin/tax-report/transfer/<int:transfer_id>/delete", methods=["POST"])
 @admin_required
 def admin_tax_transfer_delete(transfer_id):
+    q  = request.form.get("q", "")
+    yr = request.form.get("year", "")
     conn = get_db()
     if conn:
         try:
@@ -14159,7 +14211,7 @@ def admin_tax_transfer_delete(transfer_id):
             conn.commit(); cur.close(); conn.close()
         except Exception as e:
             log.error(f"tax_transfer delete error: {e}")
-    return redirect(url_for("admin_tax_report", flash_ok="Transfer record deleted"))
+    return redirect(url_for("admin_tax_report", flash_ok="Transfer record deleted", q=q, year=yr))
 
 
 
