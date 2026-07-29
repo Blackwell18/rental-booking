@@ -13867,7 +13867,10 @@ ADMIN_TAX_HTML = """
 
   <!-- Transfer guide (the main point) -->
   <div class="guide-box">
-    <h2>🏦 Transfer to Your Bank Accounts — {{ quarter }} {{ year }}</h2>
+    {% set _is_future_q = (year > current_year) or (year == current_year and quarter > current_quarter) %}
+    <h2>🏦 Transfer to Your Bank Accounts — {{ quarter }} {{ year }}
+      {% if _is_future_q %}<span style="font-size:.73rem;background:rgba(255,255,255,.18);border-radius:6px;padding:.15rem .5rem;margin-left:.5rem">⚠ Future quarter — deposits collected so far only</span>{% endif %}
+    </h2>
     <div class="guide-accounts">
       <div class="gacc green">
         <div class="gacc-label">→ CT Sales Tax Account</div>
@@ -13890,8 +13893,12 @@ ADMIN_TAX_HTML = """
   <!-- Summary cards -->
   <div class="cards">
     <div class="card">
-      <div class="card-label">Total Collected</div>
+      <div class="card-label">✅ Collected</div>
       <div class="card-value">${{ '%.2f'|format(total_collected) }}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">🟡 Balance Still Owed</div>
+      <div class="card-value orange">${{ '%.2f'|format(balance_due) }}</div>
     </div>
     <div class="card">
       <div class="card-label">CT Sales Tax (6.35%)</div>
@@ -13913,17 +13920,25 @@ ADMIN_TAX_HTML = """
 
   <!-- Year at a glance -->
   <div class="section">
-    <div class="sec-hdr"><span>{{ year }} — All Quarters</span></div>
+    <div class="sec-hdr">
+      <span>{{ year }} — All Quarters</span>
+      <span style="font-size:.75rem;color:#6b7280;font-weight:400">✅ money in hand &nbsp;·&nbsp; 🟡 customers still owe this &nbsp;·&nbsp; <span style="background:#fef3c7;color:#92400e;padding:.1rem .35rem;border-radius:4px;font-size:.7rem">FUTURE</span> event hasn't happened yet</span>
+    </div>
     <div class="tbl-wrap">
     <table>
       <thead><tr>
-        <th>Quarter</th><th>Collected</th><th>Sales Tax</th><th>Net Revenue</th><th>Income Tax ({{ (income_tax_rate*100)|int }}%)</th><th>Take-Home</th>
+        <th>Quarter</th><th>✅ Collected</th><th>🟡 Balance Owed</th><th>Sales Tax</th><th>Net Revenue</th><th>Income Tax ({{ (income_tax_rate*100)|int }}%)</th><th>Take-Home</th>
       </tr></thead>
       <tbody>
       {% for row in year_summary %}
-      <tr {% if row.q == quarter %}class="q-current"{% endif %}>
-        <td style="font-weight:700">{{ row.q }}<span style="color:#9ca3af;font-weight:400;font-size:.78rem;margin-left:.4rem">{{ row.label }}</span></td>
-        <td>${{ '%.2f'|format(row.collected) }}</td>
+      {% set is_future = (year > current_year) or (year == current_year and row.q > current_quarter) %}
+      <tr {% if row.q == quarter %}class="q-current"{% elif is_future %}style="opacity:.5;background:#fffbeb"{% endif %}>
+        <td style="font-weight:700">
+          {{ row.q }}<span style="color:#9ca3af;font-weight:400;font-size:.78rem;margin-left:.4rem">{{ row.label }}</span>
+          {% if is_future %}<span style="font-size:.68rem;background:#fef3c7;color:#92400e;border-radius:4px;padding:.1rem .35rem;margin-left:.3rem">FUTURE</span>{% endif %}
+        </td>
+        <td style="font-weight:600">${{ '%.2f'|format(row.collected) }}</td>
+        <td style="color:#d97706">${{ '%.2f'|format(row.balance_due) }}</td>
         <td style="color:#dc2626">${{ '%.2f'|format(row.sales_tax) }}</td>
         <td style="color:#2563eb">${{ '%.2f'|format(row.net) }}</td>
         <td style="color:#d97706">${{ '%.2f'|format(row.income_tax) }}</td>
@@ -13933,6 +13948,7 @@ ADMIN_TAX_HTML = """
       <tr style="background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb">
         <td>Full Year</td>
         <td>${{ '%.2f'|format(year_summary|sum(attribute='collected')) }}</td>
+        <td style="color:#d97706">${{ '%.2f'|format(year_summary|sum(attribute='balance_due')) }}</td>
         <td style="color:#dc2626">${{ '%.2f'|format(year_summary|sum(attribute='sales_tax')) }}</td>
         <td style="color:#2563eb">${{ '%.2f'|format(year_summary|sum(attribute='net')) }}</td>
         <td style="color:#d97706">${{ '%.2f'|format(year_summary|sum(attribute='income_tax')) }}</td>
@@ -14011,14 +14027,15 @@ ADMIN_TAX_HTML = """
     {% if tax_bookings %}
     <div class="tbl-wrap">
     <table>
-      <thead><tr><th>#</th><th>Client</th><th>Event Date</th><th>Collected</th><th>Sales Tax</th><th>Net</th></tr></thead>
+      <thead><tr><th>#</th><th>Client</th><th>Event Date</th><th>✅ Collected</th><th>🟡 Balance Owed</th><th>Sales Tax</th><th>Net</th></tr></thead>
       <tbody>
       {% for b in tax_bookings %}
       <tr>
         <td><a href="/admin/booking/{{ b.id }}" style="color:#2563eb;text-decoration:none;font-weight:600">#{{ b.id }}</a></td>
         <td>{{ b.full_name }}</td>
         <td style="color:#6b7280">{{ b.event_start_date or '—' }}</td>
-        <td>${{ '%.2f'|format(b.revenue_collected) }}</td>
+        <td style="font-weight:600">${{ '%.2f'|format(b.revenue_collected) }}</td>
+        <td style="color:#d97706">${{ '%.2f'|format([((b.grand_total or 0)|float - (b.amount_paid or 0)|float), 0]|max) }}</td>
         <td style="color:#dc2626">${{ '%.2f'|format(b.tax_in_payment) }}</td>
         <td style="color:#2563eb">${{ '%.2f'|format(b.net_revenue) }}</td>
       </tr>
@@ -14108,21 +14125,22 @@ def admin_tax_report():
             b["net_revenue"]       = net
             bks.append(b)
 
-        collected  = round(sum(b["revenue_collected"] for b in bks), 2)
-        sales_tax  = round(sum(b["tax_in_payment"]    for b in bks), 2)
-        net_rev    = round(sum(b["net_revenue"]        for b in bks), 2)
-        income_tax = round(net_rev * INCOME_TAX_RATE, 2)
-        take_home  = round(net_rev - income_tax, 2)
-        return collected, sales_tax, net_rev, income_tax, take_home, bks
+        collected   = round(sum(b["revenue_collected"] for b in bks), 2)
+        sales_tax   = round(sum(b["tax_in_payment"]    for b in bks), 2)
+        net_rev     = round(sum(b["net_revenue"]        for b in bks), 2)
+        income_tax  = round(net_rev * INCOME_TAX_RATE, 2)
+        take_home   = round(net_rev - income_tax, 2)
+        balance_due = round(sum(max(float(b.get("grand_total") or 0) - float(b.get("amount_paid") or 0), 0) for b in bks), 2)
+        return collected, sales_tax, net_rev, income_tax, take_home, balance_due, bks
 
     # Current quarter
-    total_collected, sales_tax_collected, net_revenue, income_tax_setaside, take_home, tax_bookings =         _calc_quarter(q_start, q_end)
+    total_collected, sales_tax_collected, net_revenue, income_tax_setaside, take_home, balance_due, tax_bookings =         _calc_quarter(q_start, q_end)
 
     # Year summary (all 4 quarters)
     year_summary = []
     for qk, (qs2, qe2, ql2) in QUARTER_DATES.items():
-        c2,st2,n2,it2,th2,_ = _calc_quarter(qs2, qe2)
-        year_summary.append({"q":qk,"label":ql2,"collected":c2,"sales_tax":st2,"net":n2,"income_tax":it2,"take_home":th2})
+        c2,st2,n2,it2,th2,bd2,_ = _calc_quarter(qs2, qe2)
+        year_summary.append({"q":qk,"label":ql2,"collected":c2,"sales_tax":st2,"net":n2,"income_tax":it2,"take_home":th2,"balance_due":bd2})
 
     # Transfers for this quarter
     conn3 = get_db()
@@ -14148,7 +14166,10 @@ def admin_tax_report():
     return render_template_string(ADMIN_TAX_HTML,
         business_name=BUSINESS_NAME,
         today=_today.isoformat(),
+        current_year=_today.year,
+        current_quarter=_qmap[_today.month],
         year=year, quarter=quarter, q_label=q_label,
+        balance_due=balance_due,
         total_collected=total_collected,
         sales_tax_collected=sales_tax_collected,
         net_revenue=net_revenue,
