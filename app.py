@@ -2819,37 +2819,42 @@ document.getElementById('bookingForm').addEventListener('submit', function(e) {
 </script>
 <script>
 function initPublicEventAutocomplete() {
-  var streetEl = document.getElementById('event_street');
-  if (!streetEl || !window.google) return;
-  var ac = new google.maps.places.Autocomplete(streetEl, {
-    types: ['address'],
-    componentRestrictions: { country: 'us' },
-    fields: ['address_components']
-  });
-  streetEl.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') e.preventDefault();
-  });
-  ac.addListener('place_changed', function() {
-    var place = ac.getPlace();
-    if (!place.address_components) return;
-    var streetNum = '', route = '', city = '', state = '', zip = '';
-    place.address_components.forEach(function(comp) {
-      var t = comp.types;
-      if (t.includes('street_number'))                    streetNum = comp.long_name;
-      else if (t.includes('route'))                       route     = comp.long_name;
-      else if (t.includes('locality'))                    city      = comp.long_name;
-      else if (t.includes('administrative_area_level_1')) state     = comp.short_name;
-      else if (t.includes('postal_code'))                 zip       = comp.long_name;
+  if (!window.google) return;
+  function bindAC(streetId, cityId, stateId, zipId, extraCb) {
+    var el = document.getElementById(streetId);
+    if (!el) return;
+    var ac = new google.maps.places.Autocomplete(el, {
+      types: ['address'],
+      componentRestrictions: { country: 'us' },
+      fields: ['address_components']
     });
-    streetEl.value = [streetNum, route].filter(Boolean).join(' ');
-    var cityEl  = document.getElementById('event_city');
-    var stateEl = document.getElementById('event_state');
-    var zipEl   = document.getElementById('event_zip');
-    if (cityEl)  cityEl.value  = city;
-    if (stateEl) stateEl.value = state;
-    if (zipEl)   zipEl.value   = zip;
-    scheduleDistanceCalc();
-  });
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+    ac.addListener('place_changed', function() {
+      var place = ac.getPlace();
+      if (!place.address_components) return;
+      var streetNum = '', route = '', city = '', state = '', zip = '';
+      place.address_components.forEach(function(comp) {
+        var t = comp.types;
+        if (t.includes('street_number'))                    streetNum = comp.long_name;
+        else if (t.includes('route'))                       route     = comp.long_name;
+        else if (t.includes('locality'))                    city      = comp.long_name;
+        else if (t.includes('administrative_area_level_1')) state     = comp.short_name;
+        else if (t.includes('postal_code'))                 zip       = comp.long_name;
+      });
+      el.value = [streetNum, route].filter(Boolean).join(' ');
+      var cityEl  = document.getElementById(cityId);
+      var stateEl = document.getElementById(stateId);
+      var zipEl   = document.getElementById(zipId);
+      if (cityEl)  cityEl.value  = city;
+      if (stateEl) stateEl.value = state;
+      if (zipEl)   zipEl.value   = zip;
+      if (extraCb) extraCb();
+    });
+  }
+  bindAC('f_street',     'f_city',     'f_state',     'f_zip',     null);
+  bindAC('event_street', 'event_city', 'event_state', 'event_zip', scheduleDistanceCalc);
 }
 </script>
 {% if google_maps_key %}
@@ -5120,37 +5125,42 @@ document.getElementById('bookingForm').addEventListener('submit', function(e) {
 </script>
 <script>
 function initPublicEventAutocomplete() {
-  var streetEl = document.getElementById('event_street');
-  if (!streetEl || !window.google) return;
-  var ac = new google.maps.places.Autocomplete(streetEl, {
-    types: ['address'],
-    componentRestrictions: { country: 'us' },
-    fields: ['address_components']
-  });
-  streetEl.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') e.preventDefault();
-  });
-  ac.addListener('place_changed', function() {
-    var place = ac.getPlace();
-    if (!place.address_components) return;
-    var streetNum = '', route = '', city = '', state = '', zip = '';
-    place.address_components.forEach(function(comp) {
-      var t = comp.types;
-      if (t.includes('street_number'))                    streetNum = comp.long_name;
-      else if (t.includes('route'))                       route     = comp.long_name;
-      else if (t.includes('locality'))                    city      = comp.long_name;
-      else if (t.includes('administrative_area_level_1')) state     = comp.short_name;
-      else if (t.includes('postal_code'))                 zip       = comp.long_name;
+  if (!window.google) return;
+  function bindAC(streetId, cityId, stateId, zipId, extraCb) {
+    var el = document.getElementById(streetId);
+    if (!el) return;
+    var ac = new google.maps.places.Autocomplete(el, {
+      types: ['address'],
+      componentRestrictions: { country: 'us' },
+      fields: ['address_components']
     });
-    streetEl.value = [streetNum, route].filter(Boolean).join(' ');
-    var cityEl  = document.getElementById('event_city');
-    var stateEl = document.getElementById('event_state');
-    var zipEl   = document.getElementById('event_zip');
-    if (cityEl)  cityEl.value  = city;
-    if (stateEl) stateEl.value = state;
-    if (zipEl)   zipEl.value   = zip;
-    scheduleDistanceCalc();
-  });
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+    ac.addListener('place_changed', function() {
+      var place = ac.getPlace();
+      if (!place.address_components) return;
+      var streetNum = '', route = '', city = '', state = '', zip = '';
+      place.address_components.forEach(function(comp) {
+        var t = comp.types;
+        if (t.includes('street_number'))                    streetNum = comp.long_name;
+        else if (t.includes('route'))                       route     = comp.long_name;
+        else if (t.includes('locality'))                    city      = comp.long_name;
+        else if (t.includes('administrative_area_level_1')) state     = comp.short_name;
+        else if (t.includes('postal_code'))                 zip       = comp.long_name;
+      });
+      el.value = [streetNum, route].filter(Boolean).join(' ');
+      var cityEl  = document.getElementById(cityId);
+      var stateEl = document.getElementById(stateId);
+      var zipEl   = document.getElementById(zipId);
+      if (cityEl)  cityEl.value  = city;
+      if (stateEl) stateEl.value = state;
+      if (zipEl)   zipEl.value   = zip;
+      if (extraCb) extraCb();
+    });
+  }
+  bindAC('f_street',     'f_city',     'f_state',     'f_zip',     null);
+  bindAC('event_street', 'event_city', 'event_state', 'event_zip', scheduleDistanceCalc);
 }
 </script>
 {% if google_maps_key %}
@@ -5260,46 +5270,7 @@ table{border-collapse:collapse}
   });
 })();
 </script>
-<script>
-function initAdminAddressAutocomplete() {
-  if (!window.google) return;
-  function bindAC(streetId, cityId, stateId, zipId) {
-    var el = document.getElementById(streetId);
-    if (!el) return;
-    var ac = new google.maps.places.Autocomplete(el, {
-      types: ['address'],
-      componentRestrictions: { country: 'us' },
-      fields: ['address_components']
-    });
-    el.addEventListener('keydown', function(e){ if(e.key==='Enter') e.preventDefault(); });
-    ac.addListener('place_changed', function() {
-      var place = ac.getPlace();
-      if (!place.address_components) return;
-      var num='', route='', city='', state='', zip='';
-      place.address_components.forEach(function(comp) {
-        var t = comp.types;
-        if (t.includes('street_number'))                    num   = comp.long_name;
-        else if (t.includes('route'))                       route = comp.long_name;
-        else if (t.includes('locality'))                    city  = comp.long_name;
-        else if (t.includes('administrative_area_level_1')) state = comp.short_name;
-        else if (t.includes('postal_code'))                 zip   = comp.long_name;
-      });
-      el.value = [num, route].filter(Boolean).join(' ');
-      var cEl=document.getElementById(cityId),
-          sEl=document.getElementById(stateId),
-          zEl=document.getElementById(zipId);
-      if(cEl) cEl.value=city;
-      if(sEl) sEl.value=state;
-      if(zEl) zEl.value=zip;
-    });
-  }
-  bindAC('f_street',    'f_city',    'f_state',    'f_zip');
-  bindAC('event_street','event_city','event_state','event_zip');
-}
-</script>
-{% if google_maps_key %}
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initAdminAddressAutocomplete" async defer></script>
-{% endif %}
+
 </body></html>
 """
 
