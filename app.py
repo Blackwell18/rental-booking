@@ -10100,6 +10100,7 @@ def admin_set_delivery(booking_id):
         " FROM bookings WHERE id=%s", (booking_id,))
     row = cur.fetchone()
     b   = dict(row) if row else {}
+    log.info(f"set-delivery booking_id={booking_id} status={status} phone={b.get('phone')} email={b.get('email')}")
     try:
         if status == "none":
             cur.execute("UPDATE bookings SET delivery_status=NULL,delivered_at=NULL,picked_up_at=NULL WHERE id=%s",(booking_id,))
@@ -10107,13 +10108,41 @@ def admin_set_delivery(booking_id):
         elif status == "delivered":
             cur.execute("UPDATE bookings SET delivery_status='delivered',delivered_at=NOW() WHERE id=%s",(booking_id,))
             conn.commit()
+            # Send email via helper
             try: send_delivery_confirmation(b, None, "photo.jpg")
-            except Exception as e: log.error(f"set-delivery notify: {e}")
+            except Exception as e: log.error(f"set-delivery email error: {e}")
+            # SMS directly — independent of email
+            try:
+                first = (b.get("full_name") or "").split()[0] or "there"
+                bid   = b.get("id")
+                phone = b.get("phone")
+                log.info(f"set-delivery: attempting SMS to {phone}")
+                if phone:
+                    result = send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items have been delivered for booking #{bid}. Enjoy your event! 🎉")
+                    log.info(f"set-delivery: SMS result={result}")
+                else:
+                    log.warning(f"set-delivery: no phone for booking {booking_id}")
+            except Exception as e:
+                log.error(f"set-delivery SMS error: {e}")
         elif status == "picked_up":
             cur.execute("UPDATE bookings SET delivery_status='picked_up',picked_up_at=NOW() WHERE id=%s",(booking_id,))
             conn.commit()
+            # Send email via helper
             try: send_pickup_confirmation(b)
-            except Exception as e: log.error(f"set-delivery pickup notify: {e}")
+            except Exception as e: log.error(f"set-delivery pickup email error: {e}")
+            # SMS directly — independent of email
+            try:
+                first = (b.get("full_name") or "").split()[0] or "there"
+                bid   = b.get("id")
+                phone = b.get("phone")
+                log.info(f"set-delivery pickup: attempting SMS to {phone}")
+                if phone:
+                    result = send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been picked up. Thank you — we hope you had a great event! 🙏")
+                    log.info(f"set-delivery pickup: SMS result={result}")
+                else:
+                    log.warning(f"set-delivery pickup: no phone for booking {booking_id}")
+            except Exception as e:
+                log.error(f"set-delivery pickup SMS error: {e}")
     except Exception as e:
         log.error(f"set-delivery DB error: {e}")
     finally:
