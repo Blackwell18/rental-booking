@@ -6321,6 +6321,24 @@ ADMIN_BOOKING_HTML = """
   <!-- ── Actions card ── -->
   <div class="card" style="border:none;padding:1.1rem 1.25rem">
 
+    <!-- DELIVERY at top -->
+    {% if b.status not in ('denied','cancelled') %}
+    <div style="margin-bottom:1rem">
+      <div style="font-size:.7rem;font-weight:700;color:#085041;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;padding:.35rem .6rem;background:#E1F5EE;border-radius:6px">&#x1F69A; Delivery Status</div>
+      {% if b.delivery_status == 'picked_up' %}
+        <div style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:8px;padding:.6rem .85rem;font-size:.9rem;font-weight:700;text-align:center">&#x2705; Picked Up &#x2014; Complete</div>
+      {% elif b.delivery_status == 'delivered' %}
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:7px;padding:.4rem .8rem;font-size:.82rem;font-weight:700;white-space:nowrap">&#x1F69A; Delivered</span>
+          <button onclick="adminDeliveryAction('pickup')" style="flex:1;min-width:130px;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:.6rem 1rem;font-size:.88rem;font-weight:700;cursor:pointer">&#x1F504; Mark Picked Up</button>
+          <button onclick="adminDeliveryAction('undo_deliver')" title="Undo" style="background:#f1f5f9;color:#6b7280;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .75rem;font-size:.84rem;cursor:pointer">&#x21A9; Undo</button>
+        </div>
+      {% else %}
+        <button onclick="openAdminDeliverModal()" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:.75rem 1rem;font-size:1rem;font-weight:800;cursor:pointer">&#x1F4E6; Mark Delivered</button>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% if b.status in ('accepted', 'pending', 'agree_to_pay', 'confirmed') %}
     <!-- Record Payment -->
     <div style="margin-bottom:1rem">
@@ -6436,26 +6454,6 @@ ADMIN_BOOKING_HTML = """
         </div>
       {% else %}
         <div style="color:#9ca3af;font-size:.8rem;padding:.4rem .55rem">No payments recorded yet.</div>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    <!-- Delivery -->
-    {% if b.status not in ('denied','cancelled') %}
-    <div style="padding-top:.85rem;border-top:1px solid #f1f5f9;margin-bottom:.85rem">
-      <div style="font-size:.7rem;font-weight:700;color:#085041;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#E1F5EE;border-radius:6px">🚚 Delivery</div>
-      {% if b.delivery_status == 'picked_up' %}
-        <span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:7px;padding:.35rem .85rem;font-size:.84rem;font-weight:600">✔ Picked Up</span>
-      {% elif b.delivery_status == 'delivered' %}
-        <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status">
-          <button onclick="return confirm('Mark as Picked Up?')"
-            style="background:#eff6ff;color:#1e40af;border:1px solid #93c5fd;border-radius:7px;padding:.38rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">✅ Mark Picked Up</button>
-        </form>
-      {% else %}
-        <form method="POST" action="/admin/booking/{{ b.id }}/delivery-status">
-          <button onclick="return confirm('Mark as Delivered?')"
-            style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:7px;padding:.38rem .9rem;font-size:.84rem;font-weight:600;cursor:pointer">🚚 Mark Delivered</button>
-        </form>
       {% endif %}
     </div>
     {% endif %}
@@ -6695,6 +6693,74 @@ table{border-collapse:collapse}
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
   else{wrapTables();}
 })();
+</script>
+
+<!-- Admin Delivery Photo Modal -->
+<div id="admin-deliver-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;align-items:flex-end;justify-content:center">
+  <div style="background:white;border-radius:20px 20px 0 0;padding:1.5rem 1.25rem 2.5rem;width:100%;max-width:480px;box-shadow:0 -4px 40px rgba(0,0,0,.25)">
+    <div style="font-size:1.1rem;font-weight:700;color:#1a202c;margin-bottom:.3rem">&#x1F4E6; Confirm Delivery</div>
+    <div style="font-size:.83rem;color:#6b7280;margin-bottom:1.25rem">Optionally add a photo &#x2014; it will be emailed and texted to the customer as proof of delivery.</div>
+    <img id="admin-photo-preview" src="" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;display:none;margin-bottom:1rem;border:1px solid #e2e8f0">
+    <label style="display:block;width:100%;padding:.8rem;background:#eff6ff;color:#1d4ed8;border-radius:10px;font-size:.88rem;font-weight:700;text-align:center;cursor:pointer;margin-bottom:.75rem;border:1.5px dashed #3b82f6;box-sizing:border-box" for="admin-photo-input">
+      &#x1F4F7; Take / Choose Photo <em style="font-weight:400;opacity:.7">(optional)</em>
+    </label>
+    <input type="file" id="admin-photo-input" accept="image/*" capture="environment" style="display:none" onchange="adminPhotoPreview(this)">
+    <button id="admin-confirm-btn" onclick="submitAdminDeliver()" style="width:100%;padding:.85rem;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:800;cursor:pointer;margin-bottom:.6rem">&#x2705; Confirm &amp; Notify Customer</button>
+    <button onclick="closeAdminDeliverModal()" style="width:100%;padding:.7rem;background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer">Cancel</button>
+  </div>
+</div>
+<style>@keyframes adm-spin{to{transform:rotate(360deg)}}</style>
+<script>
+function openAdminDeliverModal(){
+  document.getElementById('admin-photo-input').value='';
+  document.getElementById('admin-photo-preview').style.display='none';
+  var btn=document.getElementById('admin-confirm-btn');
+  btn.disabled=false;btn.innerHTML='&#x2705; Confirm &amp; Notify Customer';
+  document.getElementById('admin-deliver-modal').style.display='flex';
+}
+function closeAdminDeliverModal(){
+  document.getElementById('admin-deliver-modal').style.display='none';
+}
+function adminPhotoPreview(input){
+  if(input.files&&input.files[0]){
+    var r=new FileReader();
+    r.onload=function(e){
+      var p=document.getElementById('admin-photo-preview');
+      p.src=e.target.result;p.style.display='block';
+    };
+    r.readAsDataURL(input.files[0]);
+  }
+}
+function submitAdminDeliver(){
+  var btn=document.getElementById('admin-confirm-btn');
+  btn.disabled=true;
+  btn.innerHTML='<span style="display:inline-block;width:14px;height:14px;border:2.5px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:adm-spin .7s linear infinite;vertical-align:middle;margin-right:.4rem"></span>Sending&hellip;';
+  var fd=new FormData();
+  fd.append('action','deliver');
+  var f=document.getElementById('admin-photo-input').files[0];
+  if(f)fd.append('photo',f);
+  fetch('/admin/booking/{{ b.id }}/delivery-action',{method:'POST',body:fd})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.ok){closeAdminDeliverModal();location.reload();}
+      else{alert('Error: '+(d.error||'Unknown'));btn.disabled=false;btn.innerHTML='&#x2705; Confirm &amp; Notify Customer';}
+    })
+    .catch(function(){alert('Network error');btn.disabled=false;btn.innerHTML='&#x2705; Confirm &amp; Notify Customer';});
+}
+function adminDeliveryAction(action){
+  var msg=action==='pickup'?'Mark as Picked Up? The customer will be notified.':'Undo the delivery mark?';
+  if(!confirm(msg))return;
+  fetch('/admin/booking/{{ b.id }}/delivery-action',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:action})
+  }).then(function(r){return r.json();})
+    .then(function(d){if(d.ok)location.reload();else alert('Error: '+(d.error||'Unknown'));})
+    .catch(function(){alert('Network error');});
+}
+document.getElementById('admin-deliver-modal').addEventListener('click',function(e){
+  if(e.target===this)closeAdminDeliverModal();
+});
 </script>
 </body></html>
 """
@@ -9931,6 +9997,50 @@ def booking_delivery_status(booking_id):
 # ══════════════════════════════════════════════════════════════════════════════
 #  ROUTES — STRIPE WEBHOOK
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+@app.route("/admin/booking/<int:booking_id>/delivery-action", methods=["POST"])
+@admin_required
+def admin_delivery_action(booking_id):
+    """Delivery action: deliver (+ optional photo), pickup, undo_deliver."""
+    if request.is_json:
+        data = request.get_json() or {}
+        action = data.get("action", "deliver")
+        image_bytes = None
+        image_filename = "photo.jpg"
+    else:
+        action = request.form.get("action", "deliver")
+        pf = request.files.get("photo")
+        image_bytes = pf.read() if (pf and pf.filename) else None
+        image_filename = (pf.filename if pf else None) or "photo.jpg"
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT id,full_name,email,phone,delivery_status,"
+        "event_street,event_city,event_state,event_zip FROM bookings WHERE id=%s",
+        (booking_id,)
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close(); return jsonify({"error":"not found"}), 404
+    b = dict(row)
+    if action == "deliver":
+        cur.execute("UPDATE bookings SET delivery_status='delivered',delivered_at=NOW() WHERE id=%s",(booking_id,))
+        conn.commit(); cur.close()
+        try: send_delivery_confirmation(b, image_bytes, image_filename)
+        except Exception as e: log.error(f"Delivery notify error: {e}")
+    elif action == "pickup":
+        cur.execute("UPDATE bookings SET delivery_status='picked_up',picked_up_at=NOW() WHERE id=%s",(booking_id,))
+        conn.commit(); cur.close()
+        try: send_pickup_confirmation(b)
+        except Exception as e: log.error(f"Pickup notify error: {e}")
+    elif action == "undo_deliver":
+        cur.execute("UPDATE bookings SET delivery_status=NULL,delivered_at=NULL WHERE id=%s",(booking_id,))
+        conn.commit(); cur.close()
+    else:
+        cur.close(); return jsonify({"error":"unknown action"}), 400
+    return jsonify({"ok": True})
+
 
 @app.route("/payment/success/<int:booking_id>")
 def payment_success(booking_id):
