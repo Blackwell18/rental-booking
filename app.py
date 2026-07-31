@@ -3876,6 +3876,15 @@ ADMIN_BOOKING_EDIT_HTML = """
   .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
   .page-content{margin-left:0!important}
   .mobile-menu-btn{display:block}
+  /* ── mobile action card fixes ── */
+  .mob-form{flex-direction:column!important}
+  .mob-form input,.mob-form select,.mob-form button{width:100%!important;flex:unset!important;min-width:unset!important}
+  .mob-btn-grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:.4rem!important}
+  .mob-btn-grid form,.mob-btn-grid a{display:block!important;margin:0!important}
+  .mob-btn-grid button,.mob-btn-grid a{width:100%!important;box-sizing:border-box!important;white-space:normal!important;text-align:center!important}
+  .hdr-del{flex-direction:column!important;align-items:stretch!important;gap:.4rem!important}
+  .hdr-del form{display:block!important;margin:0!important}
+  .hdr-del button{width:100%!important}
 }
 </style>
 </head>
@@ -5450,7 +5459,7 @@ ADMIN_BOOKING_HTML = """
     <a href="/admin/booking/{{ b.id }}/edit" style="margin-left:{% if b.status not in ('pending', 'accepted', 'confirmed') or b.payment_status not in ('waiting', None, '') %}auto{% else %}0{% endif %};font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap;border:1px solid #e5e7eb;border-radius:6px;padding:.3rem .75rem">✏️ Edit</a>
   </div>
   {% if b.status not in ('denied','cancelled') %}
-  <div style="width:100%;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding-top:.4rem;border-top:1px solid #f3f4f6">
+  <div class="hdr-del" style="width:100%;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding-top:.4rem;border-top:1px solid #f3f4f6">
     <span style="font-size:.75rem;font-weight:600;color:#6b7280;white-space:nowrap">Delivery:</span>
     {% if not b.delivery_status %}
       <button onclick="openAdminDeliverModal()" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;cursor:pointer">&#x1F4E6; Mark Delivered</button>
@@ -6291,7 +6300,7 @@ ADMIN_BOOKING_HTML = """
         </button>
       </form>
       {% endif %}
-      <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+      <form method="POST" action="/admin/booking/{{ b.id }}/custom-stripe-link" class="mob-form" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
         <input type="number" name="amount" min="0.50" step="0.01" placeholder="$ Amount" required
                style="flex:1;min-width:80px;border:1px solid #d1d5db;border-radius:6px;padding:.38rem .5rem;font-size:.9rem">
         <input type="text" name="label" placeholder="Label (opt)"
@@ -6376,6 +6385,7 @@ ADMIN_BOOKING_HTML = """
     <div style="margin-bottom:1rem">
       <div style="font-size:.7rem;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.55rem;padding:.35rem .6rem;background:#E6F1FB;border-radius:6px">💳 Record Payment</div>
       <form method="POST" action="/admin/booking/{{ b.id }}/record-payment"
+            class="mob-form"
             onsubmit="return confirm('Record this payment?')"
             style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
         <input type="number" name="amount" step="0.01" min="0.01" placeholder="Amount $" required
@@ -6388,7 +6398,7 @@ ADMIN_BOOKING_HTML = """
         </select>
         <button type="submit" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:.38rem .85rem;font-size:.84rem;font-weight:600;cursor:pointer">Record</button>
       </form>
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
+      <div class="mob-btn-grid" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem">
         {% if b.status not in ('denied','cancelled','concluded') %}
         <form method="POST" action="/admin/booking/{{ b.id }}/cash-payment" onsubmit="return confirm('Mark as paid in full with cash?')">
           <button style="background:#E1F5EE;color:#085041;border:1px solid #5DCAA5;border-radius:6px;padding:.3rem .75rem;font-size:.8rem;font-weight:600;cursor:pointer">💵 Cash Full</button>
