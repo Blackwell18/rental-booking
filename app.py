@@ -2093,26 +2093,18 @@ FORM_HTML = r"""
   <div class="card">
     <h2>Your Information</h2>
     <div class="row">
-      <div class="field" style="position:relative">
-        <label>Full Name <span class="required">*</span></label>
-        <input id="f_full_name" name="full_name" required placeholder="Jane Smith"
-               value="{{ form.full_name or '' }}" autocomplete="off"
-               oninput="csSearch(this.value)">
-        <div id="cs-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:9999;
-          background:#fff;border:1px solid #d1d5db;border-top:none;border-radius:0 0 10px 10px;
-          box-shadow:0 8px 24px rgba(0,0,0,.13);max-height:300px;overflow-y:auto"></div>
-      </div>
-      <div class="field"><label>Company Name <span style="color:#718096;font-weight:400">(if applicable)</span></label><input id="f_company" name="company_name" placeholder="ABC Events LLC" value="{{ form.company_name or '' }}"></div>
+      <div class="field"><label>Full Name <span class="required">*</span></label><input name="full_name" required placeholder="Jane Smith" value="{{ form.full_name or '' }}"></div>
+      <div class="field"><label>Company Name <span style="color:#718096;font-weight:400">(if applicable)</span></label><input name="company_name" placeholder="ABC Events LLC" value="{{ form.company_name or '' }}"></div>
     </div>
-    <div class="field"><label>Street Address <span class="required">*</span></label><input id="f_street" name="renter_street" required placeholder="123 Main Street" value="{{ form.renter_street or '' }}"></div>
+    <div class="field"><label>Street Address <span class="required">*</span></label><input name="renter_street" required placeholder="123 Main Street" value="{{ form.renter_street or '' }}"></div>
     <div class="row3">
-      <div class="field"><label>City <span class="required">*</span></label><input id="f_city" name="renter_city" required placeholder="Hartford" value="{{ form.renter_city or '' }}"></div>
-      <div class="field"><label>State <span class="required">*</span></label><input id="f_state" name="renter_state" required placeholder="CT" maxlength="2" value="{{ form.renter_state or '' }}"></div>
-      <div class="field"><label>Zip <span class="required">*</span></label><input id="f_zip" name="renter_zip" required placeholder="06101" value="{{ form.renter_zip or '' }}"></div>
+      <div class="field"><label>City <span class="required">*</span></label><input name="renter_city" required placeholder="Hartford" value="{{ form.renter_city or '' }}"></div>
+      <div class="field"><label>State <span class="required">*</span></label><input name="renter_state" required placeholder="CT" maxlength="2" value="{{ form.renter_state or '' }}"></div>
+      <div class="field"><label>Zip <span class="required">*</span></label><input name="renter_zip" required placeholder="06101" value="{{ form.renter_zip or '' }}"></div>
     </div>
     <div class="row">
-      <div class="field"><label>Phone <span class="required">*</span></label><input id="f_phone" name="phone" type="tel" required placeholder="(555) 000-0000" value="{{ form.phone or '' }}"></div>
-      <div class="field"><label>Email <span class="required">*</span></label><input id="f_email" name="email" type="email" required placeholder="jane@email.com" value="{{ form.email or '' }}"></div>
+      <div class="field"><label>Phone <span class="required">*</span></label><input name="phone" type="tel" required placeholder="(555) 000-0000" value="{{ form.phone or '' }}"></div>
+      <div class="field"><label>Email <span class="required">*</span></label><input name="email" type="email" required placeholder="jane@email.com" value="{{ form.email or '' }}"></div>
     </div>
     <div style="margin-top:1rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
       <input type="checkbox" name="tax_exempt_request" id="tax_exempt_request" value="1" onchange="updateTotals()" style="width:18px;height:18px;margin-top:.15rem;accent-color:#16a34a;cursor:pointer;flex-shrink:0">
@@ -4301,18 +4293,28 @@ ADMIN_NEW_BOOKING_HTML = r"""
   <div class="card">
     <h2>Your Information</h2>
     <div class="row">
-      <div class="field"><label>Full Name <span class="required">*</span></label><input name="full_name" required placeholder="Jane Smith" value="{{ form.full_name or '' }}"></div>
-      <div class="field"><label>Company Name <span style="color:#718096;font-weight:400">(if applicable)</span></label><input name="company_name" placeholder="ABC Events LLC" value="{{ form.company_name or '' }}"></div>
+      <div class="field" style="position:relative">
+        <label>Full Name <span class="required">*</span></label>
+        <input id="f_full_name" name="full_name" required placeholder="Jane Smith"
+               value="{{ form.full_name or '' }}"
+               autocomplete="new-customer"
+               oninput="csSearch(this.value)"
+               onkeydown="csKey(event)">
+        <div id="cs-dd" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:99999;
+          background:#fff;border:1.5px solid #2563eb;border-radius:10px;
+          box-shadow:0 8px 28px rgba(0,0,0,.18);max-height:300px;overflow-y:auto"></div>
+      </div>
+      <div class="field"><label>Company Name <span style="color:#718096;font-weight:400">(if applicable)</span></label><input id="f_company" name="company_name" placeholder="ABC Events LLC" value="{{ form.company_name or '' }}"></div>
     </div>
-    <div class="field"><label>Street Address <span class="required">*</span></label><input name="renter_street" required placeholder="123 Main Street" value="{{ form.renter_street or '' }}"></div>
+    <div class="field"><label>Street Address <span class="required">*</span></label><input id="f_street" name="renter_street" required placeholder="123 Main Street" value="{{ form.renter_street or '' }}"></div>
     <div class="row3">
-      <div class="field"><label>City <span class="required">*</span></label><input name="renter_city" required placeholder="Hartford" value="{{ form.renter_city or '' }}"></div>
-      <div class="field"><label>State <span class="required">*</span></label><input name="renter_state" required placeholder="CT" maxlength="2" value="{{ form.renter_state or '' }}"></div>
-      <div class="field"><label>Zip <span class="required">*</span></label><input name="renter_zip" required placeholder="06101" value="{{ form.renter_zip or '' }}"></div>
+      <div class="field"><label>City <span class="required">*</span></label><input id="f_city" name="renter_city" required placeholder="Hartford" value="{{ form.renter_city or '' }}"></div>
+      <div class="field"><label>State <span class="required">*</span></label><input id="f_state" name="renter_state" required placeholder="CT" maxlength="2" value="{{ form.renter_state or '' }}"></div>
+      <div class="field"><label>Zip <span class="required">*</span></label><input id="f_zip" name="renter_zip" required placeholder="06101" value="{{ form.renter_zip or '' }}"></div>
     </div>
     <div class="row">
-      <div class="field"><label>Phone <span class="required">*</span></label><input name="phone" type="tel" required placeholder="(555) 000-0000" value="{{ form.phone or '' }}"></div>
-      <div class="field"><label>Email <span class="required">*</span></label><input name="email" type="email" required placeholder="jane@email.com" value="{{ form.email or '' }}"></div>
+      <div class="field"><label>Phone <span class="required">*</span></label><input id="f_phone" name="phone" type="tel" required placeholder="(555) 000-0000" value="{{ form.phone or '' }}"></div>
+      <div class="field"><label>Email <span class="required">*</span></label><input id="f_email" name="email" type="email" required placeholder="jane@email.com" value="{{ form.email or '' }}"></div>
     </div>
     <div style="margin-top:1rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
       <input type="checkbox" name="tax_exempt_request" id="tax_exempt_request" value="1" onchange="updateTotals()" style="width:18px;height:18px;margin-top:.15rem;accent-color:#16a34a;cursor:pointer;flex-shrink:0">
@@ -5187,6 +5189,77 @@ table{border-collapse:collapse}
 </div><!-- /container -->
   </div><!-- /page-body -->
 </div><!-- /page-content -->
+<style>
+.cs-item{padding:.65rem 1rem;cursor:pointer;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}
+.cs-item:hover,.cs-focused{background:#eff6ff}
+.cs-item:last-child{border-bottom:none;border-radius:0 0 10px 10px}
+.cs-name{font-weight:700;color:#111827;font-size:.9rem}
+.cs-detail{font-size:.78rem;color:#6b7280;margin-top:.1rem}
+.cs-tag{background:#dcfce7;color:#166534;font-size:.68rem;font-weight:700;padding:.1rem .4rem;border-radius:4px;white-space:nowrap;flex-shrink:0;align-self:center}
+</style>
+<script>
+(function(){
+  var _t=null,_data=[],_fi=-1;
+  function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  window.csSearch=function(val){
+    clearTimeout(_t);
+    var dd=document.getElementById('cs-dd');
+    if(!val||val.length<2){dd.style.display='none';return;}
+    _t=setTimeout(function(){
+      fetch('/admin/api/customer-search?q='+encodeURIComponent(val))
+        .then(function(r){return r.json();})
+        .then(function(data){
+          _data=data;_fi=-1;
+          if(!data.length){dd.style.display='none';return;}
+          dd.innerHTML=data.map(function(row,i){
+            var loc=[row.city,row.state].filter(Boolean).join(', ');
+            var det=[row.phone,row.email,loc].filter(Boolean).join(' · ');
+            return '<div class="cs-item'+(i===_fi?' cs-focused':'')+'" data-i="'+i+'"'
+              +' onmousedown="csSelect(event,'+i+')">'
+              +'<div><div class="cs-name">'+esc(row.full_name)+'</div>'
+              +(det?'<div class="cs-detail">'+esc(det)+'</div>':'')+'</div>'
+              +(row.company_name?'<span class="cs-tag">'+esc(row.company_name)+'</span>':'')
+              +'</div>';
+          }).join('');
+          dd.style.display='block';
+        }).catch(function(){dd.style.display='none';});
+    },180);
+  };
+
+  window.csSelect=function(e,idx){
+    if(e)e.preventDefault();
+    var row=_data[idx];if(!row)return;
+    document.getElementById('f_full_name').value=row.full_name||'';
+    document.getElementById('f_company').value=row.company_name||'';
+    document.getElementById('f_street').value=row.street||'';
+    document.getElementById('f_city').value=row.city||'';
+    document.getElementById('f_state').value=row.state||'';
+    document.getElementById('f_zip').value=row.zip||'';
+    document.getElementById('f_phone').value=row.phone||'';
+    document.getElementById('f_email').value=row.email||'';
+    document.getElementById('cs-dd').style.display='none';
+    document.getElementById('f_company').focus();
+  };
+
+  window.csKey=function(e){
+    var dd=document.getElementById('cs-dd');
+    var items=dd.querySelectorAll('.cs-item');
+    if(!items.length)return;
+    if(e.key==='ArrowDown'){e.preventDefault();_fi=Math.min(_fi+1,items.length-1);}
+    else if(e.key==='ArrowUp'){e.preventDefault();_fi=Math.max(_fi-1,0);}
+    else if(e.key==='Enter'&&_fi>=0){e.preventDefault();csSelect(null,_fi);return;}
+    else if(e.key==='Escape'){dd.style.display='none';_fi=-1;return;}
+    else{return;}
+    items.forEach(function(el,i){el.classList.toggle('cs-focused',i===_fi);});
+  };
+
+  document.addEventListener('click',function(e){
+    if(!e.target.closest('#f_full_name')&&!e.target.closest('#cs-dd'))
+      document.getElementById('cs-dd').style.display='none';
+  });
+})();
+</script>
 </body></html>
 """
 
@@ -11937,77 +12010,6 @@ ADMIN_REPORTS_HTML = """
 
   </div>
 </div>
-<style>
-.cs-item{padding:.7rem 1rem;cursor:pointer;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}
-.cs-item:hover,.cs-item.cs-focused{background:#eff6ff}
-.cs-item:last-child{border-bottom:none}
-.cs-name{font-weight:700;color:#111827;font-size:.9rem}
-.cs-detail{font-size:.78rem;color:#6b7280;margin-top:.15rem}
-.cs-tag{background:#dcfce7;color:#166534;font-size:.7rem;font-weight:700;padding:.1rem .4rem;border-radius:4px;white-space:nowrap;flex-shrink:0;margin-top:.1rem}
-</style>
-<script>
-(function(){
-  var _t=null, _data=[], _focus=-1;
-  function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-
-  window.csSearch = function(val){
-    clearTimeout(_t);
-    var dd=document.getElementById('cs-dd');
-    if(val.length<2){dd.style.display='none';return;}
-    _t=setTimeout(function(){
-      fetch('/admin/api/customer-search?q='+encodeURIComponent(val))
-        .then(function(r){return r.json();})
-        .then(function(data){
-          _data=data; _focus=-1;
-          if(!data.length){dd.style.display='none';return;}
-          dd.innerHTML=data.map(function(c,i){
-            var loc=[c.city,c.state].filter(Boolean).join(', ');
-            var detail=[c.phone,c.email,loc].filter(Boolean).join(' · ');
-            return '<div class="cs-item" data-i="'+i+'" onmousedown="csSelect(event,'+i+')">'
-              +'<div><div class="cs-name">'+esc(c.full_name)+'</div>'
-              +(detail?'<div class="cs-detail">'+esc(detail)+'</div>':'')
-              +'</div>'
-              +(c.company_name?'<span class="cs-tag">'+esc(c.company_name)+'</span>':'')
-              +'</div>';
-          }).join('');
-          dd.style.display='block';
-        });
-    },180);
-  };
-
-  window.csSelect = function(e, idx){
-    e.preventDefault();
-    var c=_data[idx]; if(!c)return;
-    document.getElementById('f_full_name').value = c.full_name||'';
-    document.getElementById('f_company').value   = c.company_name||'';
-    document.getElementById('f_street').value    = c.street||'';
-    document.getElementById('f_city').value      = c.city||'';
-    document.getElementById('f_state').value     = c.state||'';
-    document.getElementById('f_zip').value       = c.zip||'';
-    document.getElementById('f_phone').value     = c.phone||'';
-    document.getElementById('f_email').value     = c.email||'';
-    document.getElementById('cs-dd').style.display='none';
-    document.getElementById('f_company').focus();
-  };
-
-  document.addEventListener('DOMContentLoaded',function(){
-    var inp=document.getElementById('f_full_name');
-    if(!inp)return;
-    inp.addEventListener('keydown',function(e){
-      var items=document.querySelectorAll('#cs-dd .cs-item');
-      if(!items.length)return;
-      if(e.key==='ArrowDown'){e.preventDefault();_focus=Math.min(_focus+1,items.length-1);}
-      else if(e.key==='ArrowUp'){e.preventDefault();_focus=Math.max(_focus-1,0);}
-      else if(e.key==='Enter'&&_focus>=0){e.preventDefault();csSelect(e,_focus);return;}
-      else if(e.key==='Escape'){document.getElementById('cs-dd').style.display='none';return;}
-      items.forEach(function(el,i){el.classList.toggle('cs-focused',i===_focus);});
-    });
-    inp.addEventListener('blur',function(){
-      setTimeout(function(){document.getElementById('cs-dd').style.display='none';},150);
-    });
-  });
-})();
-</script>
 </body>
 </html>
 """
