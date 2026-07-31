@@ -4306,7 +4306,7 @@ ADMIN_NEW_BOOKING_HTML = r"""
       </div>
       <div class="field"><label>Company Name <span style="color:#718096;font-weight:400">(if applicable)</span></label><input id="f_company" name="company_name" placeholder="ABC Events LLC" value="{{ form.company_name or '' }}"></div>
     </div>
-    <div class="field"><label>Street Address <span class="required">*</span></label><input id="f_street" name="renter_street" required placeholder="123 Main Street" value="{{ form.renter_street or '' }}"></div>
+    <div class="field"><label>Street Address <span class="required">*</span></label><input id="f_street" name="renter_street" required placeholder="Start typing your address…" value="{{ form.renter_street or '' }}" autocomplete="new-address"></div>
     <div class="row3">
       <div class="field"><label>City <span class="required">*</span></label><input id="f_city" name="renter_city" required placeholder="Hartford" value="{{ form.renter_city or '' }}"></div>
       <div class="field"><label>State <span class="required">*</span></label><input id="f_state" name="renter_state" required placeholder="CT" maxlength="2" value="{{ form.renter_state or '' }}"></div>
@@ -5260,6 +5260,46 @@ table{border-collapse:collapse}
   });
 })();
 </script>
+<script>
+function initAdminAddressAutocomplete() {
+  if (!window.google) return;
+  function bindAC(streetId, cityId, stateId, zipId) {
+    var el = document.getElementById(streetId);
+    if (!el) return;
+    var ac = new google.maps.places.Autocomplete(el, {
+      types: ['address'],
+      componentRestrictions: { country: 'us' },
+      fields: ['address_components']
+    });
+    el.addEventListener('keydown', function(e){ if(e.key==='Enter') e.preventDefault(); });
+    ac.addListener('place_changed', function() {
+      var place = ac.getPlace();
+      if (!place.address_components) return;
+      var num='', route='', city='', state='', zip='';
+      place.address_components.forEach(function(comp) {
+        var t = comp.types;
+        if (t.includes('street_number'))                    num   = comp.long_name;
+        else if (t.includes('route'))                       route = comp.long_name;
+        else if (t.includes('locality'))                    city  = comp.long_name;
+        else if (t.includes('administrative_area_level_1')) state = comp.short_name;
+        else if (t.includes('postal_code'))                 zip   = comp.long_name;
+      });
+      el.value = [num, route].filter(Boolean).join(' ');
+      var cEl=document.getElementById(cityId),
+          sEl=document.getElementById(stateId),
+          zEl=document.getElementById(zipId);
+      if(cEl) cEl.value=city;
+      if(sEl) sEl.value=state;
+      if(zEl) zEl.value=zip;
+    });
+  }
+  bindAC('f_street',    'f_city',    'f_state',    'f_zip');
+  bindAC('event_street','event_city','event_state','event_zip');
+}
+</script>
+{% if google_maps_key %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=initAdminAddressAutocomplete" async defer></script>
+{% endif %}
 </body></html>
 """
 
