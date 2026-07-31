@@ -5449,6 +5449,34 @@ ADMIN_BOOKING_HTML = """
     {% endif %}
     <a href="/admin/booking/{{ b.id }}/edit" style="margin-left:{% if b.status not in ('pending', 'accepted', 'confirmed') or b.payment_status not in ('waiting', None, '') %}auto{% else %}0{% endif %};font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap;border:1px solid #e5e7eb;border-radius:6px;padding:.3rem .75rem">✏️ Edit</a>
   </div>
+  {% if b.status not in ('denied','cancelled') %}
+  <div style="width:100%;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding-top:.4rem;border-top:1px solid #f3f4f6">
+    <span style="font-size:.75rem;font-weight:600;color:#6b7280;white-space:nowrap">Delivery:</span>
+    {% if not b.delivery_status %}
+      <button onclick="openAdminDeliverModal()" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;cursor:pointer">&#x1F4E6; Mark Delivered</button>
+    {% elif b.delivery_status == 'delivered' %}
+      <span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:.18rem .65rem;font-size:.75rem;font-weight:700">&#x1F69A; Delivered</span>
+      <form method="POST" action="/admin/booking/{{ b.id }}/set-delivery" style="display:inline;margin:0">
+        <input type="hidden" name="status" value="picked_up">
+        <button style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;cursor:pointer">&#x1F504; Mark Picked Up</button>
+      </form>
+      <form method="POST" action="/admin/booking/{{ b.id }}/set-delivery" style="display:inline;margin:0">
+        <input type="hidden" name="status" value="none">
+        <button onclick="return confirm('Undo delivery?')" style="background:#f1f5f9;color:#6b7280;border:1px solid #e2e8f0;border-radius:7px;padding:.35rem .65rem;font-size:.8rem;cursor:pointer">&#x21A9; Undo</button>
+      </form>
+    {% elif b.delivery_status == 'picked_up' %}
+      <span style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:20px;padding:.18rem .65rem;font-size:.75rem;font-weight:700">&#x2705; Picked Up</span>
+      <form method="POST" action="/admin/booking/{{ b.id }}/set-delivery" style="display:inline;margin:0">
+        <input type="hidden" name="status" value="delivered">
+        <button onclick="return confirm('Set back to Delivered?')" style="background:#f5f3ff;color:#7c3aed;border:1px solid #c4b5fd;border-radius:7px;padding:.35rem .65rem;font-size:.8rem;font-weight:600;cursor:pointer">&#x21A9; Undo Pickup</button>
+      </form>
+      <form method="POST" action="/admin/booking/{{ b.id }}/set-delivery" style="display:inline;margin:0">
+        <input type="hidden" name="status" value="none">
+        <button onclick="return confirm('Reset to Not Delivered?')" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:7px;padding:.35rem .65rem;font-size:.8rem;cursor:pointer">&#x274C; Reset</button>
+      </form>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 
 <!-- ── Two-column layout ── -->
@@ -10058,6 +10086,39 @@ def admin_delivery_action(booking_id):
     else:
         cur.close(); return jsonify({"error":"unknown action"}), 400
     return jsonify({"ok": True})
+
+
+@app.route("/admin/booking/<int:booking_id>/set-delivery", methods=["POST"])
+@admin_required
+def admin_set_delivery(booking_id):
+    """Form POST — set delivery status directly and redirect back."""
+    status = request.form.get("status", "none")
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT id,full_name,email,phone,event_street,event_city,event_state,event_zip"
+        " FROM bookings WHERE id=%s", (booking_id,))
+    row = cur.fetchone()
+    b   = dict(row) if row else {}
+    try:
+        if status == "none":
+            cur.execute("UPDATE bookings SET delivery_status=NULL,delivered_at=NULL,picked_up_at=NULL WHERE id=%s",(booking_id,))
+            conn.commit()
+        elif status == "delivered":
+            cur.execute("UPDATE bookings SET delivery_status='delivered',delivered_at=NOW() WHERE id=%s",(booking_id,))
+            conn.commit()
+            try: send_delivery_confirmation(b, None, "photo.jpg")
+            except Exception as e: log.error(f"set-delivery notify: {e}")
+        elif status == "picked_up":
+            cur.execute("UPDATE bookings SET delivery_status='picked_up',picked_up_at=NOW() WHERE id=%s",(booking_id,))
+            conn.commit()
+            try: send_pickup_confirmation(b)
+            except Exception as e: log.error(f"set-delivery pickup notify: {e}")
+    except Exception as e:
+        log.error(f"set-delivery DB error: {e}")
+    finally:
+        cur.close()
+    return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
 @app.route("/payment/success/<int:booking_id>")
