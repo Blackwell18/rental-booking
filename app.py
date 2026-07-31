@@ -6326,7 +6326,11 @@ ADMIN_BOOKING_HTML = """
     <div style="margin-bottom:1rem">
       <div style="font-size:.7rem;font-weight:700;color:#085041;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;padding:.35rem .6rem;background:#E1F5EE;border-radius:6px">&#x1F69A; Delivery Status</div>
       {% if b.delivery_status == 'picked_up' %}
-        <div style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:8px;padding:.6rem .85rem;font-size:.9rem;font-weight:700;text-align:center">&#x2705; Picked Up &#x2014; Complete</div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <span style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:7px;padding:.4rem .8rem;font-size:.82rem;font-weight:700;white-space:nowrap">&#x2705; Picked Up</span>
+          <button onclick="adminDeliveryAction('undo_pickup')" title="Undo pickup" style="background:#f1f5f9;color:#6b7280;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .75rem;font-size:.84rem;cursor:pointer">&#x21A9; Undo Pickup</button>
+          <button onclick="adminDeliveryAction('reset')" title="Reset to not delivered" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;padding:.6rem .75rem;font-size:.82rem;cursor:pointer">&#x274C; Reset</button>
+        </div>
       {% elif b.delivery_status == 'delivered' %}
         <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
           <span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:7px;padding:.4rem .8rem;font-size:.82rem;font-weight:700;white-space:nowrap">&#x1F69A; Delivered</span>
@@ -6748,7 +6752,13 @@ function submitAdminDeliver(){
     .catch(function(){alert('Network error');btn.disabled=false;btn.innerHTML='&#x2705; Confirm &amp; Notify Customer';});
 }
 function adminDeliveryAction(action){
-  var msg=action==='pickup'?'Mark as Picked Up? The customer will be notified.':'Undo the delivery mark?';
+  var msgs={
+    pickup:'Mark as Picked Up? The customer will be notified.',
+    undo_deliver:'Undo delivery mark? This will reset to Not Delivered.',
+    undo_pickup:'Undo pickup? This will set status back to Delivered.',
+    reset:'Reset delivery status entirely? Status will go back to Not Delivered.'
+  };
+  var msg=msgs[action]||'Are you sure?';
   if(!confirm(msg))return;
   fetch('/admin/booking/{{ b.id }}/delivery-action',{
     method:'POST',
@@ -10036,6 +10046,14 @@ def admin_delivery_action(booking_id):
         except Exception as e: log.error(f"Pickup notify error: {e}")
     elif action == "undo_deliver":
         cur.execute("UPDATE bookings SET delivery_status=NULL,delivered_at=NULL WHERE id=%s",(booking_id,))
+        conn.commit(); cur.close()
+    elif action == "undo_pickup":
+        # Go back from picked_up to delivered
+        cur.execute("UPDATE bookings SET delivery_status='delivered',picked_up_at=NULL WHERE id=%s",(booking_id,))
+        conn.commit(); cur.close()
+    elif action == "reset":
+        # Reset entirely — not delivered, not picked up
+        cur.execute("UPDATE bookings SET delivery_status=NULL,delivered_at=NULL,picked_up_at=NULL WHERE id=%s",(booking_id,))
         conn.commit(); cur.close()
     else:
         cur.close(); return jsonify({"error":"unknown action"}), 400
