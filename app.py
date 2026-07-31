@@ -12119,6 +12119,108 @@ def admin_reports():
 #  DRIVER VIEW  (mobile-optimised, no admin login required but token-protected)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+def send_delivery_confirmation(b, image_bytes=None, image_filename="photo.jpg"):
+    """Email + SMS to customer confirming their items were delivered."""
+    email = b.get("email")
+    first = (b.get("full_name") or "").split()[0] or "there"
+    bid   = b.get("id")
+    addr  = " ".join(filter(None, [
+        b.get("event_street",""), b.get("event_city",""),
+        b.get("event_state",""), b.get("event_zip","")
+    ]))
+    now_str = datetime.now().strftime("%B %-d, %Y at %-I:%M %p")
+    if email and GMAIL_USER and GMAIL_APP_PASSWORD:
+        try:
+            photo_html = ""
+            if image_bytes:
+                photo_html = """
+      <div style="margin-top:1rem;text-align:center">
+        <p style="font-size:.85rem;color:#6b7280;margin-bottom:.5rem">Photo confirmation:</p>
+        <img src="cid:delivery_photo" style="max-width:100%;border-radius:10px;border:1px solid #e2e8f0">
+      </div>"""
+            addr_html = f"<p style='color:#374151'><strong>Delivered to:</strong> {addr}</p>" if addr else ""
+            html = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:540px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#16a34a,#15803d);padding:2rem;color:white;text-align:center">
+    <div style="font-size:2.5rem">\U0001f4e6</div>
+    <h2 style="margin:.5rem 0 0">Your Items Have Been Delivered!</h2>
+    <p style="margin:.4rem 0 0;opacity:.85">{BUSINESS_NAME}</p>
+  </div>
+  <div style="padding:2rem">
+    <p>Hi <strong>{first}</strong>,</p>
+    <p style="margin:.75rem 0">Great news! Your rental items for booking <strong>#{bid}</strong> have been delivered.</p>
+    {addr_html}
+    <p style="color:#6b7280;font-size:.88rem">Delivered: {now_str}</p>
+    {photo_html}
+    <div style="margin:1.5rem 0;padding:1rem;background:#f0fdf4;border-radius:8px;border:1px solid #86efac">
+      <p style="margin:0;color:#166534;font-weight:600">\U0001f389 Enjoy your event! Contact us if you need anything.</p>
+    </div>
+    <p style="color:#6b7280;font-size:.82rem">— The {BUSINESS_NAME} Team</p>
+  </div>
+</div></body></html>"""
+            plain = f"Hi {first}, your {BUSINESS_NAME} rental items for booking #{bid} have been delivered. Delivered: {now_str}. Enjoy your event!"
+            from email.mime.multipart import MIMEMultipart as _MM
+            from email.mime.text import MIMEText as _MT
+            msg = _MM("related")
+            msg["From"]    = f"{BUSINESS_NAME} <{GMAIL_USER}>"
+            msg["To"]      = email
+            msg["Subject"] = f"Your Items Are Delivered! — {BUSINESS_NAME} Booking #{bid}"
+            if OWNER_BCC:
+                msg["Bcc"] = OWNER_BCC
+            alt = _MM("alternative")
+            alt.attach(_MT(plain, "plain"))
+            alt.attach(_MT(html, "html"))
+            msg.attach(alt)
+            if image_bytes:
+                img_part = MIMEBase("image", "jpeg")
+                img_part.set_payload(image_bytes)
+                _email_encoders.encode_base64(img_part)
+                img_part.add_header("Content-ID", "<delivery_photo>")
+                img_part.add_header("Content-Disposition", "inline", filename=image_filename)
+                msg.attach(img_part)
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+                s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+                s.send_message(msg)
+            log.info(f"Delivery confirmation email sent to {email}")
+        except Exception as e:
+            log.error(f"Delivery email error: {e}")
+    phone = b.get("phone")
+    if phone:
+        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been delivered. Enjoy your event! \U0001f389")
+
+
+def send_pickup_confirmation(b):
+    """Email + SMS to customer confirming their items have been picked up."""
+    email = b.get("email")
+    first = (b.get("full_name") or "").split()[0] or "there"
+    bid   = b.get("id")
+    now_str = datetime.now().strftime("%B %-d, %Y at %-I:%M %p")
+    if email:
+        html = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:540px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#7c3aed,#6d28d9);padding:2rem;color:white;text-align:center">
+    <div style="font-size:2.5rem">\U0001f690</div>
+    <h2 style="margin:.5rem 0 0">Your Items Have Been Picked Up</h2>
+    <p style="margin:.4rem 0 0;opacity:.85">{BUSINESS_NAME}</p>
+  </div>
+  <div style="padding:2rem">
+    <p>Hi <strong>{first}</strong>,</p>
+    <p style="margin:.75rem 0">Your rental items for booking <strong>#{bid}</strong> have been successfully picked up.</p>
+    <p style="color:#6b7280;font-size:.88rem">Picked up: {now_str}</p>
+    <div style="margin:1.5rem 0;padding:1rem;background:#f5f3ff;border-radius:8px;border:1px solid #c4b5fd">
+      <p style="margin:0;color:#5b21b6;font-weight:600">\u2728 Thank you for choosing {BUSINESS_NAME}! We hope you had a wonderful event.</p>
+    </div>
+    <p style="color:#6b7280;font-size:.82rem">— The {BUSINESS_NAME} Team</p>
+  </div>
+</div></body></html>"""
+        plain = f"Hi {first}, your {BUSINESS_NAME} rental items for booking #{bid} have been picked up. Thank you for choosing us!"
+        _send_email(email, f"Your Rental Items Picked Up — {BUSINESS_NAME} Booking #{bid}", html, plain)
+    phone = b.get("phone")
+    if phone:
+        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been picked up. Thank you \u2014 we hope you had a great event! \U0001f64f")
+
+
 DRIVER_VIEW_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -12133,34 +12235,58 @@ DRIVER_VIEW_HTML = """
     .topbar span{font-size:.78rem;color:#94a3b8}
     .date-nav{display:flex;gap:.5rem;padding:.75rem 1.25rem;background:#1e293b;border-bottom:1px solid #334155}
     .date-nav a{flex:1;padding:.5rem;text-align:center;background:#334155;color:#cbd5e1;border-radius:8px;font-size:.82rem;font-weight:600;text-decoration:none}
-    .date-nav a:hover{background:#475569}
     .date-nav span{flex:2;text-align:center;padding:.5rem;font-size:.88rem;font-weight:700;color:#f1f5f9}
+    .summary{margin:.75rem 1.25rem;background:#1e293b;border-radius:10px;padding:.75rem 1rem;display:flex;gap:.5rem;border:1px solid #334155}
+    .summary-item{flex:1;text-align:center}
+    .summary-item .val{font-size:1.25rem;font-weight:800;color:#f1f5f9}
+    .summary-item .lbl{font-size:.65rem;color:#64748b;text-transform:uppercase;font-weight:600;margin-top:.1rem}
+    /* STOP CARD */
+    .stop-card{margin:.75rem 1.25rem;border-radius:14px;overflow:hidden;border:1.5px solid #334155;background:#1e293b}
+    .stop-card.st-delivered{border-color:#16a34a}
+    .stop-card.st-picked_up{opacity:.5;border-color:#475569}
+    /* ACTION BAR — top of each card */
+    .action-bar{padding:.85rem 1rem}
+    .btn-deliver{width:100%;padding:.9rem;background:#16a34a;color:white;border:none;border-radius:10px;font-size:.95rem;font-weight:800;cursor:pointer}
+    .btn-deliver:active{background:#15803d}
+    .delivered-row{display:flex;align-items:center;gap:.6rem}
+    .delivered-label{font-size:.85rem;font-weight:700;color:#4ade80;white-space:nowrap}
+    .btn-pickup{flex:1;padding:.75rem;background:#7c3aed;color:white;border:none;border-radius:10px;font-size:.82rem;font-weight:700;cursor:pointer}
+    .btn-pickup:active{background:#6d28d9}
+    .btn-undo{padding:.75rem .9rem;background:#374151;color:#9ca3af;border:none;border-radius:10px;font-size:.8rem;font-weight:600;cursor:pointer}
+    .complete-bar{text-align:center;color:#64748b;font-size:.85rem;font-weight:600}
+    /* CARD HEADER */
+    .stop-header{padding:.75rem 1rem;display:flex;align-items:center;gap:.75rem;background:#263148}
+    .stop-num{width:2rem;height:2rem;border-radius:50%;background:#3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.88rem;flex-shrink:0}
+    .st-delivered .stop-num{background:#16a34a}
+    .st-picked_up .stop-num{background:#475569}
+    .stop-name{font-size:.95rem;font-weight:700;color:#f8fafc;flex:1}
+    .stop-time{font-size:.78rem;color:#94a3b8;font-weight:600}
+    /* CARD BODY */
+    .stop-body{padding:.75rem 1rem}
+    .stop-addr{font-size:.88rem;color:#cbd5e1;margin-bottom:.5rem;line-height:1.4}
+    .stop-phone{font-size:.85rem;margin-bottom:.5rem}
+    .stop-phone a{color:#60a5fa;text-decoration:none;font-weight:600}
+    .stop-items{font-size:.8rem;color:#94a3b8;margin-bottom:.75rem;line-height:1.5}
+    .stop-links{display:flex;gap:.5rem;flex-wrap:wrap}
+    .btn-link{padding:.55rem .8rem;border-radius:8px;font-size:.78rem;font-weight:700;text-decoration:none;display:inline-block;border:none;cursor:pointer}
+    .btn-map{background:#1e3a5f;color:#60a5fa}
+    .btn-call{background:#1d4ed8;color:white}
     .empty{text-align:center;padding:3rem 1.5rem;color:#64748b}
     .empty .icon{font-size:3rem;margin-bottom:.75rem}
-    .stop-card{margin:.75rem 1.25rem;background:#1e293b;border-radius:14px;overflow:hidden;border:1px solid #334155}
-    .stop-card.delivered{opacity:.55;border-color:#1e3a2e}
-    .stop-header{padding:.85rem 1rem;background:#263148;display:flex;align-items:center;gap:.75rem}
-    .stop-num{width:2rem;height:2rem;border-radius:50%;background:#3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.88rem;flex-shrink:0}
-    .stop-card.delivered .stop-num{background:#16a34a}
-    .stop-name{font-size:1rem;font-weight:700;color:#f8fafc;flex:1}
-    .stop-time{font-size:.8rem;color:#94a3b8;font-weight:600}
-    .stop-body{padding:.85rem 1rem}
-    .stop-addr{font-size:.9rem;color:#cbd5e1;margin-bottom:.6rem;line-height:1.4}
-    .stop-phone{font-size:.88rem;color:#60a5fa;margin-bottom:.6rem}
-    .stop-phone a{color:#60a5fa;text-decoration:none;font-weight:600}
-    .stop-items{font-size:.82rem;color:#94a3b8;margin-bottom:.85rem;line-height:1.5}
-    .stop-items strong{color:#cbd5e1}
-    .stop-actions{display:flex;gap:.6rem}
-    .btn-map{flex:1;padding:.65rem;background:#334155;color:#cbd5e1;border-radius:10px;font-size:.82rem;font-weight:700;text-align:center;text-decoration:none;display:block}
-    .btn-map:hover{background:#475569}
-    .btn-call{padding:.65rem 1rem;background:#1d4ed8;color:white;border-radius:10px;font-size:.82rem;font-weight:700;text-decoration:none}
-    .btn-done{flex:1;padding:.65rem;background:#16a34a;color:white;border-radius:10px;font-size:.82rem;font-weight:700;border:none;cursor:pointer;text-align:center}
-    .btn-done:active{background:#15803d}
-    .btn-undone{flex:1;padding:.65rem;background:#374151;color:#9ca3af;border-radius:10px;font-size:.82rem;font-weight:700;border:none;cursor:pointer}
-    .summary{margin:0 1.25rem .75rem;background:#1e293b;border-radius:10px;padding:.75rem 1rem;display:flex;gap:1.5rem;border:1px solid #334155}
-    .summary-item{text-align:center}
-    .summary-item .val{font-size:1.4rem;font-weight:800;color:#f1f5f9}
-    .summary-item .lbl{font-size:.68rem;color:#64748b;text-transform:uppercase;font-weight:600}
+    /* PHOTO MODAL */
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:1000;align-items:flex-end;justify-content:center}
+    .modal-overlay.open{display:flex}
+    .modal-box{background:#1e293b;border-radius:20px 20px 0 0;padding:1.5rem 1.25rem 2.5rem;width:100%;max-width:480px;border:1px solid #334155}
+    .modal-title{font-size:1.05rem;font-weight:700;color:#f1f5f9;margin-bottom:.3rem}
+    .modal-sub{font-size:.82rem;color:#94a3b8;margin-bottom:1.25rem}
+    #photo-preview{width:100%;max-height:200px;object-fit:cover;border-radius:10px;display:none;margin-bottom:1rem;border:1px solid #334155}
+    .btn-camera-label{display:block;width:100%;padding:.85rem;background:#1e3a5f;color:#60a5fa;border-radius:10px;font-size:.88rem;font-weight:700;text-align:center;cursor:pointer;margin-bottom:.75rem;border:1.5px dashed #3b82f6}
+    #photo-input{display:none}
+    .btn-confirm{width:100%;padding:.9rem;background:#16a34a;color:white;border:none;border-radius:10px;font-size:.95rem;font-weight:800;cursor:pointer;margin-bottom:.6rem}
+    .btn-confirm:disabled{background:#374151;color:#6b7280;cursor:not-allowed}
+    .btn-cancel{width:100%;padding:.75rem;background:transparent;color:#6b7280;border:1px solid #334155;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer}
+    .spinner{display:inline-block;width:16px;height:16px;border:2.5px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:.4rem}
+    @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 </head>
 <body>
@@ -12177,59 +12303,135 @@ DRIVER_VIEW_HTML = """
 {% if stops %}
 <div class="summary" style="margin-top:.75rem">
   <div class="summary-item"><div class="val">{{ stops|length }}</div><div class="lbl">Stops</div></div>
-  <div class="summary-item"><div class="val">{{ delivered_count }}</div><div class="lbl">Done</div></div>
-  <div class="summary-item"><div class="val">{{ stops|length - delivered_count }}</div><div class="lbl">Left</div></div>
+  <div class="summary-item"><div class="val" style="color:#fb923c">{{ stops|length - delivered_count - pickup_count }}</div><div class="lbl">Pending</div></div>
+  <div class="summary-item"><div class="val" style="color:#4ade80">{{ delivered_count }}</div><div class="lbl">Delivered</div></div>
+  <div class="summary-item"><div class="val" style="color:#c084fc">{{ pickup_count }}</div><div class="lbl">Picked Up</div></div>
 </div>
+
 {% for s in stops %}
-<div class="stop-card {% if s.delivered %}delivered{% endif %}" id="card-{{ s.id }}">
+<div class="stop-card st-{{ s.state }}" id="card-{{ s.id }}">
+
+  <!-- ★ ACTION BUTTONS — at the top for easy access ★ -->
+  <div class="action-bar">
+    {% if s.state == 'none' %}
+    <button class="btn-deliver" onclick="openDeliverModal({{ s.id }})">📦 Mark Delivered</button>
+    {% elif s.state == 'delivered' %}
+    <div class="delivered-row">
+      <span class="delivered-label">✅ Delivered</span>
+      <button class="btn-pickup" onclick="doAction({{ s.id }}, 'pickup')">🔄 Mark Picked Up</button>
+      <button class="btn-undo" onclick="doAction({{ s.id }}, 'undo_deliver')" title="Undo">↩</button>
+    </div>
+    {% else %}
+    <div class="complete-bar">✅ Picked Up — Complete</div>
+    {% endif %}
+  </div>
+
+  <!-- Header -->
   <div class="stop-header">
-    <div class="stop-num">{% if s.delivered %}✓{% else %}{{ loop.index }}{% endif %}</div>
+    <div class="stop-num">
+      {% if s.state == 'picked_up' %}✓{% elif s.state == 'delivered' %}📦{% else %}{{ loop.index }}{% endif %}
+    </div>
     <div class="stop-name">{{ s.customer_name }}</div>
     {% if s.time_display %}<div class="stop-time">{{ s.time_display }}</div>{% endif %}
   </div>
+
+  <!-- Body -->
   <div class="stop-body">
-    {% if s.address %}
-    <div class="stop-addr">📍 {{ s.address }}</div>
-    {% endif %}
-    {% if s.phone %}
-    <div class="stop-phone">📞 <a href="tel:{{ s.phone }}">{{ s.phone }}</a></div>
-    {% endif %}
-    {% if s.items_summary %}
-    <div class="stop-items"><strong>Items:</strong> {{ s.items_summary }}</div>
-    {% endif %}
-    <div class="stop-actions">
-      {% if s.address %}
-      {% if s.maps_url %}<a class="btn-map" href="{{ s.maps_url }}" target="_blank">🗺 Maps</a>{% endif %}
-      {% endif %}
-      {% if s.phone %}
-      <a class="btn-call" href="tel:{{ s.phone }}">Call</a>
-      {% endif %}
-      {% if not s.delivered %}
-      <button class="btn-done" onclick="markDelivered({{ s.id }}, this)">✓ Mark Done</button>
-      {% else %}
-      <button class="btn-undone" onclick="markDelivered({{ s.id }}, this)">Undo</button>
-      {% endif %}
+    {% if s.address %}<div class="stop-addr">📍 {{ s.address }}</div>{% endif %}
+    {% if s.phone %}<div class="stop-phone">📞 <a href="tel:{{ s.phone }}">{{ s.phone }}</a></div>{% endif %}
+    {% if s.items_summary %}<div class="stop-items">📋 {{ s.items_summary }}</div>{% endif %}
+    <div class="stop-links">
+      {% if s.maps_url %}<a class="btn-link btn-map" href="{{ s.maps_url }}" target="_blank">🗺 Maps</a>{% endif %}
+      {% if s.phone %}<a class="btn-link btn-call" href="tel:{{ s.phone }}">📞 Call</a>{% endif %}
     </div>
   </div>
+
 </div>
 {% endfor %}
+
 {% else %}
 <div class="empty">
   <div class="icon">📭</div>
-  <div style="font-size:1rem;font-weight:700;color:#cbd5e1;margin-bottom:.4rem">No deliveries today</div>
+  <div style="font-size:1rem;font-weight:700;color:#cbd5e1;margin-bottom:.4rem">No stops today</div>
   <div>Nothing scheduled for {{ date_label }}</div>
 </div>
 {% endif %}
 
+<!-- DELIVERY PHOTO MODAL -->
+<div class="modal-overlay" id="deliver-modal">
+  <div class="modal-box">
+    <div class="modal-title">📦 Confirm Delivery</div>
+    <div class="modal-sub">Optionally add a photo as proof of delivery — it will be emailed and texted to the customer.</div>
+    <img id="photo-preview" src="" alt="Preview">
+    <label class="btn-camera-label" for="photo-input">📷 Take / Choose Photo <em style="font-weight:400;opacity:.7">(optional)</em></label>
+    <input type="file" id="photo-input" accept="image/*" capture="environment" onchange="previewPhoto(this)">
+    <button class="btn-confirm" id="confirm-btn" onclick="submitDeliver()">✅ Confirm &amp; Notify Customer</button>
+    <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
 <script>
-function markDelivered(id, btn){
-  fetch('/driver/' + id + '/toggle', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({date:'{{ date_str }}'})
-  }).then(function(r){return r.json();}).then(function(d){
-    location.reload();
-  }).catch(function(e){alert('Error: '+e);});
+var _deliverId = null;
+
+function openDeliverModal(id) {
+  _deliverId = id;
+  document.getElementById('photo-input').value = '';
+  document.getElementById('photo-preview').style.display = 'none';
+  var btn = document.getElementById('confirm-btn');
+  btn.disabled = false;
+  btn.innerHTML = '✅ Confirm &amp; Notify Customer';
+  document.getElementById('deliver-modal').classList.add('open');
 }
+
+function closeModal() {
+  document.getElementById('deliver-modal').classList.remove('open');
+  _deliverId = null;
+}
+
+function previewPhoto(input) {
+  if (input.files && input.files[0]) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var p = document.getElementById('photo-preview');
+      p.src = e.target.result;
+      p.style.display = 'block';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function submitDeliver() {
+  if (!_deliverId) return;
+  var btn = document.getElementById('confirm-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Sending…';
+  var fd = new FormData();
+  fd.append('action', 'deliver');
+  var photoFile = document.getElementById('photo-input').files[0];
+  if (photoFile) fd.append('photo', photoFile);
+  fetch('/driver/' + _deliverId + '/action', {method: 'POST', body: fd})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.ok) { closeModal(); location.reload(); }
+      else { alert('Error: ' + (d.error || 'Unknown')); btn.disabled=false; btn.innerHTML='✅ Confirm &amp; Notify Customer'; }
+    })
+    .catch(function(e){ alert('Network error'); btn.disabled=false; btn.innerHTML='✅ Confirm &amp; Notify Customer'; });
+}
+
+function doAction(id, action) {
+  if (action === 'pickup' && !confirm('Mark as picked up? The customer will be notified.')) return;
+  fetch('/driver/' + id + '/action', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: action})
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ if (d.ok) location.reload(); else alert('Error: '+(d.error||'Unknown')); })
+    .catch(function(e){ alert('Network error'); });
+}
+
+document.getElementById('deliver-modal').addEventListener('click', function(e){
+  if (e.target === this) closeModal();
+});
 </script>
 </body>
 </html>
@@ -12275,11 +12477,11 @@ def driver_view(date_str):
     conn = get_db()
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
-        SELECT id, full_name, phone,
+        SELECT id, full_name, email, phone,
                COALESCE(delivery_date, setup_date, event_start_date) AS del_date,
                COALESCE(delivery_time, setup_time) AS del_time,
                event_street, event_city, event_state, event_zip,
-               items_json, status, delivered_at
+               items_json, status, delivery_status, delivered_at
         FROM bookings
         WHERE COALESCE(delivery_date, setup_date, event_start_date) = %s
           AND status IN ('accepted','concluded')
@@ -12321,18 +12523,27 @@ def driver_view(date_str):
         maps_url = ""
         if addr:
             maps_url = "https://www.google.com/maps/search/?api=1&query=" + urllib.parse.quote_plus(addr)
+        ds = b.get("delivery_status") or ""
+        if ds == "picked_up":
+            _state = "picked_up"
+        elif ds == "delivered" or b.get("delivered_at"):
+            _state = "delivered"
+        else:
+            _state = "none"
         stops.append({
             "id": b["id"],
             "customer_name": b["full_name"],
+            "email": b.get("email") or "",
             "phone": b["phone"] or "",
             "address": addr,
             "maps_url": maps_url,
             "time_display": time_display,
             "items_summary": items_raw,
-            "delivered": bool(b.get("delivered_at")),
+            "state": _state,
         })
 
-    delivered_count = sum(1 for s in stops if s["delivered"])
+    delivered_count = sum(1 for s in stops if s["state"] == "delivered")
+    pickup_count    = sum(1 for s in stops if s["state"] == "picked_up")
 
     def fmt_date(d):
         today = date.today()
@@ -12355,25 +12566,80 @@ def driver_view(date_str):
         next_label=fmt_date(next_d),
         stops=stops,
         delivered_count=delivered_count,
+        pickup_count=pickup_count,
     )
 
 
 @app.route("/driver/<int:booking_id>/toggle", methods=["POST"])
 def driver_toggle_delivered(booking_id):
-    """Toggle delivered_at for a booking from the driver view."""
+    """Legacy toggle — kept for backward compatibility. Calls driver_action internally."""
+    return driver_action(booking_id)
+
+
+@app.route("/driver/<int:booking_id>/action", methods=["POST"])
+def driver_action(booking_id):
+    """Handle delivery actions from driver view: deliver (with optional photo), pickup, undo_deliver."""
+    # Parse action — supports both JSON and multipart/form-data
+    if request.is_json:
+        data = request.get_json() or {}
+        action = data.get("action", "deliver")
+        image_bytes    = None
+        image_filename = "photo.jpg"
+    else:
+        action = request.form.get("action", "deliver")
+        photo_file  = request.files.get("photo")
+        image_bytes = photo_file.read() if (photo_file and photo_file.filename) else None
+        image_filename = (photo_file.filename if photo_file else None) or "photo.jpg"
+
     conn = get_db()
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT delivered_at FROM bookings WHERE id=%s", (booking_id,))
-    row = cur.fetchone()
-    if not row:
+    cur.execute("""
+        SELECT id, full_name, email, phone, delivery_status,
+               event_street, event_city, event_state, event_zip
+        FROM bookings WHERE id=%s
+    """, (booking_id,))
+    b = cur.fetchone()
+    if not b:
         cur.close()
         return jsonify({"error": "not found"}), 404
-    if row["delivered_at"]:
-        cur.execute("UPDATE bookings SET delivered_at=NULL WHERE id=%s", (booking_id,))
+    b = dict(b)
+
+    if action == "deliver":
+        cur.execute(
+            "UPDATE bookings SET delivery_status='delivered', delivered_at=NOW() WHERE id=%s",
+            (booking_id,)
+        )
+        conn.commit()
+        cur.close()
+        try:
+            send_delivery_confirmation(b, image_bytes, image_filename)
+        except Exception as e:
+            log.error(f"Delivery notification error: {e}")
+
+    elif action == "pickup":
+        cur.execute(
+            "UPDATE bookings SET delivery_status='picked_up', picked_up_at=NOW() WHERE id=%s",
+            (booking_id,)
+        )
+        conn.commit()
+        cur.close()
+        try:
+            send_pickup_confirmation(b)
+        except Exception as e:
+            log.error(f"Pickup notification error: {e}")
+
+    elif action == "undo_deliver":
+        cur.execute(
+            "UPDATE bookings SET delivery_status=NULL, delivered_at=NULL WHERE id=%s",
+            (booking_id,)
+        )
+        conn.commit()
+        cur.close()
+
     else:
-        cur.execute("UPDATE bookings SET delivered_at=NOW() WHERE id=%s", (booking_id,))
-    conn.commit()
-    cur.close()
+        cur.close()
+        return jsonify({"error": "unknown action"}), 400
+
     return jsonify({"ok": True})
 
 
