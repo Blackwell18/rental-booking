@@ -1550,6 +1550,12 @@ By completing payment you agree to the rental terms and contract.
 — {BUSINESS_NAME}"""
 
     _send_email(email, subject, html, plain)
+    # Also text the payment link
+    if payment_link and b.get("phone"):
+        _sms_action = f"Pay ${charge_amount:.2f} deposit" if is_deposit else f"Pay ${charge_amount:.2f} in full"
+        send_sms(b["phone"],
+            f"Hi {first}! Your {BUSINESS_NAME} booking is confirmed. "
+            f"{_sms_action} to lock in your date: {payment_link}")
 
 
 def send_receipt_email(b):
@@ -1982,6 +1988,11 @@ No signature required — payment constitutes acceptance of this agreement.
 — {BUSINESS_NAME}"""
 
     _send_email(email, subject, html, plain)
+    # Also text the final payment link
+    if payment_link and b.get("phone"):
+        send_sms(b["phone"],
+            f"Hi {first}! Final payment of ${remaining_amount:.2f} is due for your {BUSINESS_NAME} "
+            f"event. Pay here to confirm your delivery: {payment_link}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -9626,6 +9637,12 @@ def custom_stripe_link(booking_id):
         plain = f"Hi {first},\n\nPayment of ${amount:.2f} is due for your booking.\n\nPay here: {payment_link}\n\n— {BUSINESS_NAME}"
         _send_email(b.get("email"), subject, html, plain)
         log.info(f"Custom payment link sent for #{booking_id}: ${amount:.2f}")
+    # Also text the payment link
+    if payment_link and b.get("phone"):
+        first = (b.get("full_name") or "").split()[0] or "there"
+        send_sms(b["phone"],
+            f"Hi {first}! {BUSINESS_NAME} sent you a payment link for ${amount:.2f}. "
+            f"Pay here: {payment_link}")
 
     link_param = urllib.parse.quote(payment_link or "", safe="")
     return redirect(url_for("admin_booking", booking_id=booking_id) + f"?custom_link={link_param}")
