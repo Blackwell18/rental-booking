@@ -10921,6 +10921,7 @@ ADMIN_ROUTE_HTML = """
   </div>
 
   {# ── Origin section: current location → depot ── #}
+  {% if view != 'pickup' %}
   <div id="origin-section">
     <!-- Current location card (shown when GPS available) -->
     <div id="curr-loc-card" style="display:none;flex-direction:row;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
@@ -10952,6 +10953,7 @@ ADMIN_ROUTE_HTML = """
     </div>
   </div>
   <div style="display:flex;margin-left:.95rem"><div style="width:2px;height:24px;background:#d1d5db"></div></div>
+  {% endif %}
 
   {% for b in route_bookings %}
 
@@ -11021,6 +11023,21 @@ ADMIN_ROUTE_HTML = """
     </div>
   </div>
   {% endfor %}
+  {% if view == 'pickup' and route_bookings %}
+  <div style="display:flex;margin-left:.95rem"><div style="width:2px;height:24px;background:#d1d5db"></div></div>
+  <div id="origin-section">
+    <!-- Depot card — shown at bottom for pickup route -->
+    <div style="display:flex;gap:1rem;align-items:center;padding:.4rem .25rem .1rem">
+      <div style="width:2rem;display:flex;justify-content:center;flex-direction:column;align-items:center;gap:.25rem">
+        <div style="width:2rem;height:2rem;border-radius:50%;background:#6b7280;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem">&#127968;</div>
+        <div class="stop-eta" id="eta-depot" style="font-size:.62rem"></div>
+      </div>
+      <div style="font-size:.82rem;color:#6b7280;font-weight:500">
+        <strong style="color:#374151">Return to Depot:</strong> {{ depot_address }}
+      </div>
+    </div>
+  </div>
+  {% endif %}
   {% else %}
   <div class="empty">{% if view == "pickup" %}No pickups scheduled for {{ route_date }}.{% else %}No deliveries scheduled for {{ route_date }}.{% endif %}</div>
   {% endif %}
