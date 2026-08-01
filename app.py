@@ -10160,6 +10160,55 @@ def admin_set_delivery(booking_id):
     return redirect(url_for("admin_booking", booking_id=booking_id))
 
 
+
+@app.route("/privacy")
+def privacy_policy():
+    html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy Policy — {BUSINESS_NAME}</title>
+<style>body{{font-family:-apple-system,sans-serif;max-width:700px;margin:2rem auto;padding:1rem 1.5rem;color:#1a202c;line-height:1.7}}h1{{color:#1a365d}}h2{{color:#2b6cb0;margin-top:2rem}}a{{color:#2b6cb0}}</style>
+</head><body>
+<h1>Privacy Policy</h1>
+<p><strong>Last updated: July 2026</strong></p>
+<p>{BUSINESS_NAME} ("we", "us", or "our") operates a party rental booking service. This Privacy Policy explains how we collect, use, and protect your personal information.</p>
+<h2>Information We Collect</h2>
+<p>We collect information you provide when submitting a booking request, including your name, email address, phone number, and event details.</p>
+<h2>How We Use Your Information</h2>
+<p>We use your information to process your booking, send booking confirmations, invoices, and delivery or pickup notifications via email and SMS.</p>
+<h2>SMS Messaging</h2>
+<p>By providing your phone number on our booking form, you consent to receive SMS notifications from {BUSINESS_NAME} regarding your booking status, delivery confirmations, and pickup confirmations. Message frequency varies. <strong>Message and data rates may apply.</strong> We do not share your mobile number with third parties for marketing purposes. Reply STOP to opt out.</p>
+<h2>Data Sharing</h2>
+<p>We do not sell or share your personal information with third parties except as necessary to process payments (Stripe) or send communications (Gmail, Twilio).</p>
+<h2>Contact</h2>
+<p>Questions? Email us at <a href="mailto:{GMAIL_USER or 'contact@rentaparty.com'}">{GMAIL_USER or 'contact@rentaparty.com'}</a></p>
+</body></html>"""
+    return html
+
+@app.route("/terms")
+def terms_of_service():
+    html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terms &amp; Conditions — {BUSINESS_NAME}</title>
+<style>body{{font-family:-apple-system,sans-serif;max-width:700px;margin:2rem auto;padding:1rem 1.5rem;color:#1a202c;line-height:1.7}}h1{{color:#1a365d}}h2{{color:#2b6cb0;margin-top:2rem}}a{{color:#2b6cb0}}</style>
+</head><body>
+<h1>Terms &amp; Conditions</h1>
+<p><strong>Last updated: July 2026</strong></p>
+<p>By submitting a booking request with {BUSINESS_NAME}, you agree to the following terms.</p>
+<h2>Bookings</h2>
+<p>All bookings are subject to availability and approval. A deposit or full payment may be required to confirm your reservation.</p>
+<h2>Cancellations</h2>
+<p>Cancellation policies vary. Please contact us directly for details regarding your specific booking.</p>
+<h2>SMS Notifications</h2>
+<p>By providing your phone number, you consent to receive SMS messages from {BUSINESS_NAME} related to your booking, including confirmations, delivery notifications, and pickup notifications. Message and data rates may apply. Reply STOP to unsubscribe.</p>
+<h2>Liability</h2>
+<p>{BUSINESS_NAME} is not responsible for damages arising from misuse of rental equipment.</p>
+<h2>Contact</h2>
+<p>Questions? Email us at <a href="mailto:{GMAIL_USER or 'contact@rentaparty.com'}">{GMAIL_USER or 'contact@rentaparty.com'}</a></p>
+</body></html>"""
+    return html
+
 @app.route("/payment/success/<int:booking_id>")
 def payment_success(booking_id):
     """Thank-you page shown after Stripe payment completes."""
