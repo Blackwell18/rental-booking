@@ -2106,6 +2106,13 @@ FORM_HTML = r"""
       <div class="field"><label>Phone <span class="required">*</span></label><input name="phone" type="tel" required placeholder="(555) 000-0000" value="{{ form.phone or '' }}"></div>
       <div class="field"><label>Email <span class="required">*</span></label><input name="email" type="email" required placeholder="jane@email.com" value="{{ form.email or '' }}"></div>
     </div>
+    <div style="margin-top:.75rem;padding:.75rem 1rem;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
+      <input type="checkbox" name="sms_consent" id="sms_consent" value="1" style="width:18px;height:18px;margin-top:.15rem;accent-color:#2563eb;cursor:pointer;flex-shrink:0">
+      <label for="sms_consent" style="cursor:pointer;font-size:.88rem;color:#1e40af;font-weight:600;line-height:1.4">
+        Yes, send me SMS delivery &amp; pickup notifications
+        <span style="display:block;font-weight:400;font-size:.78rem;color:#374151;margin-top:.25rem">By checking this box, you agree to receive text messages from Rent a Party, LLC about your booking status, including delivery and pickup confirmations. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. This is optional — you can still book without checking this box.</span>
+      </label>
+    </div>
     <div style="margin-top:1rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
       <input type="checkbox" name="tax_exempt_request" id="tax_exempt_request" value="1" onchange="updateTotals()" style="width:18px;height:18px;margin-top:.15rem;accent-color:#16a34a;cursor:pointer;flex-shrink:0">
       <label for="tax_exempt_request" style="cursor:pointer;font-size:.9rem;color:#166534;font-weight:600;line-height:1.4">
@@ -4329,6 +4336,13 @@ ADMIN_NEW_BOOKING_HTML = r"""
     <div class="row">
       <div class="field"><label>Phone <span class="required">*</span></label><input id="f_phone" name="phone" type="tel" required placeholder="(555) 000-0000" value="{{ form.phone or '' }}"></div>
       <div class="field"><label>Email <span class="required">*</span></label><input id="f_email" name="email" type="email" required placeholder="jane@email.com" value="{{ form.email or '' }}"></div>
+    </div>
+    <div style="margin-top:.75rem;padding:.75rem 1rem;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
+      <input type="checkbox" name="sms_consent" id="sms_consent" value="1" style="width:18px;height:18px;margin-top:.15rem;accent-color:#2563eb;cursor:pointer;flex-shrink:0">
+      <label for="sms_consent" style="cursor:pointer;font-size:.88rem;color:#1e40af;font-weight:600;line-height:1.4">
+        Yes, send me SMS delivery &amp; pickup notifications
+        <span style="display:block;font-weight:400;font-size:.78rem;color:#374151;margin-top:.25rem">By checking this box, you agree to receive text messages from Rent a Party, LLC about your booking status, including delivery and pickup confirmations. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. This is optional — you can still book without checking this box.</span>
+      </label>
     </div>
     <div style="margin-top:1rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
       <input type="checkbox" name="tax_exempt_request" id="tax_exempt_request" value="1" onchange="updateTotals()" style="width:18px;height:18px;margin-top:.15rem;accent-color:#16a34a;cursor:pointer;flex-shrink:0">
