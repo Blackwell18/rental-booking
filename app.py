@@ -10175,6 +10175,18 @@ def admin_set_delivery(booking_id):
 
 
 
+
+@app.route("/twilio/incoming-sms", methods=["POST"])
+def twilio_incoming_sms():
+    """Forward any customer SMS reply to the owner's personal phone."""
+    from_number = request.form.get("From", "")
+    body        = request.form.get("Body", "").strip()
+    owner_phone = "+12037517964"
+    if body and from_number:
+        send_sms(owner_phone, f"Reply from {from_number}: {body}")
+    # Return empty TwiML so Twilio doesn't send an auto-response
+    return '<Response></Response>', 200, {"Content-Type": "text/xml"}
+
 @app.route("/privacy")
 def privacy_policy():
     html = f"""<!doctype html>
