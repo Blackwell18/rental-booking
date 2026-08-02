@@ -10176,6 +10176,37 @@ def admin_set_delivery(booking_id):
 
 
 
+
+@app.route("/admin/booking/<int:booking_id>/on-route", methods=["POST"])
+@admin_required
+def on_route_notify(booking_id):
+    """Send 'on the way' SMS to customer and return JSON."""
+    conn = get_db()
+    if not conn:
+        return jsonify({"ok": False, "error": "db"})
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT id,full_name,phone FROM bookings WHERE id=%s", (booking_id,))
+        row = cur.fetchone()
+        cur.close()
+    except Exception as e:
+        log.error(f"on-route db error: {e}")
+        return jsonify({"ok": False})
+    if not row:
+        return jsonify({"ok": False, "error": "not found"})
+    b = dict(row)
+    phone = b.get("phone")
+    first = (b.get("full_name") or "").split()[0] or "there"
+    bid   = b.get("id")
+    if not phone:
+        return jsonify({"ok": False, "error": "no phone"})
+    msg = (f"Hi {first}! This is {BUSINESS_NAME} — your rental items for booking #{bid} "
+           f"are on their way and will be arriving shortly. "
+           f"Reply STOP to opt out.")
+    result = send_sms(phone, msg)
+    log.info(f"on-route SMS booking {booking_id} → {phone}: {result}")
+    return jsonify({"ok": result})
+
 @app.route("/twilio/incoming-sms", methods=["POST"])
 def twilio_incoming_sms():
     """Forward any customer SMS reply to the owner's personal phone."""
@@ -11088,6 +11119,13 @@ ADMIN_ROUTE_HTML = """
         {% if b.phone %}
         <a href="tel:{{ b.phone }}" class="btn-sm">📞 Call</a>
         {% endif %}
+        {% if b.phone and b.nav_address %}
+        <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}')"
+                id="onroute-btn-{{ b.id }}"
+                class="btn-sm" style="background:#f97316;color:#fff;border-color:#ea580c;cursor:pointer">
+          🚚 On Route
+        </button>
+        {% endif %}
         {% if b.route_override %}
         <form method="POST" action="/admin/route/override/{{ b.id }}" style="display:inline">
           <input type="hidden" name="redirect" value="/admin/route?date={{ route_date }}&view={{ view }}">
@@ -11414,6 +11452,25 @@ table{border-collapse:collapse}
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
   else{wrapTables();}
 })();
+
+function sendOnRoute(bookingId, navAddress) {
+  const btn = document.getElementById('onroute-btn-' + bookingId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+  fetch('/admin/booking/' + bookingId + '/on-route', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({})})
+    .then(r => r.json())
+    .then(d => {
+      if (btn) {
+        btn.textContent = d.ok ? '✅ Sent!' : '❌ Failed';
+        btn.style.background = d.ok ? '#16a34a' : '#dc2626';
+        if (d.ok) {
+          // Open Google Maps directions
+          window.open('https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(navAddress) + '&travelmode=driving', '_blank');
+        }
+      }
+    })
+    .catch(() => { if (btn) { btn.textContent = '❌ Error'; btn.style.background='#dc2626'; } });
+}
 </script>
 </body></html>
 """
