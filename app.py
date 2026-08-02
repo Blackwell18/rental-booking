@@ -11847,7 +11847,7 @@ def admin_route():
                     FROM bookings
                     WHERE event_end_date = %s
                       AND (
-                        (status = 'accepted' AND payment_status IN ('paid','partial'))
+                        status IN ('accepted','confirmed','agree_to_pay','partial')
                         OR route_override = TRUE
                       )
                       AND status NOT IN ('denied','cancelled','concluded')
@@ -11865,7 +11865,7 @@ def admin_route():
                     FROM bookings
                     WHERE COALESCE(delivery_date, setup_date) = %s
                       AND (
-                        (status = 'accepted' AND payment_status IN ('paid','partial'))
+                        status IN ('accepted','confirmed','agree_to_pay','partial')
                         OR route_override = TRUE
                       )
                       AND status NOT IN ('denied','cancelled','concluded')
