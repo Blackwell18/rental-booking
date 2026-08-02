@@ -8487,7 +8487,7 @@ def admin_dashboard():
                        COALESCE(delivery_time, setup_time) AS event_start_time,
                        items_json, status
                 FROM bookings
-                WHERE COALESCE(delivery_date, setup_date) = %s
+                WHERE (setup_date = %s OR delivery_date = %s)
                   AND status NOT IN ('denied','cancelled','concluded')
                   AND (archived IS NULL OR archived = FALSE)
                 ORDER BY COALESCE(delivery_time, setup_time) ASC NULLS LAST, id ASC
@@ -11853,7 +11853,7 @@ def admin_route():
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY event_start_time ASC NULLS LAST, id ASC
-                """, (route_date,))
+                """, (route_date, route_date))
             else:
                 cur.execute("""
                     SELECT id, full_name, phone, email, delivery_location,
@@ -11863,7 +11863,7 @@ def admin_route():
                            COALESCE(delivery_date, setup_date) AS route_date_field,
                            route_override
                     FROM bookings
-                    WHERE COALESCE(delivery_date, setup_date) = %s
+                    WHERE (setup_date = %s OR delivery_date = %s)
                       AND (
                         status IN ('accepted','confirmed','agree_to_pay','partial')
                         OR route_override = TRUE
@@ -11906,7 +11906,7 @@ def admin_route():
                 WHERE COALESCE(delivery_date, setup_date) = %s
                   AND status NOT IN ('denied','cancelled','concluded')
                   AND (archived IS NULL OR archived = FALSE)
-            """, (route_date,))
+            """, (route_date, route_date))
             for row in cur_ct.fetchall():
                 b2 = dict(row)
                 try:
@@ -11972,13 +11972,13 @@ def admin_route():
             cur_ex.execute(f"""
                 SELECT id, full_name, status, payment_status, items_json
                 FROM bookings
-                WHERE {date_col} = %s
-                  AND NOT (status = 'accepted' AND payment_status IN ('paid','partial'))
+                WHERE (setup_date = %s OR delivery_date = %s)
+                  AND NOT status IN ('accepted','confirmed','agree_to_pay','partial')
                   AND status NOT IN ('denied','cancelled','concluded')
                   AND (route_override IS NULL OR route_override = FALSE)
                   AND (archived IS NULL OR archived = FALSE)
                 ORDER BY id ASC
-            """, (route_date,))
+            """, (route_date, route_date))
             for row in cur_ex.fetchall():
                 eb = dict(row)
                 try:
