@@ -12575,34 +12575,38 @@ def send_delivery_confirmation(b, image_bytes=None, image_filename="photo.jpg"):
 
 
 def send_pickup_confirmation(b):
-    """Email + SMS to customer confirming their items have been picked up."""
+    """Email + SMS to customer confirming their items have been picked up, with review request."""
     email = b.get("email")
     first = (b.get("full_name") or "").split()[0] or "there"
     bid   = b.get("id")
     now_str = datetime.now().strftime("%B %-d, %Y at %-I:%M %p")
+    review_url = "https://g.page/r/CekuiaN5jdgOEAE/review"
     if email:
         html = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
 <div style="max-width:540px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
   <div style="background:linear-gradient(135deg,#7c3aed,#6d28d9);padding:2rem;color:white;text-align:center">
-    <div style="font-size:2.5rem">\U0001f690</div>
-    <h2 style="margin:.5rem 0 0">Your Items Have Been Picked Up</h2>
+    <div style="font-size:2.5rem">\U0001f3c6</div>
+    <h2 style="margin:.5rem 0 0">Thank You, {first}!</h2>
     <p style="margin:.4rem 0 0;opacity:.85">{BUSINESS_NAME}</p>
   </div>
   <div style="padding:2rem">
     <p>Hi <strong>{first}</strong>,</p>
-    <p style="margin:.75rem 0">Your rental items for booking <strong>#{bid}</strong> have been successfully picked up.</p>
-    <p style="color:#6b7280;font-size:.88rem">Picked up: {now_str}</p>
-    <div style="margin:1.5rem 0;padding:1rem;background:#f5f3ff;border-radius:8px;border:1px solid #c4b5fd">
-      <p style="margin:0;color:#5b21b6;font-weight:600">\u2728 Thank you for choosing {BUSINESS_NAME}! We hope you had a wonderful event.</p>
+    <p style="margin:.75rem 0">It was our absolute pleasure serving you for your event! Your rental items for booking <strong>#{bid}</strong> have been successfully picked up on {now_str}.</p>
+    <p style="margin:.75rem 0">We hope everything went smoothly and that your event was everything you dreamed of. 🎉</p>
+    <div style="margin:1.75rem 0;padding:1.25rem;background:#fefce8;border-radius:10px;border:1.5px solid #fde68a;text-align:center">
+      <p style="margin:0 0 .5rem;font-size:1rem;font-weight:700;color:#92400e">⭐ Loved your experience?</p>
+      <p style="margin:0 0 1.1rem;font-size:.9rem;color:#78350f">We'd be so grateful if you took a moment to leave us a review — it means the world to a small business like ours!</p>
+      <a href="{review_url}" style="display:inline-block;background:#f59e0b;color:white;padding:.7rem 1.75rem;border-radius:8px;font-weight:700;font-size:.95rem;text-decoration:none">⭐ Leave a Google Review</a>
     </div>
-    <p style="color:#6b7280;font-size:.82rem">— The {BUSINESS_NAME} Team</p>
+    <p style="margin:.75rem 0;color:#374151">We look forward to serving you again at your next event!</p>
+    <p style="color:#6b7280;font-size:.82rem;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
   </div>
 </div></body></html>"""
-        plain = f"Hi {first}, your {BUSINESS_NAME} rental items for booking #{bid} have been picked up. Thank you for choosing us!"
-        _send_email(email, f"Your Rental Items Picked Up — {BUSINESS_NAME} Booking #{bid}", html, plain)
+        plain = f"Hi {first}, thank you so much for choosing {BUSINESS_NAME} for your event! Your rental items for booking #{bid} have been picked up. We hope your event was amazing! If you have a moment, we\'d love a Google review: {review_url}"
+        _send_email(email, f"Thank You from {BUSINESS_NAME} — We Hope Your Event Was Amazing! 🎉", html, plain)
     phone = b.get("phone")
     if phone:
-        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been picked up. Thank you \u2014 we hope you had a great event! \U0001f64f")
+        send_sms(phone, f"Hi {first}! Thank you so much for allowing {BUSINESS_NAME} to be part of your event 🙏 We hope it was everything you envisioned! If you have a moment, we\'d love a Google review: {review_url} — it means the world to us! Reply STOP to opt out.")
 
 
 DRIVER_VIEW_HTML = """
