@@ -11853,7 +11853,7 @@ def admin_route():
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY event_start_time ASC NULLS LAST, id ASC
-                """, (route_date, route_date))
+                """, (route_date,))
             else:
                 cur.execute("""
                     SELECT id, full_name, phone, email, delivery_location,
@@ -11871,7 +11871,7 @@ def admin_route():
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
                     ORDER BY COALESCE(delivery_time, setup_time) ASC NULLS LAST, id ASC
-                """, (route_date,))
+                """, (route_date, route_date))
             for row in cur.fetchall():
                 b = dict(row)
                 parts = [
@@ -11903,7 +11903,7 @@ def admin_route():
             cur_ct = conn_ct.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cur_ct.execute("""
                 SELECT id, full_name, items_json FROM bookings
-                WHERE COALESCE(delivery_date, setup_date) = %s
+                WHERE (setup_date = %s OR delivery_date = %s)
                   AND status NOT IN ('denied','cancelled','concluded')
                   AND (archived IS NULL OR archived = FALSE)
             """, (route_date, route_date))
