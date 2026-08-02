@@ -6752,15 +6752,15 @@ table{border-collapse:collapse}
 </script>
 
 <!-- Admin Delivery Photo Modal -->
-<div id="admin-deliver-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;align-items:flex-end;justify-content:center">
-  <div style="background:white;border-radius:20px 20px 0 0;padding:1.5rem 1.25rem 2.5rem;width:100%;max-width:480px;box-shadow:0 -4px 40px rgba(0,0,0,.25)">
+<div id="admin-deliver-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;align-items:flex-end;justify-content:center;-webkit-overflow-scrolling:touch">
+  <div style="background:white;border-radius:20px 20px 0 0;padding:1.5rem 1.25rem 2.5rem;width:100%;max-width:480px;box-shadow:0 -4px 40px rgba(0,0,0,.25);overflow-y:auto;max-height:90vh;-webkit-overflow-scrolling:touch">
     <div style="font-size:1.1rem;font-weight:700;color:#1a202c;margin-bottom:.3rem">&#x1F4E6; Confirm Delivery</div>
     <div style="font-size:.83rem;color:#6b7280;margin-bottom:1.25rem">Optionally add a photo &#x2014; it will be emailed and texted to the customer as proof of delivery.</div>
     <img id="admin-photo-preview" src="" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;display:none;margin-bottom:1rem;border:1px solid #e2e8f0">
     <label style="display:block;width:100%;padding:.8rem;background:#eff6ff;color:#1d4ed8;border-radius:10px;font-size:.88rem;font-weight:700;text-align:center;cursor:pointer;margin-bottom:.75rem;border:1.5px dashed #3b82f6;box-sizing:border-box" for="admin-photo-input">
       &#x1F4F7; Take / Choose Photo <em style="font-weight:400;opacity:.7">(optional)</em>
     </label>
-    <input type="file" id="admin-photo-input" accept="image/*" capture="environment" style="display:none" onchange="adminPhotoPreview(this)">
+    <input type="file" id="admin-photo-input" accept="image/*" style="display:none" onchange="adminPhotoPreview(this)">
     <button id="admin-confirm-btn" onclick="submitAdminDeliver()" style="width:100%;padding:.85rem;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:800;cursor:pointer;margin-bottom:.6rem">&#x2705; Confirm &amp; Notify Customer</button>
     <button onclick="closeAdminDeliverModal()" style="width:100%;padding:.7rem;background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer">Cancel</button>
   </div>
@@ -6768,15 +6768,21 @@ table{border-collapse:collapse}
 <style>@keyframes adm-spin{to{transform:rotate(360deg)}}</style>
 <script>
 function openAdminDeliverModal(){
-  document.getElementById('admin-photo-input').value='';
+  var inp=document.getElementById('admin-photo-input');
+  try{inp.value='';}catch(e){}
   document.getElementById('admin-photo-preview').style.display='none';
   var btn=document.getElementById('admin-confirm-btn');
   btn.disabled=false;btn.innerHTML='&#x2705; Confirm &amp; Notify Customer';
-  document.getElementById('admin-deliver-modal').style.display='flex';
+  var modal=document.getElementById('admin-deliver-modal');
+  modal.style.display='flex';
+  // iOS: prevent body scroll while modal open
+  document.body.style.overflow='hidden';
 }
 function closeAdminDeliverModal(){
   document.getElementById('admin-deliver-modal').style.display='none';
+  document.body.style.overflow='';
 }
+
 function adminPhotoPreview(input){
   if(input.files&&input.files[0]){
     var r=new FileReader();
