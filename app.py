@@ -10910,7 +10910,8 @@ ADMIN_ROUTE_HTML = """
     <label for="rdate">Date:</label>
     <input type="date" id="rdate" name="date" value="{{ route_date }}" onchange="this.form.submit()">
     <input type="hidden" name="view" value="{{ view }}">
-    <a href="/admin/route?view={{ view }}" class="btn-today">Today</a>
+    <button type="button" class="btn-today" onclick="(function(){var d=new Date();var s=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');window.location='/admin/route?date='+s+'&view={{ view }}';})()">Today</button>
+    <button type="button" class="btn-today" style="background:#6366f1;border-color:#4f46e5" onclick="(function(){var d=new Date();d.setDate(d.getDate()+1);var s=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');window.location='/admin/route?date='+s+'&view={{ view }}';})()">Tomorrow</button>
     {% if view == "delivery" %}
     <a href="/sheet/{{ route_date }}/{{ sheet_token }}"
        target="_blank"
