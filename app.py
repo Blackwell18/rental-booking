@@ -6097,6 +6097,7 @@ ADMIN_BOOKING_HTML = """
         <span style="width:90px;text-align:center">Unit Price</span>
         <span style="width:30px"></span>
       </div>
+      <div id="mq-tier-notice" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.55rem .9rem;margin-bottom:.65rem;font-size:.85rem;color:#1e40af"></div>
       <div id="items-editor" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem">
         {% for item in items %}
         <div class="item-row" style="display:flex;gap:.5rem;align-items:center">
@@ -6142,6 +6143,43 @@ ADMIN_BOOKING_HTML = """
   var _invPrices = {};
   {% for p in products %}_invPrices[{{ p.name|tojson }}] = {{ p.price|float }};{% endfor %}
 
+  // ── Marquee tier helpers (match Python/JS on booking form) ──
+  var MQ_ML_TIERS = [{c:1,t:85},{c:2,t:160},{c:3,t:225},{c:4,t:285}];
+  var MQ_MN_TIERS = [{c:1,t:80},{c:2,t:150},{c:3,t:215},{c:4,t:275}];
+  function mqIsLetter(n){ return /^marquee\s+[a-zA-Z]$/i.test((n||'').trim()); }
+  function mqIsNumber(n){ return /^marquee\s+#?\d/i.test((n||'').trim()); }
+  function mqLetterTotal(n){ if(n<=0)return 0; var f=MQ_ML_TIERS.find(function(x){return x.c===n;}); return f?f.t:285+(n-4)*55; }
+  function mqNumberTotal(n){ if(n<=0)return 0; var f=MQ_MN_TIERS.find(function(x){return x.c===n;}); return f?f.t:275+(n-4)*55; }
+
+  function applyMarqueeTiers(){
+    var rows = document.querySelectorAll('#items-editor .item-row');
+    var mlCount=0, mnCount=0;
+    rows.forEach(function(r){
+      var nm = (r.querySelector('[name=item_name]')||{}).value||'';
+      var q  = parseInt((r.querySelector('[name=item_qty]')||{}).value||1,10)||1;
+      if(mqIsLetter(nm)) mlCount+=q;
+      else if(mqIsNumber(nm)) mnCount+=q;
+    });
+    var mlUnit = mlCount>0 ? mqLetterTotal(mlCount)/mlCount : 0;
+    var mnUnit = mnCount>0 ? mqNumberTotal(mnCount)/mnCount : 0;
+    rows.forEach(function(r){
+      var nm = (r.querySelector('[name=item_name]')||{}).value||'';
+      var pi = r.querySelector('[name=item_price]');
+      if(!pi) return;
+      if(mqIsLetter(nm)){ pi.value=mlUnit.toFixed(2); pi.style.background='#eff6ff'; pi.title='Tier price (auto)'; }
+      else if(mqIsNumber(nm)){ pi.value=mnUnit.toFixed(2); pi.style.background='#fefce8'; pi.title='Tier price (auto)'; }
+      else { pi.style.background=''; pi.title='Unit Price'; }
+    });
+    // Update tier notice
+    var notice = document.getElementById('mq-tier-notice');
+    if(!notice) return;
+    var html='';
+    if(mlCount>0){ html+='🔤 <strong>'+mlCount+' Letter'+(mlCount!==1?'s':'')+'</strong> → $'+mqLetterTotal(mlCount).toFixed(2)+' total'; }
+    if(mnCount>0){ if(html) html+=' &nbsp;·&nbsp; '; html+='🔢 <strong>'+mnCount+' Number'+(mnCount!==1?'s':'')+'</strong> → $'+mqNumberTotal(mnCount).toFixed(2)+' total'; }
+    notice.innerHTML=html;
+    notice.style.display=(mlCount>0||mnCount>0)?'block':'none';
+  }
+
   function makePriceInput(val) {
     var p = document.createElement('input');
     p.type = 'number'; p.name = 'item_price'; p.min = '0'; p.step = '0.01';
@@ -6155,12 +6193,21 @@ ADMIN_BOOKING_HTML = """
       var row = e.target.closest('.item-row');
       if (!row) return;
       var priceInput = row.querySelector('input[name="item_price"]');
-      var price = _invPrices[e.target.value];
-      if (priceInput && price !== undefined && parseFloat(priceInput.value) === 0) {
-        priceInput.value = price.toFixed(2);
+      var nm = e.target.value;
+      if(mqIsLetter(nm)||mqIsNumber(nm)){
+        applyMarqueeTiers();
+      } else {
+        var price = _invPrices[nm];
+        if (priceInput && price !== undefined) {
+          priceInput.value = price.toFixed(2);
+          priceInput.style.background='';
+        }
       }
     }
+    if (e.target.name === 'item_qty') { applyMarqueeTiers(); }
   });
+  // Run on page load to apply tiers to existing items
+  document.addEventListener('DOMContentLoaded', applyMarqueeTiers);
 
   document.getElementById('add-item-btn').addEventListener('click', function() {
     var editor = document.getElementById('items-editor');
@@ -9495,6 +9542,32 @@ def update_booking_items(booking_id):
             if up == 0:
                 up = _prod_map.get(name.lower(), 0)
             items.append({"name": name, "qty": q, "unit_price": up, "total": round(up * q, 2)})
+
+    # Apply marquee tier pricing (same logic as /submit)
+    import re as _re_mq
+    def _is_ml(n): return bool(_re_mq.match(r'^marquee\s+[a-zA-Z]$', n.strip(), _re_mq.IGNORECASE))
+    def _is_mn(n): return bool(_re_mq.match(r'^marquee\s+#?\d', n.strip(), _re_mq.IGNORECASE))
+    _ML_TIERS = [(1,85),(2,160),(3,225),(4,285)]
+    _MN_TIERS = [(1,80),(2,150),(3,215),(4,275)]
+    def _ml_total(n):
+        for c,t in _ML_TIERS:
+            if c==n: return float(t)
+        return 285.0+(n-4)*55.0
+    def _mn_total(n):
+        for c,t in _MN_TIERS:
+            if c==n: return float(t)
+        return 275.0+(n-4)*55.0
+    ml_count = sum(i["qty"] for i in items if _is_ml(i["name"]))
+    mn_count = sum(i["qty"] for i in items if _is_mn(i["name"]))
+    ml_unit = (_ml_total(ml_count)/ml_count) if ml_count>0 else 0.0
+    mn_unit = (_mn_total(mn_count)/mn_count) if mn_count>0 else 0.0
+    for i in items:
+        if _is_ml(i["name"]):
+            i["unit_price"] = round(ml_unit, 2)
+            i["total"]      = round(ml_unit * i["qty"], 2)
+        elif _is_mn(i["name"]):
+            i["unit_price"] = round(mn_unit, 2)
+            i["total"]      = round(mn_unit * i["qty"], 2)
 
     # Exact time delivery & delivery fee
     exact_time = bool(request.form.get("exact_time_delivery"))
