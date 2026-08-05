@@ -1110,13 +1110,20 @@ def send_owner_email(b):
     exact = b.get("exact_time_delivery", False)
     event_addr = f"{b.get('event_street','')}, {b.get('event_city','')}, {b.get('event_state','')} {b.get('event_zip','')}"
     renter_addr = f"{b.get('renter_street','')}, {b.get('renter_city','')}, {b.get('renter_state','')} {b.get('renter_zip','')}"
+    import html as _html
+    delivery_fee_amt = float(b.get("delivery_fee") or 0)
+    exact_fee_amt    = 175.0 if exact else 0.0
+    late_night_amt   = float(b.get("late_night_fee") or 0)
+    tax_amount       = float(b.get("tax_amount") or 0)
+    items_subtotal   = float(b.get("items_subtotal") or sum(float(i.get("total") or 0) for i in items))
     item_rows = ""
     for it in items:
         _it_up  = float(it.get("unit_price") or 0)
         _it_tot = float(it.get("total") or round(_it_up * int(it.get("qty") or 1), 2))
+        _name   = _html.escape(str(it.get("name") or ""))
         item_rows += f"""
         <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">{it.get('name','')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">{_name}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center">{it.get('qty','')}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right">${_it_up:.2f}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600">${_it_tot:.2f}</td>
@@ -1151,6 +1158,9 @@ def send_owner_email(b):
       </tr>
       {item_rows}
       {"<tr><td colspan='3' style='padding:8px 12px;border-bottom:1px solid #e2e8f0'>Exact Time Delivery</td><td style='padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0'>$175.00</td></tr>" if exact else ""}
+      {f"<tr><td colspan='3' style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#374151'>Delivery Fee</td><td style='padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0'>${delivery_fee_amt:.2f}</td></tr>" if delivery_fee_amt else ""}
+      {f"<tr><td colspan='3' style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#92400e'>Late Night Fee</td><td style='padding:8px 12px;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0;color:#92400e'>${late_night_amt:.2f}</td></tr>" if late_night_amt else ""}
+      {f"<tr><td colspan='3' style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#6b7280;font-size:.9rem'>CT Sales Tax (6.35%)</td><td style='padding:8px 12px;text-align:right;border-bottom:1px solid #e2e8f0;color:#6b7280'>${tax_amount:.2f}</td></tr>" if tax_amount else ""}
       <tr style="background:#1a365d;color:white">
         <td colspan="3" style="padding:12px;font-weight:700">ESTIMATED TOTAL</td>
         <td style="padding:12px;text-align:right;font-weight:700;font-size:1.2rem">${b.get('grand_total',0):.2f}</td>
