@@ -2121,6 +2121,9 @@ FORM_HTML = r"""
       <label for="sms_consent" style="cursor:pointer;font-size:.88rem;color:#1e40af;font-weight:600;line-height:1.4">
         Yes, send me SMS delivery &amp; pickup notifications
         <span style="display:block;font-weight:400;font-size:.78rem;color:#374151;margin-top:.25rem">By checking this box, you agree to receive text messages from Rent a Party, LLC about your booking status, including delivery and pickup confirmations. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. This is optional — you can still book without checking this box.</span>
+        <span style="display:block;font-size:.75rem;color:#6b7280;margin-top:.3rem">
+          By opting in, you agree to our <a href="/terms" target="_blank" style="color:#2563eb;text-decoration:underline">Terms &amp; Conditions</a> and <a href="/privacy" target="_blank" style="color:#2563eb;text-decoration:underline">Privacy Policy</a>. Mobile opt-in data will not be shared with third parties for marketing purposes.
+        </span>
       </label>
     </div>
     <div style="margin-top:1rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
@@ -4354,6 +4357,9 @@ ADMIN_NEW_BOOKING_HTML = r"""
       <label for="sms_consent" style="cursor:pointer;font-size:.88rem;color:#1e40af;font-weight:600;line-height:1.4">
         Yes, send me SMS delivery &amp; pickup notifications
         <span style="display:block;font-weight:400;font-size:.78rem;color:#374151;margin-top:.25rem">By checking this box, you agree to receive text messages from Rent a Party, LLC about your booking status, including delivery and pickup confirmations. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. This is optional — you can still book without checking this box.</span>
+        <span style="display:block;font-size:.75rem;color:#6b7280;margin-top:.3rem">
+          By opting in, you agree to our <a href="/terms" target="_blank" style="color:#2563eb;text-decoration:underline">Terms &amp; Conditions</a> and <a href="/privacy" target="_blank" style="color:#2563eb;text-decoration:underline">Privacy Policy</a>. Mobile opt-in data will not be shared with third parties for marketing purposes.
+        </span>
       </label>
     </div>
     <div style="margin-top:1rem;padding:.75rem 1rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;display:flex;align-items:flex-start;gap:.75rem">
@@ -10482,10 +10488,12 @@ def privacy_policy():
 <p>We collect information you provide when submitting a booking request, including your name, email address, phone number, and event details.</p>
 <h2>How We Use Your Information</h2>
 <p>We use your information to process your booking, send booking confirmations, invoices, and delivery or pickup notifications via email and SMS.</p>
-<h2>SMS Messaging</h2>
-<p>By providing your phone number on our booking form, you consent to receive SMS notifications from {BUSINESS_NAME} regarding your booking status, delivery confirmations, and pickup confirmations. Message frequency varies. <strong>Message and data rates may apply.</strong> We do not share your mobile number with third parties for marketing purposes. Reply STOP to opt out.</p>
+<h2>SMS Messaging &amp; Mobile Opt-In</h2>
+<p>By providing your phone number and checking the SMS consent box on our booking form, you consent to receive text messages from {BUSINESS_NAME} regarding your booking status, delivery confirmations, pickup confirmations, and review requests. Message frequency varies. <strong>Message and data rates may apply.</strong></p>
+<p>You can opt out at any time by replying <strong>STOP</strong> to any message. For help, reply <strong>HELP</strong>.</p>
+<p><strong>Mobile opt-in data and consent will not be shared with any third parties or affiliates for marketing or promotional purposes.</strong></p>
 <h2>Data Sharing</h2>
-<p>We do not sell or share your personal information with third parties except as necessary to process payments (Stripe) or send communications (Gmail, Twilio).</p>
+<p>We do not sell or share your personal information with third parties except as necessary to process payments (Stripe) or send SMS communications (Twilio). Mobile information collected through our SMS opt-in is used solely for booking-related notifications and is never sold or shared with third parties or affiliates for marketing or promotional purposes.</p>
 <h2>Contact</h2>
 <p>Questions? Email us at <a href="mailto:{GMAIL_USER or 'contact@rentaparty.com'}">{GMAIL_USER or 'contact@rentaparty.com'}</a></p>
 </body></html>"""
