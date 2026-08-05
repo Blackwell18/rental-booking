@@ -6087,9 +6087,11 @@ ADMIN_BOOKING_HTML = """
   </datalist>
   <div class="card">
     <h2>Edit Items</h2>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <form method="POST" action="/admin/booking/{{ b.id }}/update-items">
       <!-- Header labels -->
       <div style="display:flex;gap:.5rem;margin-bottom:.25rem;font-size:.75rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">
+        <span style="width:22px"></span>
         <span style="flex:1;padding-left:.65rem">Item Name</span>
         <span style="width:62px;text-align:center">Qty</span>
         <span style="width:90px;text-align:center">Unit Price</span>
@@ -6099,6 +6101,7 @@ ADMIN_BOOKING_HTML = """
       <div id="items-editor" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem">
         {% for item in items %}
         <div class="item-row" style="display:flex;gap:.5rem;align-items:center">
+          <span class="drag-handle" style="cursor:grab;color:#9ca3af;font-size:1.1rem;padding:.2rem .1rem;touch-action:none;flex-shrink:0" title="Drag to reorder">⠿</span>
           <input type="text" name="item_name" value="{{ item.name }}" list="inv-list"
                  placeholder="Type to search inventory…"
                  style="flex:1;border:1px solid #d1d5db;border-radius:6px;padding:.4rem .65rem;font-size:.9rem">
@@ -6136,6 +6139,7 @@ ADMIN_BOOKING_HTML = """
       <p style="font-size:.78rem;color:#6b7280;margin-top:.5rem;margin-bottom:0">Totals, tax, and grand total are automatically recalculated on save.</p>
     </form>
   </div>
+  <style>.sortable-ghost{opacity:.4;background:#dbeafe;border-radius:6px}</style>
   <script>
   // Price lookup map from inventory
   var _invPrices = {};
@@ -6212,6 +6216,11 @@ ADMIN_BOOKING_HTML = """
     var row = document.createElement('div');
     row.className = 'item-row';
     row.style.cssText = 'display:flex;gap:.5rem;align-items:center';
+    var handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.textContent = '⠿';
+    handle.title = 'Drag to reorder';
+    handle.style.cssText = 'cursor:grab;color:#9ca3af;font-size:1.1rem;padding:.2rem .1rem;touch-action:none;flex-shrink:0';
     var nameInput = document.createElement('input');
     nameInput.type = 'text'; nameInput.name = 'item_name';
     nameInput.setAttribute('list', 'inv-list');
@@ -6232,10 +6241,20 @@ ADMIN_BOOKING_HTML = """
     removeBtn.type = 'button'; removeBtn.textContent = '✕';
     removeBtn.style.cssText = 'background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:.4rem .65rem;font-size:.85rem;cursor:pointer;font-weight:700';
     removeBtn.addEventListener('click', function() { row.remove(); });
-    row.appendChild(nameInput); row.appendChild(qtyInput); row.appendChild(priceInput); row.appendChild(removeBtn);
+    row.appendChild(handle); row.appendChild(nameInput); row.appendChild(qtyInput); row.appendChild(priceInput); row.appendChild(removeBtn);
     editor.appendChild(row);
     nameInput.focus();
   });
+
+  // Init drag-to-reorder
+  if(window.Sortable){
+    Sortable.create(document.getElementById('items-editor'), {
+      handle: '.drag-handle',
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      onEnd: function(){ applyMarqueeTiers(); }
+    });
+  }
   </script>
 
   {% if b.notes %}
