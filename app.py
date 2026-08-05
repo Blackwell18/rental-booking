@@ -3387,6 +3387,7 @@ ADMIN_DASH_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link"><span class="sb-icon">👥</span> Clients</a>
     <a href="/admin/inventory" class="sb-link"><span class="sb-icon">📦</span> Inventory</a>
+    <a href="/admin/availability" class="sb-link"><span class="sb-icon">📅</span> Availability</a>
     <a href="/admin/calendar" class="sb-link"><span class="sb-icon">📅</span> Calendar</a>
     <a href="/admin/reports" class="sb-link"><span class="sb-icon">📊</span> Reports</a>
     <a href="/admin/route" class="sb-link"><span class="sb-icon">🗺</span> Route</a>
@@ -3905,6 +3906,7 @@ ADMIN_BOOKING_EDIT_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
@@ -4288,6 +4290,7 @@ ADMIN_NEW_BOOKING_HTML = r"""
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link"><span class="sb-icon">👥</span> Clients</a>
     <a href="/admin/inventory" class="sb-link"><span class="sb-icon">📦</span> Inventory</a>
+    <a href="/admin/availability" class="sb-link"><span class="sb-icon">📅</span> Availability</a>
     <a href="/admin/calendar" class="sb-link"><span class="sb-icon">📅</span> Calendar</a>
     <a href="/admin/reports" class="sb-link"><span class="sb-icon">📊</span> Reports</a>
     <a href="/admin/route" class="sb-link"><span class="sb-icon">🗺</span> Route</a>
@@ -5389,6 +5392,7 @@ ADMIN_BOOKING_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
@@ -7286,6 +7290,191 @@ def booking_success(booking_id):
     )
 
 
+
+ADMIN_AVAILABILITY_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="manifest" href="/admin-manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Rent a Party">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js");</script>
+  <title>Availability — {{ business_name }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:#f5f6fa;color:#111827;min-height:100vh}
+    .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+    .sb-overlay.show{display:block}
+    .sidebar{width:210px;min-height:100vh;background:#fff;border-right:1px solid #e5e7eb;position:fixed;top:0;left:0;z-index:100;display:flex;flex-direction:column;transition:transform .25s ease}
+    .sb-brand{display:flex;align-items:center;gap:.6rem;padding:.9rem 1rem;border-bottom:1px solid #f3f4f6}
+    .sb-brand img{height:1.8rem;width:auto;object-fit:contain}
+    .sb-brand-name{font-size:.85rem;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sb-new-btn{display:block;margin:.75rem .75rem .25rem;background:#16a34a;color:#fff;text-align:center;padding:.5rem .75rem;border-radius:8px;text-decoration:none;font-size:.82rem;font-weight:600}
+    .sb-new-btn:hover{background:#15803d}
+    .sb-nav{flex:1;padding:.5rem 0;overflow-y:auto}
+    .sb-link{display:flex;align-items:center;gap:.55rem;padding:.55rem 1rem;color:#374151;text-decoration:none;font-size:.85rem;font-weight:500;border-radius:8px;margin:1px .5rem;transition:background .15s,color .15s}
+    .sb-link:hover{background:#f3f4f6;color:#111827}
+    .sb-link.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
+    .sb-bottom{padding:.75rem;border-top:1px solid #f3f4f6}
+    .sb-divider{height:1px;background:#f3f4f6;margin:.4rem .75rem}
+    .page-content{margin-left:210px;min-height:100vh}
+    .pg-hdr{background:#fff;border-bottom:1px solid #e5e7eb;padding:.7rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:50}
+    .pg-hdr h1{font-size:1.05rem;font-weight:700;color:#111827;flex:1;margin:0}
+    .mobile-menu-btn{display:none;background:none;border:none;font-size:1.35rem;cursor:pointer;color:#374151;padding:.2rem .3rem;line-height:1;border-radius:6px}
+    .mobile-menu-btn:hover{background:#f3f4f6}
+    .main{max-width:900px;margin:0 auto;padding:1.75rem}
+    .card{background:white;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:1.5rem}
+    .card-header{padding:.85rem 1.25rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:.88rem;color:#374151}
+    .btn{display:inline-block;padding:.4rem .85rem;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;line-height:1.5}
+    .btn-primary{background:#2563eb;color:white}
+    .btn-mode{padding:.35rem .9rem;border-radius:6px;font-size:.83rem;font-weight:600;cursor:pointer}
+    .item-card{border:1px solid #e5e7eb;border-radius:10px;padding:.85rem 1rem;background:white;margin-bottom:.65rem;cursor:pointer;transition:box-shadow .15s}
+    .item-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.07)}
+    .item-card.sold-out{background:#fef2f2;border-color:#fecaca}
+    .item-card.low{background:#fffbeb;border-color:#fde68a}
+    .item-card.ok{background:#f0fdf4;border-color:#bbf7d0}
+    .booking-list{margin-top:.6rem;padding-top:.6rem;border-top:1px solid #e5e7eb;display:none}
+    .booking-list.open{display:block}
+    .booking-chip{display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:.2rem .55rem;font-size:.78rem;font-weight:600;margin:.2rem .2rem 0 0;text-decoration:none}
+    .booking-chip:hover{background:#dbeafe}
+    @media(max-width:768px){
+      .sidebar{transform:translateX(-210px)}
+      .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,.15)}
+      .page-content{margin-left:0!important}
+      .mobile-menu-btn{display:block}
+      .main{padding:1rem}
+    }
+  </style>
+</head>
+<body>
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/logo.png" alt=""><span class="sb-brand-name">{{ business_name }}</span></div>
+  <a href="/admin/booking/new" class="sb-new-btn">+ New Booking</a>
+  <nav class="sb-nav">
+    <a href="/admin/dashboard" class="sb-link">🏠 Dashboard</a>
+    <div class="sb-divider"></div>
+    <a href="/admin/customers" class="sb-link">👥 Clients</a>
+    <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link active">📅 Availability</a>
+    <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
+    <a href="/admin/reports" class="sb-link">📊 Reports</a>
+    <a href="/admin/route" class="sb-link">🗺 Route</a>
+    <a href="/driver/{{ today }}" class="sb-link">🚚 Driver View</a>
+    <a href="/admin/formsite-import" class="sb-link">📥 Import</a>
+    <a href="/admin/tax-report" class="sb-link">💰 Tax Report</a>
+  </nav>
+  <div class="sb-bottom">
+    <a href="/admin/logout" class="sb-link">🚪 Sign Out</a>
+  </div>
+</aside>
+<div class="page-content">
+<div class="pg-hdr">
+  <button class="mobile-menu-btn" onclick="openSidebar()">&#9776;</button>
+  <h1>📅 Check Availability</h1>
+</div>
+<div class="main">
+
+  <div class="card">
+    <div class="card-header">Select a date to check inventory availability</div>
+    <div style="padding:1.25rem 1.5rem">
+      <div style="display:flex;gap:.6rem;margin-bottom:1rem">
+        <button type="button" id="btn_single" class="btn-mode" onclick="setMode('single')"
+          style="border:1.5px solid #2563eb;background:#2563eb;color:white">Single Day</button>
+        <button type="button" id="btn_range" class="btn-mode" onclick="setMode('range')"
+          style="border:1.5px solid #d1d5db;background:white;color:#374151">Date Range</button>
+      </div>
+      <form method="GET" action="/admin/availability" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end">
+        <div>
+          <label style="display:block;font-size:.75rem;font-weight:600;color:#6b7280;margin-bottom:.3rem">Date</label>
+          <input type="date" name="check_from" id="check_from" value="{{ check_from }}"
+            style="border:1px solid #d1d5db;border-radius:6px;padding:.42rem .7rem;font-size:.88rem">
+        </div>
+        <div id="to_wrapper" style="display:{% if check_to and check_to != check_from %}block{% else %}none{% endif %}">
+          <label style="display:block;font-size:.75rem;font-weight:600;color:#6b7280;margin-bottom:.3rem">To</label>
+          <input type="date" name="check_to" id="check_to" value="{{ check_to }}"
+            style="border:1px solid #d1d5db;border-radius:6px;padding:.42rem .7rem;font-size:.88rem">
+        </div>
+        <button type="submit" class="btn btn-primary" style="align-self:flex-end;padding:.45rem 1.1rem;font-size:.88rem">Check Availability</button>
+        {% if check_from %}<a href="/admin/availability" style="align-self:flex-end;font-size:.82rem;color:#6b7280;text-decoration:none;padding:.42rem .5rem">✕ Clear</a>{% endif %}
+      </form>
+    </div>
+  </div>
+
+  {% if avail_data %}
+  <div style="margin-bottom:.75rem;font-size:.88rem;font-weight:600;color:#374151">
+    Results for {{ check_from }}{% if check_to and check_to != check_from %} → {{ check_to }}{% endif %}
+    &nbsp;·&nbsp; <span style="color:#16a34a">{{ avail_data|selectattr('available','gt',0)|list|length }} available</span>
+    &nbsp;·&nbsp; <span style="color:#dc2626">{{ avail_data|selectattr('available','eq',0)|list|length }} sold out</span>
+  </div>
+  {% for item in avail_data %}
+  {% set pct = ((item.reserved / item.total * 100)|int) if item.total > 0 else 0 %}
+  <div class="item-card {% if item.available == 0 %}sold-out{% elif item.available <= 2 %}low{% else %}ok{% endif %}"
+       onclick="toggleBookings('bk_{{ loop.index }}')">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
+      <div style="font-size:.95rem;font-weight:700;color:#111827">{{ item.name }}</div>
+      <div style="display:flex;align-items:center;gap:.75rem;flex-shrink:0">
+        <span style="font-size:.8rem;color:#6b7280">{{ item.reserved }} reserved</span>
+        <span style="font-size:1rem;font-weight:800;color:{% if item.available == 0 %}#dc2626{% elif item.available <= 2 %}#d97706{% else %}#16a34a{% endif %}">
+          {{ item.available }}/{{ item.total }}
+          {% if item.available == 0 %}<span style="font-size:.75rem;font-weight:600"> SOLD OUT</span>{% endif %}
+        </span>
+        {% if item.bookings %}<span style="font-size:.75rem;color:#9ca3af">▾ {{ item.bookings|length }} booking{{ 's' if item.bookings|length != 1 }}</span>{% endif %}
+      </div>
+    </div>
+    <div style="height:5px;background:#e5e7eb;border-radius:3px;margin-top:.6rem">
+      <div style="height:5px;border-radius:3px;width:{{ pct }}%;background:{% if pct>=100 %}#ef4444{% elif pct>=70 %}#f59e0b{% else %}#10b981{% endif %};transition:width .3s"></div>
+    </div>
+    {% if item.bookings %}
+    <div class="booking-list" id="bk_{{ loop.index }}">
+      <div style="font-size:.75rem;font-weight:600;color:#6b7280;margin-bottom:.35rem">Bookings using this item:</div>
+      {% for bk in item.bookings %}
+      <a href="/admin/booking/{{ bk.id }}" class="booking-chip" onclick="event.stopPropagation()">
+        #{{ bk.id }} {{ bk.name }} ({{ bk.qty }}x)
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% elif check_from %}
+  <div style="text-align:center;padding:2.5rem;color:#6b7280;font-size:.9rem">No inventory data found.</div>
+  {% endif %}
+
+</div>
+</div>
+<script>
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sb-overlay').classList.add('show')}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show')}
+function toggleBookings(id){var el=document.getElementById(id);if(el)el.classList.toggle('open')}
+function setMode(m){
+  var tw=document.getElementById('to_wrapper');
+  var bs=document.getElementById('btn_single');
+  var br=document.getElementById('btn_range');
+  if(m==='range'){
+    tw.style.display='block';
+    br.style.border='1.5px solid #2563eb';br.style.background='#2563eb';br.style.color='white';
+    bs.style.border='1.5px solid #d1d5db';bs.style.background='white';bs.style.color='#374151';
+  } else {
+    tw.style.display='none';
+    bs.style.border='1.5px solid #2563eb';bs.style.background='#2563eb';bs.style.color='white';
+    br.style.border='1.5px solid #d1d5db';br.style.background='white';br.style.color='#374151';
+  }
+}
+// Auto-set mode based on current values
+(function(){
+  var cf='{{ check_from }}', ct='{{ check_to }}';
+  if(ct && ct !== cf) setMode('range');
+})();
+</script>
+</body>
+</html>
+"""
+
 ADMIN_INVENTORY_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -7382,6 +7571,7 @@ ADMIN_INVENTORY_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link active">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
@@ -7405,55 +7595,8 @@ ADMIN_INVENTORY_HTML = """
   {% if flash_ok %}<div class="flash flash-ok">✓ {{ flash_ok }}</div>{% endif %}
   {% if flash_err %}<div class="flash flash-err">⚠ {{ flash_err }}</div>{% endif %}
 
-  <!-- ── Availability Checker ── -->
-  <div class="card" style="margin-bottom:1.5rem">
-    <div class="card-header">📅 Check Availability</div>
-    <div style="padding:1.1rem 1.25rem">
-      <div style="display:flex;gap:.75rem;margin-bottom:.9rem">
-        <button type="button" id="btn_single" onclick="setMode('single')"
-          style="padding:.35rem .9rem;border-radius:6px;font-size:.83rem;font-weight:600;cursor:pointer;border:1.5px solid #2563eb;background:#2563eb;color:white">Single Day</button>
-        <button type="button" id="btn_range" onclick="setMode('range')"
-          style="padding:.35rem .9rem;border-radius:6px;font-size:.83rem;font-weight:600;cursor:pointer;border:1.5px solid #d1d5db;background:white;color:#374151">Date Range</button>
-      </div>
-      <form method="GET" action="/admin/inventory" style="display:flex;flex-wrap:wrap;gap:.65rem;align-items:flex-end">
-        <div>
-          <label style="display:block;font-size:.75rem;font-weight:600;color:#6b7280;margin-bottom:.25rem">Date</label>
-          <input type="date" name="check_from" id="check_from" value="{{ check_from }}"
-            style="border:1px solid #d1d5db;border-radius:6px;padding:.38rem .6rem;font-size:.86rem">
-        </div>
-        <div id="to_wrapper" style="display:none">
-          <label style="display:block;font-size:.75rem;font-weight:600;color:#6b7280;margin-bottom:.25rem">To</label>
-          <input type="date" name="check_to" id="check_to" value="{{ check_to }}"
-            style="border:1px solid #d1d5db;border-radius:6px;padding:.38rem .6rem;font-size:.86rem">
-        </div>
-        <button type="submit" style="background:#2563eb;color:white;border:none;border-radius:6px;padding:.42rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;align-self:flex-end">Check</button>
-        {% if check_from %}<a href="/admin/inventory" style="align-self:flex-end;font-size:.82rem;color:#6b7280;text-decoration:none;padding:.42rem .5rem">✕ Clear</a>{% endif %}
-      </form>
-    </div>
-    {% if avail_data %}
-    <div style="border-top:1px solid #e5e7eb;padding:.75rem 1.25rem .5rem">
-      <div style="font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.6rem">
-        Availability for {{ check_from }}{% if check_to and check_to != check_from %} → {{ check_to }}{% endif %}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.6rem">
-        {% for item in avail_data %}
-        {% set pct = ((item.reserved / item.total * 100)|int) if item.total > 0 else 0 %}
-        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:.65rem .85rem;background:{% if item.available == 0 %}#fef2f2{% elif item.available <= 2 %}#fffbeb{% else %}#f0fdf4{% endif %}">
-          <div style="font-size:.84rem;font-weight:600;color:#111827;margin-bottom:.3rem">{{ item.name }}</div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:.78rem;color:#6b7280">{{ item.reserved }} reserved</span>
-            <span style="font-size:.88rem;font-weight:700;color:{% if item.available == 0 %}#dc2626{% elif item.available <= 2 %}#d97706{% else %}#16a34a{% endif %}">
-              {{ item.available }}/{{ item.total }} avail{% if item.available == 0 %} — SOLD OUT{% endif %}
-            </span>
-          </div>
-          <div style="height:4px;background:#e5e7eb;border-radius:2px;margin-top:.4rem">
-            <div style="height:4px;border-radius:2px;width:{{ pct }}%;background:{% if pct>=100 %}#ef4444{% elif pct>=70 %}#f59e0b{% else %}#10b981{% endif %}"></div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
+  <div style="margin-bottom:1rem;padding:.75rem 1rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:.85rem;color:#1d4ed8;font-weight:500">
+    📅 Need to check what's available on a date? <a href="/admin/availability" style="font-weight:700;color:#1d4ed8">Go to Availability →</a>
   </div>
 
   <div class="card">
@@ -10594,6 +10737,7 @@ ADMIN_CALENDAR_HTML = """<!DOCTYPE html>
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link">&#128101; Clients</a>
     <a href="/admin/inventory" class="sb-link">&#128230; Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link active">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
@@ -10889,6 +11033,7 @@ ADMIN_ROUTE_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link active">🗺 Route</a>
@@ -11490,6 +11635,17 @@ function sendOnRoute(bookingId, navAddress) {
 @app.route("/admin/inventory")
 @admin_required
 def admin_inventory():
+    products = get_products()
+    return render_template_string(ADMIN_INVENTORY_HTML,
+        business_name=BUSINESS_NAME,
+        products=products,
+        flash_ok=request.args.get("flash_ok", ""),
+        flash_err=request.args.get("flash_err", ""),
+    )
+
+@app.route("/admin/availability")
+@admin_required
+def admin_availability():
     products   = get_products()
     check_from = request.args.get("check_from", "")
     check_to   = request.args.get("check_to", "")
@@ -11497,24 +11653,60 @@ def admin_inventory():
     if check_from:
         end = check_to or check_from
         available = get_available(check_from, end)
+        # Also fetch booking details for each item so we can show customer names
+        conn = get_db()
+        booking_by_item = {}  # pid -> [{id, name, qty}]
+        if conn:
+            try:
+                cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                cur.execute("""
+                    SELECT id, full_name, items_json FROM bookings
+                    WHERE (
+                      (status = 'accepted' AND payment_status IN ('partial','paid'))
+                      OR status = 'agree_to_pay'
+                    )
+                      AND (delivery_status IS NULL OR delivery_status != 'picked_up')
+                      AND setup_date IS NOT NULL
+                      AND event_end_date IS NOT NULL
+                      AND setup_date <= %s
+                      AND event_end_date >= %s
+                """, (end, check_from))
+                name_to_id = {p["name"].lower(): p["id"] for p in products}
+                for row in cur.fetchall():
+                    try:
+                        items = json.loads(row["items_json"] or "[]")
+                        for item in items:
+                            pid = item.get("id") or name_to_id.get((item.get("name") or "").lower())
+                            qty = int(item.get("qty") or 0)
+                            if pid and qty > 0:
+                                booking_by_item.setdefault(pid, []).append({
+                                    "id": row["id"],
+                                    "name": (row["full_name"] or f"#{row['id']}").split()[0] + " " + " ".join((row["full_name"] or "").split()[1:2]),
+                                    "qty": qty,
+                                })
+                    except Exception:
+                        pass
+                cur.close(); conn.close()
+            except Exception as e:
+                log.error(f"availability booking detail error: {e}")
         for p in products:
             total    = int(p.get("total", 0))
             avail    = available.get(p["id"], total)
             reserved = max(0, total - avail)
             avail_data.append({
-                "name": p["name"],
-                "total": total,
-                "reserved": reserved,
+                "name":      p["name"],
+                "total":     total,
+                "reserved":  reserved,
                 "available": avail,
+                "bookings":  booking_by_item.get(p["id"], []),
             })
-    return render_template_string(ADMIN_INVENTORY_HTML,
+    from datetime import date as _date
+    return render_template_string(ADMIN_AVAILABILITY_HTML,
         business_name=BUSINESS_NAME,
-        products=products,
         avail_data=avail_data,
         check_from=check_from,
         check_to=check_to,
-        flash_ok=request.args.get("flash_ok", ""),
-        flash_err=request.args.get("flash_err", ""),
+        today=_date.today().isoformat(),
     )
 
 
@@ -13325,6 +13517,7 @@ ADMIN_CUSTOMERS_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link active">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
@@ -13707,6 +13900,7 @@ ADMIN_CUSTOMER_IMPORT_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link active">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
@@ -14027,6 +14221,7 @@ ADMIN_CUSTOMER_EDIT_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link active">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
@@ -14621,6 +14816,7 @@ ADMIN_TAX_HTML = """
     <div class="sb-divider"></div>
     <a href="/admin/customers" class="sb-link">👥 Clients</a>
     <a href="/admin/inventory" class="sb-link">📦 Inventory</a>
+    <a href="/admin/availability" class="sb-link">📅 Availability</a>
     <a href="/admin/calendar" class="sb-link">📅 Calendar</a>
     <a href="/admin/reports" class="sb-link">📊 Reports</a>
     <a href="/admin/route" class="sb-link">🗺 Route</a>
