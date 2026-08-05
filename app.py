@@ -2423,7 +2423,7 @@ function getMarqueeLetterTotal(n){
   return 285+(n-4)*55;
 }
 function isMarqueeNumber(name){ return /^marquee\s+#?\d/i.test(name); }
-function isMarqueeLetter(name){ return /^marquee\s+[a-z]$/i.test(name); }
+function isMarqueeLetter(name){ return /^marquee\s+/i.test((name||'').trim()) && !isMarqueeNumber(name); }
 
 // ── Item Categories ───────────────────────────────────────────────
 const ITEM_CATEGORIES = [
@@ -2439,9 +2439,8 @@ const ITEM_CATEGORIES = [
 function getCat(name){
   const n=name.trim();
   // Marquee Letter: "Marquee A", "Marquee B", etc. — marquee followed by a single letter
-  if(/^marquee\s+[a-zA-Z]$/i.test(n) || /marquee\s+[a-zA-Z]\s*$/i.test(n)) return "🔤 Marquee Letters";
-  // Marquee Number: "Marquee #5", "Marquee 3", etc. — marquee followed by # or digit
   if(/marquee\s+#?\d/i.test(n)) return "🔢 Marquee Numbers";
+  if(/^marquee\s+/i.test(n)) return "🔤 Marquee Letters";
   const nl=n.toLowerCase();
   for(const c of ITEM_CATEGORIES){ if(c.keywords.some(k=>nl.includes(k))) return c.label; }
   return "📦 Other";
@@ -4742,7 +4741,7 @@ function getMarqueeLetterTotal(n){
   return 285+(n-4)*55;
 }
 function isMarqueeNumber(name){ return /^marquee\s+#?\d/i.test(name); }
-function isMarqueeLetter(name){ return /^marquee\s+[a-z]$/i.test(name); }
+function isMarqueeLetter(name){ return /^marquee\s+/i.test((name||'').trim()) && !isMarqueeNumber(name); }
 
 // ── Item Categories ───────────────────────────────────────────────
 const ITEM_CATEGORIES = [
@@ -4758,9 +4757,8 @@ const ITEM_CATEGORIES = [
 function getCat(name){
   const n=name.trim();
   // Marquee Letter: "Marquee A", "Marquee B", etc. — marquee followed by a single letter
-  if(/^marquee\s+[a-zA-Z]$/i.test(n) || /marquee\s+[a-zA-Z]\s*$/i.test(n)) return "🔤 Marquee Letters";
-  // Marquee Number: "Marquee #5", "Marquee 3", etc. — marquee followed by # or digit
   if(/marquee\s+#?\d/i.test(n)) return "🔢 Marquee Numbers";
+  if(/^marquee\s+/i.test(n)) return "🔤 Marquee Letters";
   const nl=n.toLowerCase();
   for(const c of ITEM_CATEGORIES){ if(c.keywords.some(k=>nl.includes(k))) return c.label; }
   return "📦 Other";
@@ -6146,7 +6144,7 @@ ADMIN_BOOKING_HTML = """
   // ── Marquee tier helpers (match Python/JS on booking form) ──
   var MQ_ML_TIERS = [{c:1,t:85},{c:2,t:160},{c:3,t:225},{c:4,t:285}];
   var MQ_MN_TIERS = [{c:1,t:80},{c:2,t:150},{c:3,t:215},{c:4,t:275}];
-  function mqIsLetter(n){ return /^marquee\s+[a-zA-Z]$/i.test((n||'').trim()); }
+  function mqIsLetter(n){ return /^marquee\s+/i.test((n||'').trim()) && !mqIsNumber(n); }
   function mqIsNumber(n){ return /^marquee\s+#?\d/i.test((n||'').trim()); }
   function mqLetterTotal(n){ if(n<=0)return 0; var f=MQ_ML_TIERS.find(function(x){return x.c===n;}); return f?f.t:285+(n-4)*55; }
   function mqNumberTotal(n){ if(n<=0)return 0; var f=MQ_MN_TIERS.find(function(x){return x.c===n;}); return f?f.t:275+(n-4)*55; }
@@ -7049,7 +7047,7 @@ def _submit_inner():
             _raw_items.append({"id": p["id"], "name": p["name"], "qty": qty, "base_price": float(p["price"])})
 
     # Marquee tier pricing (must match JS logic exactly)
-    def _is_ml(name): return bool(re.match(r'^marquee\s+[a-z]$', name.strip(), re.IGNORECASE))
+    def _is_ml(name): return bool(re.match(r'^marquee\s+', name.strip(), re.IGNORECASE)) and not bool(re.match(r'^marquee\s+#?\d', name.strip(), re.IGNORECASE))
     def _is_mn(name): return bool(re.match(r'^marquee\s+#?\d', name.strip(), re.IGNORECASE))
     _ML_TIERS = [(1,85),(2,160),(3,225),(4,285)]
     _MN_TIERS = [(1,80),(2,150),(3,215),(4,275)]
@@ -9545,7 +9543,7 @@ def update_booking_items(booking_id):
 
     # Apply marquee tier pricing (same logic as /submit)
     import re as _re_mq
-    def _is_ml(n): return bool(_re_mq.match(r'^marquee\s+[a-zA-Z]$', n.strip(), _re_mq.IGNORECASE))
+    def _is_ml(n): return bool(_re_mq.match(r'^marquee\s+', n.strip(), _re_mq.IGNORECASE)) and not bool(_re_mq.match(r'^marquee\s+#?\d', n.strip(), _re_mq.IGNORECASE))
     def _is_mn(n): return bool(_re_mq.match(r'^marquee\s+#?\d', n.strip(), _re_mq.IGNORECASE))
     _ML_TIERS = [(1,85),(2,160),(3,225),(4,285)]
     _MN_TIERS = [(1,80),(2,150),(3,215),(4,275)]
