@@ -317,6 +317,7 @@ def init_db():
             # Fix payment_status='paid' where amount_paid < grand_total (stale data)
             "UPDATE bookings SET payment_status='partial' WHERE payment_status='paid' AND grand_total > 0 AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid < grand_total - 0.50",
             "UPDATE bookings SET payment_status='waiting' WHERE payment_status='paid' AND (amount_paid IS NULL OR amount_paid <= 0) AND grand_total > 0",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_photo BYTEA DEFAULT NULL",
             # Auto-conclude: picked up 2+ days ago
             """UPDATE bookings SET status='concluded'
                WHERE delivery_status='picked_up'
@@ -1040,7 +1041,7 @@ def _send_email(to, subject, html, plain, reply_to=None):
         log.error(f"Email error: {e}")
 
 
-def send_sms(to_number, message):
+def send_sms(to_number, message, media_url=None):
     """Send an SMS via Twilio. Returns True on success, False on failure."""
     if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER):
         log.warning("Twilio not configured — SMS not sent")
@@ -1059,7 +1060,7 @@ def send_sms(to_number, message):
         resp = requests.post(
             f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json",
             auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
-            data={"From": TWILIO_FROM_NUMBER, "To": to_e164, "Body": message},
+            data={k:v for k,v in {"From":TWILIO_FROM_NUMBER,"To":to_e164,"Body":message,"MediaUrl":media_url}.items() if v is not None},
             timeout=10,
         )
         if resp.status_code in (200, 201):
@@ -6841,9 +6842,10 @@ table{border-collapse:collapse}
     <div style="font-size:1.1rem;font-weight:700;color:#1a202c;margin-bottom:.3rem">&#x1F4E6; Confirm Delivery</div>
     <div style="font-size:.83rem;color:#6b7280;margin-bottom:1.25rem">Optionally add a photo &#x2014; it will be emailed and texted to the customer as proof of delivery.</div>
     <img id="admin-photo-preview" src="" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;display:none;margin-bottom:1rem;border:1px solid #e2e8f0">
-    <label style="display:block;width:100%;padding:.8rem;background:#eff6ff;color:#1d4ed8;border-radius:10px;font-size:.88rem;font-weight:700;text-align:center;cursor:pointer;margin-bottom:.75rem;border:1.5px dashed #3b82f6;box-sizing:border-box" for="admin-photo-input">
-      &#x1F4F7; Take / Choose Photo <em style="font-weight:400;opacity:.7">(optional)</em>
-    </label>
+    <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
+      <button type="button" onclick="document.getElementById('admin-camera-input').click()" style="flex:1;padding:.8rem;background:#eff6ff;color:#1d4ed8;border-radius:10px;font-size:.82rem;font-weight:700;text-align:center;cursor:pointer;border:1.5px dashed #3b82f6;box-sizing:border-box">&#x1F4F7; Take Photo</button>
+      <label style="flex:1;display:block;padding:.8rem;background:#f0fdf4;color:#15803d;border-radius:10px;font-size:.82rem;font-weight:700;text-align:center;cursor:pointer;border:1.5px dashed #4ade80;box-sizing:border-box" for="admin-photo-input">&#x1F5BC;&#xFE0F; Gallery</label>
+    </div>
     <input type="file" id="admin-photo-input" accept="image/*" style="display:none" onchange="adminPhotoPreview(this)">
     <button id="admin-confirm-btn" onclick="submitAdminDeliver()" style="width:100%;padding:.85rem;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:800;cursor:pointer;margin-bottom:.6rem">&#x2705; Confirm &amp; Notify Customer</button>
     <button onclick="closeAdminDeliverModal()" style="width:100%;padding:.7rem;background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer">Cancel</button>
@@ -6853,7 +6855,7 @@ table{border-collapse:collapse}
 <script>
 function openAdminDeliverModal(){
   var inp=document.getElementById('admin-photo-input');
-  try{inp.value='';}catch(e){}
+  try{inp.value='';document.getElementById('admin-camera-input').value='';}catch(e){}
   document.getElementById('admin-photo-preview').style.display='none';
   var btn=document.getElementById('admin-confirm-btn');
   btn.disabled=false;btn.innerHTML='&#x2705; Confirm &amp; Notify Customer';
@@ -6883,7 +6885,7 @@ function submitAdminDeliver(){
   btn.innerHTML='<span style="display:inline-block;width:14px;height:14px;border:2.5px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:adm-spin .7s linear infinite;vertical-align:middle;margin-right:.4rem"></span>Sending&hellip;';
   var fd=new FormData();
   fd.append('action','deliver');
-  var f=document.getElementById('admin-photo-input').files[0];
+  var f=document.getElementById('admin-photo-input').files[0]||document.getElementById('admin-camera-input').files[0];
   if(f)fd.append('photo',f);
   fetch('/admin/booking/{{ b.id }}/delivery-action',{method:'POST',body:fd})
     .then(function(r){return r.json();})
@@ -6914,6 +6916,7 @@ document.getElementById('admin-deliver-modal').addEventListener('click',function
   if(e.target===this)closeAdminDeliverModal();
 });
 </script>
+<input type="file" id="admin-camera-input" accept="image/*" capture="environment" style="display:none" onchange="adminPhotoPreview(this)">
 </body></html>
 """
 
@@ -10316,6 +10319,22 @@ def booking_delivery_status(booking_id):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
+@app.route("/delivery/photo/<int:booking_id>")
+def delivery_photo_serve(booking_id):
+    """Serve delivery proof-of-delivery photo (public URL — used by Twilio MMS)."""
+    from flask import Response as _Resp
+    conn = get_db()
+    if not conn:
+        return "Not found", 404
+    cur = conn.cursor()
+    cur.execute("SELECT delivery_photo FROM bookings WHERE id=%s", (booking_id,))
+    row = cur.fetchone()
+    cur.close()
+    if not row or not row[0]:
+        return "Not found", 404
+    return _Resp(bytes(row[0]), mimetype="image/jpeg")
+
+
 @app.route("/admin/booking/<int:booking_id>/delivery-action", methods=["POST"])
 @admin_required
 def admin_delivery_action(booking_id):
@@ -10342,7 +10361,11 @@ def admin_delivery_action(booking_id):
         cur.close(); return jsonify({"error":"not found"}), 404
     b = dict(row)
     if action == "deliver":
-        cur.execute("UPDATE bookings SET delivery_status='delivered',delivered_at=NOW() WHERE id=%s",(booking_id,))
+        if image_bytes:
+            import psycopg2 as _pg2
+            cur.execute("UPDATE bookings SET delivery_status='delivered',delivered_at=NOW(),delivery_photo=%s WHERE id=%s",(_pg2.Binary(image_bytes), booking_id))
+        else:
+            cur.execute("UPDATE bookings SET delivery_status='delivered',delivered_at=NOW() WHERE id=%s",(booking_id,))
         conn.commit(); cur.close()
         try: send_delivery_confirmation(b, image_bytes, image_filename)
         except Exception as e: log.error(f"Delivery notify error: {e}")
@@ -12871,7 +12894,8 @@ def send_delivery_confirmation(b, image_bytes=None, image_filename="photo.jpg"):
             log.error(f"Delivery email error: {e}")
     phone = b.get("phone")
     if phone:
-        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been delivered. Enjoy your event! \U0001f389")
+        _pod_url = f"{BASE_URL}/delivery/photo/{bid}" if (image_bytes and BASE_URL) else None
+        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been delivered! 🎉 Enjoy your event!", media_url=_pod_url)
 
 
 def send_pickup_confirmation(b):
