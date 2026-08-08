@@ -6843,7 +6843,7 @@ table{border-collapse:collapse}
     <div style="font-size:.83rem;color:#6b7280;margin-bottom:1.25rem">Optionally add a photo &#x2014; it will be emailed and texted to the customer as proof of delivery.</div>
     <img id="admin-photo-preview" src="" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;display:none;margin-bottom:1rem;border:1px solid #e2e8f0">
     <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
-      <button type="button" onclick="document.getElementById('admin-camera-input').click()" style="flex:1;padding:.8rem;background:#eff6ff;color:#1d4ed8;border-radius:10px;font-size:.82rem;font-weight:700;text-align:center;cursor:pointer;border:1.5px dashed #3b82f6;box-sizing:border-box">&#x1F4F7; Take Photo</button>
+      <button type="button" onclick="adminOpenCamera()" style="flex:1;padding:.8rem;background:#eff6ff;color:#1d4ed8;border-radius:10px;font-size:.82rem;font-weight:700;text-align:center;cursor:pointer;border:1.5px dashed #3b82f6;box-sizing:border-box">&#x1F4F7; Take Photo</button>
       <label style="flex:1;display:block;padding:.8rem;background:#f0fdf4;color:#15803d;border-radius:10px;font-size:.82rem;font-weight:700;text-align:center;cursor:pointer;border:1.5px dashed #4ade80;box-sizing:border-box" for="admin-photo-input">&#x1F5BC;&#xFE0F; Gallery</label>
     </div>
     <input type="file" id="admin-photo-input" accept="image/*" style="display:none" onchange="adminPhotoPreview(this)">
@@ -6877,7 +6877,49 @@ function adminPhotoPreview(input){
       p.src=e.target.result;p.style.display='block';
     };
     r.readAsDataURL(input.files[0]);
+    // If camera flow was hiding the modal, restore it now that we have a photo
+    if(window._adminCameraOpen){
+      window._adminCameraOpen=false;
+      document.getElementById('admin-deliver-modal').style.display='flex';
+      document.body.style.overflow='hidden';
+    }
   }
+}
+function adminOpenCamera(){
+  // iOS Safari bug: fetch requests hang if camera is opened from inside a
+  // position:fixed modal with overflow:hidden on body.
+  // Fix: hide modal + release body lock BEFORE opening camera,
+  // then restore when iOS returns focus after camera closes.
+  try{document.getElementById('admin-camera-input').value='';}catch(e){}
+  window._adminCameraOpen=true;
+  // Release body scroll lock
+  document.body.style.overflow='';
+  // Hide modal so iOS camera runs in a clean page context
+  document.getElementById('admin-deliver-modal').style.display='none';
+  // Small delay so the modal is fully gone before camera opens
+  setTimeout(function(){
+    document.getElementById('admin-camera-input').click();
+    // Listen for iOS returning focus after camera closes
+    var handled=false;
+    function onReturn(){
+      if(handled)return;
+      handled=true;
+      // Restore modal if user cancelled (no photo selected)
+      setTimeout(function(){
+        if(window._adminCameraOpen){
+          window._adminCameraOpen=false;
+          document.getElementById('admin-deliver-modal').style.display='flex';
+          document.body.style.overflow='hidden';
+        }
+      },300);
+      document.removeEventListener('visibilitychange',visH);
+      window.removeEventListener('focus',focH);
+    }
+    function visH(){if(!document.hidden)onReturn();}
+    function focH(){onReturn();}
+    document.addEventListener('visibilitychange',visH);
+    window.addEventListener('focus',focH);
+  },80);
 }
 function submitAdminDeliver(){
   var btn=document.getElementById('admin-confirm-btn');
