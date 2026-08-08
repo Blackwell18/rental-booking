@@ -11493,11 +11493,16 @@ ADMIN_ROUTE_HTML = """
         {% if b.phone %}
         <a href="tel:{{ b.phone }}" class="btn-sm">📞 Call</a>
         {% endif %}
-        {% if b.phone and b.nav_address %}
-        <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}', '{{ view }}')"
-                id="onroute-btn-{{ b.id }}"
-                class="btn-sm" style="background:{% if view == 'pickup' %}#7c3aed{% else %}#f97316{% endif %};color:#fff;border-color:{% if view == 'pickup' %}#6d28d9{% else %}#ea580c{% endif %};cursor:pointer">
-          {% if view == 'pickup' %}🔄 On Route (Pickup){% else %}🚚 On Route (Delivery){% endif %}
+        {% if b.phone %}
+        <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}', 'delivery')"
+                id="onroute-delivery-btn-{{ b.id }}"
+                class="btn-sm" style="background:#f97316;color:#fff;border-color:#ea580c;cursor:pointer">
+          🚚 Notify: Delivering
+        </button>
+        <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}', 'pickup')"
+                id="onroute-pickup-btn-{{ b.id }}"
+                class="btn-sm" style="background:#7c3aed;color:#fff;border-color:#6d28d9;cursor:pointer">
+          🔄 Notify: Picking Up
         </button>
         {% endif %}
         {% if view == 'pickup' and b.delivery_status != 'picked_up' %}
@@ -11885,7 +11890,8 @@ function routeMarkDelivered(bookingId, btn) {
 }
 function sendOnRoute(bookingId, navAddress, routeType) {
   routeType = routeType || 'delivery';
-  const btn = document.getElementById('onroute-btn-' + bookingId);
+  const btnId = routeType === 'pickup' ? 'onroute-pickup-btn-' + bookingId : 'onroute-delivery-btn-' + bookingId;
+  const btn = document.getElementById(btnId);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
   fetch('/admin/booking/' + bookingId + '/on-route', {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({route_type: routeType})})
@@ -11894,7 +11900,7 @@ function sendOnRoute(bookingId, navAddress, routeType) {
       if (btn) {
         btn.textContent = d.ok ? '✅ Sent!' : '❌ Failed';
         btn.style.background = d.ok ? '#16a34a' : '#dc2626';
-        if (d.ok) {
+        if (d.ok && navAddress) {
           window.open('https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(navAddress) + '&travelmode=driving', '_blank');
         }
       }
