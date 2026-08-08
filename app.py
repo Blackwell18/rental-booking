@@ -12257,17 +12257,19 @@ def admin_route():
                 cur.execute("""
                     SELECT id, full_name, phone, email, delivery_location,
                            event_street, event_city, event_state, event_zip,
-                           event_start_time, items_json, status, grand_total,
-                           event_end_date AS route_date_field, route_override
+                           COALESCE(pickup_time, event_start_time) AS event_start_time,
+                           items_json, status, grand_total,
+                           COALESCE(pickup_date, event_end_date) AS route_date_field,
+                           route_override
                     FROM bookings
-                    WHERE event_end_date = %s
+                    WHERE (COALESCE(pickup_date, event_end_date) = %s)
                       AND (
                         status IN ('accepted','confirmed','agree_to_pay','partial')
                         OR route_override = TRUE
                       )
                       AND status NOT IN ('denied','cancelled','concluded')
                       AND (archived IS NULL OR archived = FALSE)
-                    ORDER BY event_start_time ASC NULLS LAST, id ASC
+                    ORDER BY COALESCE(pickup_time, event_start_time) ASC NULLS LAST, id ASC
                 """, (route_date,))
             else:
                 cur.execute("""
@@ -12379,7 +12381,7 @@ def admin_route():
         return redirect(f"{_parsed.path}?{_new_qs}")
 
     excluded_bookings = []
-    date_col = "event_end_date" if view == "pickup" else "setup_date"
+    date_col = "COALESCE(pickup_date, event_end_date)" if view == "pickup" else "COALESCE(delivery_date, setup_date)"
     conn_ex = get_db()
     if conn_ex:
         try:
