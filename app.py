@@ -318,6 +318,7 @@ def init_db():
             "UPDATE bookings SET payment_status='partial' WHERE payment_status='paid' AND grand_total > 0 AND amount_paid IS NOT NULL AND amount_paid > 0 AND amount_paid < grand_total - 0.50",
             "UPDATE bookings SET payment_status='waiting' WHERE payment_status='paid' AND (amount_paid IS NULL OR amount_paid <= 0) AND grand_total > 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_photo BYTEA DEFAULT NULL",
+            "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_id INTEGER DEFAULT NULL",
             # Auto-conclude: picked up 2+ days ago
             """UPDATE bookings SET status='concluded'
                WHERE delivery_status='picked_up'
@@ -8855,21 +8856,22 @@ def admin_booking(booking_id):
     except Exception:
         pass
 
-    # Check for matching customer profile by name
+    # Check for matching customer profile by name (only show if not already linked)
     matched_customer = None
     try:
-        conn2 = get_db()
-        if conn2:
-            cur2 = conn2.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            cur2.execute("""
-                SELECT * FROM customers
-                WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(%s))
-                LIMIT 1
-            """, (b.get("full_name") or "",))
-            crow = cur2.fetchone()
-            cur2.close(); conn2.close()
-            if crow:
-                matched_customer = _row(crow)
+        if not b.get("customer_id"):  # already linked — skip banner
+            conn2 = get_db()
+            if conn2:
+                cur2 = conn2.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                cur2.execute("""
+                    SELECT * FROM customers
+                    WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(%s))
+                    LIMIT 1
+                """, (b.get("full_name") or "",))
+                crow = cur2.fetchone()
+                cur2.close(); conn2.close()
+                if crow:
+                    matched_customer = _row(crow)
     except Exception as e:
         log.error(f"Customer match lookup error: {e}")
 
@@ -9764,7 +9766,7 @@ def sync_customer_profile(booking_id):
                 conn.commit(); cur2.close()
                 log.info(f"Booking #{booking_id} updated from customer profile {mc['id']}")
             elif action == "link":
-                # Link booking to existing customer: copy profile info into booking
+                # Link booking to existing customer: copy profile info + set customer_id
                 cur2 = conn.cursor()
                 cur2.execute("""
                     UPDATE bookings SET
@@ -9773,13 +9775,14 @@ def sync_customer_profile(booking_id):
                       renter_street = COALESCE(NULLIF(%s,''), renter_street),
                       renter_city   = COALESCE(NULLIF(%s,''), renter_city),
                       renter_state  = COALESCE(NULLIF(%s,''), renter_state),
-                      renter_zip    = COALESCE(NULLIF(%s,''), renter_zip)
+                      renter_zip    = COALESCE(NULLIF(%s,''), renter_zip),
+                      customer_id   = %s
                     WHERE id=%s
                 """, (
                     mc.get("email") or "", mc.get("phone") or "",
                     mc.get("street") or "", mc.get("city") or "",
                     mc.get("state") or "", mc.get("zip") or "",
-                    booking_id))
+                    mc["id"], booking_id))
                 conn.commit(); cur2.close()
                 log.info(f"Booking #{booking_id} linked to customer profile {mc['id']}")
         cur.close(); conn.close()
