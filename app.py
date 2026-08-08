@@ -11500,6 +11500,22 @@ ADMIN_ROUTE_HTML = """
           {% if view == 'pickup' %}🔄 On Route (Pickup){% else %}🚚 On Route (Delivery){% endif %}
         </button>
         {% endif %}
+        {% if view == 'pickup' and b.delivery_status != 'picked_up' %}
+        <button onclick="routeMarkPickup({{ b.id }}, this)"
+                class="btn-sm" style="background:#16a34a;color:#fff;border-color:#15803d;cursor:pointer">
+          ✅ Mark Picked Up
+        </button>
+        {% elif view == 'pickup' and b.delivery_status == 'picked_up' %}
+        <span class="btn-sm" style="background:#f0fdf4;color:#15803d;border-color:#86efac;cursor:default">✅ Picked Up</span>
+        {% endif %}
+        {% if view != 'pickup' and b.delivery_status != 'delivered' and b.delivery_status != 'picked_up' %}
+        <button onclick="routeMarkDelivered({{ b.id }}, this)"
+                class="btn-sm" style="background:#2563eb;color:#fff;border-color:#1d4ed8;cursor:pointer">
+          📦 Mark Delivered
+        </button>
+        {% elif view != 'pickup' and b.delivery_status == 'delivered' %}
+        <span class="btn-sm" style="background:#eff6ff;color:#1d4ed8;border-color:#93c5fd;cursor:default">📦 Delivered</span>
+        {% endif %}
         {% if b.route_override %}
         <form method="POST" action="/admin/route/override/{{ b.id }}" style="display:inline">
           <input type="hidden" name="redirect" value="/admin/route?date={{ route_date }}&view={{ view }}">
@@ -11827,6 +11843,46 @@ table{border-collapse:collapse}
   else{wrapTables();}
 })();
 
+function routeMarkPickup(bookingId, btn) {
+  if (!confirm('Mark as Picked Up? This will notify the customer.')) return;
+  btn.disabled = true; btn.textContent = '⏳…';
+  fetch('/admin/booking/' + bookingId + '/delivery-action', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'pickup'})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      btn.textContent = '✅ Picked Up';
+      btn.style.background = '#f0fdf4';
+      btn.style.color = '#15803d';
+      btn.style.borderColor = '#86efac';
+      btn.onclick = null;
+    } else {
+      btn.disabled = false; btn.textContent = '✅ Mark Picked Up';
+      alert('Error: ' + (d.error || 'Unknown'));
+    }
+  }).catch(() => { btn.disabled = false; btn.textContent = '✅ Mark Picked Up'; alert('Network error'); });
+}
+function routeMarkDelivered(bookingId, btn) {
+  if (!confirm('Mark as Delivered? This will notify the customer.')) return;
+  btn.disabled = true; btn.textContent = '⏳…';
+  fetch('/admin/booking/' + bookingId + '/delivery-action', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'deliver'})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      btn.textContent = '📦 Delivered';
+      btn.style.background = '#eff6ff';
+      btn.style.color = '#1d4ed8';
+      btn.style.borderColor = '#93c5fd';
+      btn.onclick = null;
+    } else {
+      btn.disabled = false; btn.textContent = '📦 Mark Delivered';
+      alert('Error: ' + (d.error || 'Unknown'));
+    }
+  }).catch(() => { btn.disabled = false; btn.textContent = '📦 Mark Delivered'; alert('Network error'); });
+}
 function sendOnRoute(bookingId, navAddress, routeType) {
   routeType = routeType || 'delivery';
   const btn = document.getElementById('onroute-btn-' + bookingId);
@@ -12260,7 +12316,7 @@ def admin_route():
                            COALESCE(pickup_time, event_start_time) AS event_start_time,
                            items_json, status, grand_total,
                            COALESCE(pickup_date, event_end_date) AS route_date_field,
-                           route_override
+                           route_override, delivery_status
                     FROM bookings
                     WHERE (COALESCE(pickup_date, event_end_date) = %s)
                       AND (
@@ -12278,7 +12334,7 @@ def admin_route():
                            COALESCE(delivery_time, setup_time) AS event_start_time,
                            items_json, status, grand_total,
                            COALESCE(delivery_date, setup_date) AS route_date_field,
-                           route_override
+                           route_override, delivery_status
                     FROM bookings
                     WHERE (setup_date = %s OR delivery_date = %s)
                       AND (
