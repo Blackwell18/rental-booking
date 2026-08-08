@@ -10500,13 +10500,15 @@ def admin_set_delivery(booking_id):
 @app.route("/admin/booking/<int:booking_id>/on-route", methods=["POST"])
 @admin_required
 def on_route_notify(booking_id):
-    """Send 'on the way' SMS to customer and return JSON."""
+    """Send 'on the way' SMS + email to customer (delivery or pickup)."""
+    data = request.get_json(silent=True) or {}
+    route_type = data.get("route_type", "delivery")  # "delivery" or "pickup"
     conn = get_db()
     if not conn:
         return jsonify({"ok": False, "error": "db"})
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT id,full_name,phone FROM bookings WHERE id=%s", (booking_id,))
+        cur.execute("SELECT id,full_name,phone,email FROM bookings WHERE id=%s", (booking_id,))
         row = cur.fetchone()
         cur.close()
     except Exception as e:
@@ -10516,15 +10518,62 @@ def on_route_notify(booking_id):
         return jsonify({"ok": False, "error": "not found"})
     b = dict(row)
     phone = b.get("phone")
+    email = b.get("email")
     first = (b.get("full_name") or "").split()[0] or "there"
     bid   = b.get("id")
     if not phone:
         return jsonify({"ok": False, "error": "no phone"})
-    msg = (f"Hi {first}! This is {BUSINESS_NAME} — your rental items for booking #{bid} "
-           f"are on their way and will be arriving shortly. "
-           f"Reply STOP to opt out.")
-    result = send_sms(phone, msg)
-    log.info(f"on-route SMS booking {booking_id} → {phone}: {result}")
+    if route_type == "pickup":
+        sms_msg = (f"Hi {first}! This is {BUSINESS_NAME} — we're on our way to pick up "
+                   f"your rental items from booking #{bid}. We'll be there shortly! "
+                   f"Reply STOP to opt out.")
+        email_subject = f"We're On Our Way to Pick Up — {BUSINESS_NAME} Booking #{bid}"
+        email_html = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:540px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#7c3aed,#6d28d9);padding:2rem;color:white;text-align:center">
+    <div style="font-size:2.5rem">🚚</div>
+    <h2 style="margin:.5rem 0 0">We're On Our Way!</h2>
+    <p style="margin:.4rem 0 0;opacity:.85">{BUSINESS_NAME} — Pickup</p>
+  </div>
+  <div style="padding:2rem">
+    <p>Hi <strong>{first}</strong>,</p>
+    <p style="margin:.75rem 0">We're heading your way now to pick up your rental items for booking <strong>#{bid}</strong>. We'll be there shortly!</p>
+    <div style="margin:1.25rem 0;padding:1rem;background:#f5f3ff;border-radius:8px;border:1px solid #c4b5fd">
+      <p style="margin:0;color:#5b21b6;font-weight:600">🔄 Please have your items ready for pickup. Thank you!</p>
+    </div>
+    <p style="color:#6b7280;font-size:.82rem">— The {BUSINESS_NAME} Team</p>
+  </div>
+</div></body></html>"""
+        email_plain = f"Hi {first}, we're on our way to pick up your rental items for booking #{bid}. We'll be there shortly! — {BUSINESS_NAME}"
+    else:
+        sms_msg = (f"Hi {first}! This is {BUSINESS_NAME} — your rental items for booking #{bid} "
+                   f"are on their way and will be arriving shortly. "
+                   f"Reply STOP to opt out.")
+        email_subject = f"Your Items Are On Their Way! — {BUSINESS_NAME} Booking #{bid}"
+        email_html = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:540px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#f97316,#ea580c);padding:2rem;color:white;text-align:center">
+    <div style="font-size:2.5rem">🚚</div>
+    <h2 style="margin:.5rem 0 0">Your Items Are On Their Way!</h2>
+    <p style="margin:.4rem 0 0;opacity:.85">{BUSINESS_NAME} — Delivery</p>
+  </div>
+  <div style="padding:2rem">
+    <p>Hi <strong>{first}</strong>,</p>
+    <p style="margin:.75rem 0">Great news! Your rental items for booking <strong>#{bid}</strong> are on their way and will be arriving shortly.</p>
+    <div style="margin:1.25rem 0;padding:1rem;background:#fff7ed;border-radius:8px;border:1px solid #fed7aa">
+      <p style="margin:0;color:#9a3412;font-weight:600">📦 Please be available to receive your items. Thank you!</p>
+    </div>
+    <p style="color:#6b7280;font-size:.82rem">— The {BUSINESS_NAME} Team</p>
+  </div>
+</div></body></html>"""
+        email_plain = f"Hi {first}, your rental items for booking #{bid} are on their way and will be arriving shortly! — {BUSINESS_NAME}"
+    result = send_sms(phone, sms_msg)
+    log.info(f"on-route SMS ({route_type}) booking {booking_id} → {phone}: {result}")
+    if email:
+        try:
+            _send_email(email, email_subject, email_html, email_plain)
+        except Exception as e:
+            log.error(f"on-route email error: {e}")
     return jsonify({"ok": result})
 
 @app.route("/twilio/incoming-sms", methods=["POST"])
@@ -11445,10 +11494,10 @@ ADMIN_ROUTE_HTML = """
         <a href="tel:{{ b.phone }}" class="btn-sm">📞 Call</a>
         {% endif %}
         {% if b.phone and b.nav_address %}
-        <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}')"
+        <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}', '{{ view }}')"
                 id="onroute-btn-{{ b.id }}"
-                class="btn-sm" style="background:#f97316;color:#fff;border-color:#ea580c;cursor:pointer">
-          🚚 On Route
+                class="btn-sm" style="background:{% if view == 'pickup' %}#7c3aed{% else %}#f97316{% endif %};color:#fff;border-color:{% if view == 'pickup' %}#6d28d9{% else %}#ea580c{% endif %};cursor:pointer">
+          {% if view == 'pickup' %}🔄 On Route (Pickup){% else %}🚚 On Route (Delivery){% endif %}
         </button>
         {% endif %}
         {% if b.route_override %}
@@ -11778,18 +11827,18 @@ table{border-collapse:collapse}
   else{wrapTables();}
 })();
 
-function sendOnRoute(bookingId, navAddress) {
+function sendOnRoute(bookingId, navAddress, routeType) {
+  routeType = routeType || 'delivery';
   const btn = document.getElementById('onroute-btn-' + bookingId);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
   fetch('/admin/booking/' + bookingId + '/on-route', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({})})
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({route_type: routeType})})
     .then(r => r.json())
     .then(d => {
       if (btn) {
         btn.textContent = d.ok ? '✅ Sent!' : '❌ Failed';
         btn.style.background = d.ok ? '#16a34a' : '#dc2626';
         if (d.ok) {
-          // Open Google Maps directions
           window.open('https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(navAddress) + '&travelmode=driving', '_blank');
         }
       }
