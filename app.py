@@ -10087,7 +10087,7 @@ def apply_weekend_schedule(booking_id):
                     cur.execute("""
                         UPDATE bookings SET
                           delivery_date=%s, delivery_time=%s,
-                          event_end_date=%s, event_end_time=%s
+                          pickup_date=%s, pickup_time=%s
                         WHERE id=%s
                     """, (friday, "16:00", pickup_date, "10:00", booking_id))
                     conn.commit()
