@@ -16151,23 +16151,29 @@ def customer_portal_home():
             ORDER BY created_at DESC
         """, (email,))
         rows = [dict(r) for r in cur.fetchall()]
-        # Fetch active payment links for each booking
-        booking_ids = [r["id"] for r in rows]
-        pay_links_map = {}
-        if booking_ids:
-            cur2 = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            cur2.execute(
-                "SELECT booking_id, label, amount, url FROM payment_links "
-                "WHERE booking_id=ANY(%s) AND status='active' ORDER BY created_at DESC",
-                (booking_ids,)
-            )
-            for pl in cur2.fetchall():
-                pay_links_map.setdefault(pl["booking_id"], []).append(dict(pl))
-            cur2.close()
         cur.close(); conn.close()
     except Exception as e:
         log.error(f"portal home error: {e}")
         rows = []
+
+    # Fetch active payment links in a separate try so it never wipes rows
+    pay_links_map = {}
+    if rows:
+        try:
+            conn2 = get_db()
+            if conn2:
+                booking_ids = [r["id"] for r in rows]
+                cur2 = conn2.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur2.execute(
+                    "SELECT booking_id, label, amount, url FROM payment_links "
+                    "WHERE booking_id=ANY(%s) AND status='active' ORDER BY created_at DESC",
+                    (booking_ids,)
+                )
+                for pl in cur2.fetchall():
+                    pay_links_map.setdefault(pl["booking_id"], []).append(dict(pl))
+                cur2.close(); conn2.close()
+        except Exception as e2:
+            log.error(f"portal pay_links error: {e2}")
 
     # Classify upcoming vs past
     from datetime import date as _date
