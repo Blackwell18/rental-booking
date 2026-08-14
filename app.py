@@ -16157,10 +16157,23 @@ def customer_portal_home():
     from datetime import date as _date
     today = _date.today()
     upcoming, past = [], []
+
+    def _to_date(val):
+        if val is None: return None
+        if hasattr(val, "date") and callable(val.date): return val.date()
+        if isinstance(val, _date): return val
+        try: return datetime.strptime(str(val)[:10], "%Y-%m-%d").date()
+        except: return None
+
     for b in rows:
-        esd = b.get("event_start_date")
-        if hasattr(esd, "date"): esd = esd.date()
-        elif isinstance(esd, str): esd = datetime.strptime(esd[:10], "%Y-%m-%d").date() if esd else None
+        esd = _to_date(b.get("event_start_date"))
+        # Use the LATEST relevant date to determine if the booking is truly over:
+        # pickup_date → event_end_date → event_start_date (in that priority)
+        end_date = (
+            _to_date(b.get("pickup_date"))
+            or _to_date(b.get("event_end_date"))
+            or esd
+        )
         b["_event_date"] = esd
         try:
             items = json.loads(b.get("items_json") or "[]")
@@ -16169,7 +16182,13 @@ def customer_portal_home():
         b["_items"] = items
         subtotal = sum(float(i.get("total") or 0) for i in items)
         b["_subtotal"] = subtotal
-        if b.get("status") in ("concluded", "cancelled", "denied") or (esd and esd < today):
+        ds = (b.get("delivery_status") or "")
+        is_done = (
+            b.get("status") in ("concluded", "cancelled", "denied")
+            or ds == "picked_up"
+            or (end_date and end_date < today)
+        )
+        if is_done:
             past.append(b)
         else:
             upcoming.append(b)
