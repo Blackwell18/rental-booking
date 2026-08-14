@@ -16189,13 +16189,9 @@ def customer_portal_home():
 
     for b in rows:
         esd = _to_date(b.get("event_start_date"))
-        # Use the LATEST relevant date to determine if the booking is truly over:
-        # pickup_date → event_end_date → event_start_date (in that priority)
-        end_date = (
-            _to_date(b.get("pickup_date"))
-            or _to_date(b.get("event_end_date"))
-            or esd
-        )
+        # Use event_end_date to decide if the event is over.
+        # Do NOT use pickup_date — it can be a past scheduled date for a still-active booking.
+        end_date = _to_date(b.get("event_end_date")) or esd
         b["_event_date"] = esd
         try:
             items = json.loads(b.get("items_json") or "[]")
