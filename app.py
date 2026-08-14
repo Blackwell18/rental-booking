@@ -1347,6 +1347,8 @@ def send_customer_email(b):
       Keep your booking reference handy.{f' Questions? Call <strong>{BUSINESS_PHONE}</strong>.' if BUSINESS_PHONE else ''}
     </p>
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">- The {BUSINESS_NAME} Team</p>
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
   </div>
 </div></body></html>"""
 
@@ -1591,7 +1593,8 @@ By completing payment you agree to the rental terms and contract.
         _sms_action = f"Pay ${charge_amount:.2f} deposit" if is_deposit else f"Pay ${charge_amount:.2f} in full"
         send_sms(b["phone"],
             f"Hi {first}! Your {BUSINESS_NAME} booking is confirmed. "
-            f"{_sms_action} to lock in your date: {payment_link}")
+            f"{_sms_action} to lock in your date: {payment_link} "
+            f"View your orders: {BASE_URL}/my-orders")
 
 
 def send_receipt_email(b):
@@ -1685,6 +1688,8 @@ def send_receipt_email(b):
     <p style="color:#4a5568;line-height:1.7;font-size:.9rem">Please keep this receipt for your records. Order #{bid} is your reference for any questions or changes.</p>
     {f'<p style="color:#4a5568;font-size:.9rem">Questions? Call <strong>{BUSINESS_PHONE}</strong> or reply to this email.</p>' if BUSINESS_PHONE else ''}
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">With gratitude,<br>— The {BUSINESS_NAME} Team</p>
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
   </div>
 </div></body></html>"""
     plain = (f"RECEIPT — Order #{bid}\n{BUSINESS_NAME}\n\n"
@@ -1722,6 +1727,8 @@ def send_denied_email(b):
     </p>
     {f'<p style="color:#4a5568;margin:.75rem 0">You can reach us at <strong>{BUSINESS_PHONE}</strong>.</p>' if BUSINESS_PHONE else ""}
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
   </div>
 </div></body></html>"""
     plain = f"Hi {first},\n\nThank you for your interest in {BUSINESS_NAME}. Unfortunately, we are unable to accommodate your rental request for {_fmt_date(b.get('event_start_date'))} at this time.\n\nWe hope to serve you in the future.{f' Please call {BUSINESS_PHONE} if you have questions.' if BUSINESS_PHONE else ''}\n\n— {BUSINESS_NAME}"
@@ -1793,6 +1800,8 @@ def send_denied_inventory_email(b, short_items):
     </div>
 
     <p style="margin:0;color:#2d3748;font-size:.95rem;font-weight:600">— The {BUSINESS_NAME} Team</p>
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
   </div>
 </div></body></html>"""
 
@@ -1968,6 +1977,8 @@ def send_final_payment_email(b, remaining_amount, payment_link):
     </div>
 
     <p style="color:#2d3748;font-weight:600;margin-top:1.75rem">&mdash; The {BUSINESS_NAME} Team</p>
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
   </div>
 </div></body></html>"""
 
@@ -2028,7 +2039,8 @@ No signature required — payment constitutes acceptance of this agreement.
     if payment_link and b.get("phone"):
         send_sms(b["phone"],
             f"Hi {first}! Final payment of ${remaining_amount:.2f} is due for your {BUSINESS_NAME} "
-            f"event. Pay here to confirm your delivery: {payment_link}")
+            f"event. Pay here to confirm your delivery: {payment_link} "
+            f"View your orders: {BASE_URL}/my-orders")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -10216,7 +10228,8 @@ def custom_stripe_link(booking_id):
         first = (b.get("full_name") or "").split()[0] or "there"
         send_sms(b["phone"],
             f"Hi {first}! {BUSINESS_NAME} sent you a payment link for ${amount:.2f}. "
-            f"Pay here: {payment_link}")
+            f"Pay here: {payment_link} "
+            f"View your orders: {BASE_URL}/my-orders")
 
     link_param = urllib.parse.quote(payment_link or "", safe="")
     return redirect(url_for("admin_booking", booking_id=booking_id) + f"?custom_link={link_param}")
@@ -10554,6 +10567,7 @@ def on_route_notify(booking_id):
     if route_type == "pickup":
         sms_msg = (f"Hi {first}! This is {BUSINESS_NAME} — we're on our way to pick up "
                    f"your rental items from booking #{bid}. We'll be there shortly! "
+                   f"View your orders: {BASE_URL}/my-orders "
                    f"Reply STOP to opt out.")
         email_subject = f"We're On Our Way to Pick Up — {BUSINESS_NAME} Booking #{bid}"
         email_html = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
@@ -10576,6 +10590,7 @@ def on_route_notify(booking_id):
     else:
         sms_msg = (f"Hi {first}! This is {BUSINESS_NAME} — your rental items for booking #{bid} "
                    f"are on their way and will be arriving shortly. "
+                   f"View your orders: {BASE_URL}/my-orders "
                    f"Reply STOP to opt out.")
         email_subject = f"Your Items Are On Their Way! — {BUSINESS_NAME} Booking #{bid}"
         email_html = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
@@ -13082,7 +13097,7 @@ def send_delivery_confirmation(b, image_bytes=None, image_filename="photo.jpg"):
     phone = b.get("phone")
     if phone:
         _pod_url = f"{BASE_URL}/delivery/photo/{bid}" if (image_bytes and BASE_URL) else None
-        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been delivered! 🎉 Enjoy your event!", media_url=_pod_url)
+        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been delivered! 🎉 Enjoy your event! View your orders: {BASE_URL}/my-orders", media_url=_pod_url)
 
 
 def send_pickup_confirmation(b):
@@ -13121,7 +13136,7 @@ def send_pickup_confirmation(b):
         _send_email(email, f"Thank You from {BUSINESS_NAME} — We Hope Your Event Was Amazing! 🎉", html, plain)
     phone = b.get("phone")
     if phone:
-        send_sms(phone, f"Hi {first}! Thank you so much for allowing {BUSINESS_NAME} to be part of your event 🙏 We hope it was everything you envisioned! If you have a moment, we\'d love a Google review: {review_url} — it means the world to us! Reply STOP to opt out.")
+        send_sms(phone, f"Hi {first}! Thank you so much for allowing {BUSINESS_NAME} to be part of your event 🙏 We hope it was everything you envisioned! If you have a moment, we\'d love a Google review: {review_url} — it means the world to us! View your orders: {BASE_URL}/my-orders Reply STOP to opt out.")
 
 
 DRIVER_VIEW_HTML = """
@@ -13722,7 +13737,7 @@ def admin_send_agreement(booking_id):
 
     # Also send SMS if phone
     if b.get("phone"):
-        send_sms(b["phone"], f"Hi {b['full_name'].split()[0]}! Please sign your rental agreement for {BUSINESS_NAME}: {sign_url}")
+        send_sms(b["phone"], f"Hi {b['full_name'].split()[0]}! Please sign your rental agreement for {BUSINESS_NAME}: {sign_url} View your orders: {BASE_URL}/my-orders")
 
     return redirect(url_for("admin_booking_detail", booking_id=booking_id))
 
@@ -15867,6 +15882,7 @@ def cron_send_reminders():
                 f"This is {BUSINESS_NAME}. Your rental delivery is scheduled for "
                 f"{b['del_date'].strftime('%A, %B %-d')}. "
                 f"We haven't received your deposit yet — please pay to confirm your booking. "
+                f"View your orders: {BASE_URL}/my-orders "
                 f"Questions? Call {BUSINESS_PHONE or 'us'}."
             )
             ok = send_sms(b["phone"], msg)
@@ -15902,6 +15918,7 @@ def cron_send_reminders():
                 f"Your {BUSINESS_NAME} delivery is tomorrow"
                 f"{time_str}. "
                 f"Please make sure someone is available at the setup location. "
+                f"View your orders: {BASE_URL}/my-orders "
                 f"Questions? Call {BUSINESS_PHONE or 'us'}. See you tomorrow!"
             )
             ok = send_sms(b["phone"], msg)
@@ -15933,7 +15950,8 @@ def cron_send_reminders():
                 f"Hi {b['full_name'].split()[0]}! "
                 f"A reminder that {BUSINESS_NAME} will be picking up your rental equipment tomorrow"
                 f"{time_str}. "
-                f"Please have everything accessible. Thank you for renting with us!"
+                f"Please have everything accessible. View your orders: {BASE_URL}/my-orders "
+                f"Thank you for renting with us!"
             )
             ok = send_sms(b["phone"], msg)
             if ok:
