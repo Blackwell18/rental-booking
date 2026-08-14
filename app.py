@@ -13047,6 +13047,10 @@ def send_delivery_confirmation(b, image_bytes=None, image_filename="photo.jpg"):
       <p style="margin:0;color:#166534;font-weight:600">\U0001f389 Enjoy your event! Contact us if you need anything.</p>
     </div>
     <p style="color:#6b7280;font-size:.82rem">— The {BUSINESS_NAME} Team</p>
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center">
+      <a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a>
+    </div>
   </div>
 </div></body></html>"""
             plain = f"Hi {first}, your {BUSINESS_NAME} rental items for booking #{bid} have been delivered. Delivered: {now_str}. Enjoy your event!"
@@ -13107,6 +13111,10 @@ def send_pickup_confirmation(b):
     </div>
     <p style="margin:.75rem 0;color:#374151">We look forward to serving you again at your next event!</p>
     <p style="color:#6b7280;font-size:.82rem;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center">
+      <a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a>
+    </div>
   </div>
 </div></body></html>"""
         plain = f"Hi {first}, thank you so much for choosing {BUSINESS_NAME} for your event! Your rental items for booking #{bid} have been picked up. We hope your event was amazing! If you have a moment, we\'d love a Google review: {review_url}"
