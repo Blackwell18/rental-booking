@@ -319,6 +319,30 @@ def init_db():
             "UPDATE bookings SET payment_status='waiting' WHERE payment_status='paid' AND (amount_paid IS NULL OR amount_paid <= 0) AND grand_total > 0",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS delivery_photo BYTEA DEFAULT NULL",
             "ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_id INTEGER DEFAULT NULL",
+            """CREATE TABLE IF NOT EXISTS portal_tokens (
+                id         SERIAL PRIMARY KEY,
+                email      VARCHAR(255) NOT NULL,
+                token      VARCHAR(64)  NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ  DEFAULT NOW(),
+                expires_at TIMESTAMPTZ  NOT NULL,
+                used_at    TIMESTAMPTZ  DEFAULT NULL
+            )""",
+            "CREATE INDEX IF NOT EXISTS portal_tokens_token_idx ON portal_tokens(token)",
+            """CREATE TABLE IF NOT EXISTS change_requests (
+                id              SERIAL PRIMARY KEY,
+                booking_id      INTEGER NOT NULL,
+                customer_email  VARCHAR(255),
+                current_items   JSONB,
+                requested_items JSONB,
+                current_total   DECIMAL(10,2),
+                requested_total DECIMAL(10,2),
+                customer_note   TEXT,
+                requested_at    TIMESTAMPTZ DEFAULT NOW(),
+                status          VARCHAR(20)  DEFAULT 'pending',
+                admin_note      TEXT,
+                responded_at    TIMESTAMPTZ  DEFAULT NULL
+            )""",
+            "CREATE INDEX IF NOT EXISTS change_requests_booking_idx ON change_requests(booking_id)",
             # Auto-conclude: picked up 2+ days ago
             """UPDATE bookings SET status='concluded'
                WHERE delivery_status='picked_up'
@@ -3408,6 +3432,7 @@ ADMIN_DASH_HTML = """
     <a href="/driver/{{ today }}" class="sb-link"><span class="sb-icon">🚚</span> Driver View</a>
     <a href="/admin/formsite-import" class="sb-link"><span class="sb-icon">📥</span> Import</a>
     <a href="/admin/tax-report" class="sb-link"><span class="sb-icon">💰</span> Tax Report</a>
+    <a href="/admin/change-requests" class="sb-link"><span class="sb-icon">✏️</span> Changes</a>
   </nav>
   <div class="sb-bottom">
     <a href="/admin/download-backup" class="sb-link"><span class="sb-icon">💾</span> Backup</a>
@@ -15938,6 +15963,769 @@ def cron_daily_backup():
         log.error(f"cron_daily_backup error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CUSTOMER PORTAL — magic-link login, order history, change requests
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _portal_session_email():
+    """Return the authenticated customer email from session, or None."""
+    return session.get("portal_email")
+
+def _portal_require_auth():
+    """Return (email, None) if authenticated, or (None, redirect_response)."""
+    email = _portal_session_email()
+    if not email:
+        return None, redirect(url_for("customer_portal_request"))
+    return email, None
+
+# ── Request page: customer enters their email ─────────────────────────────────
+@app.route("/my-orders", methods=["GET"])
+def customer_portal_request():
+    sent = request.args.get("sent", "")
+    error = request.args.get("error", "")
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Orders — {BUSINESS_NAME}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem}}
+.card{{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.10);padding:2.5rem 2rem;width:100%;max-width:420px;text-align:center}}
+.logo{{font-size:2rem;margin-bottom:.5rem}}
+h1{{font-size:1.3rem;font-weight:800;color:#1a202c;margin-bottom:.4rem}}
+p{{font-size:.88rem;color:#6b7280;margin-bottom:1.5rem;line-height:1.5}}
+input{{width:100%;padding:.75rem 1rem;border:1.5px solid #d1d5db;border-radius:10px;font-size:1rem;outline:none;transition:border .15s}}
+input:focus{{border-color:#6366f1}}
+button{{width:100%;margin-top:.75rem;padding:.8rem;background:#6366f1;color:white;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer}}
+button:hover{{background:#4f46e5}}
+.msg-ok{{background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:.75rem 1rem;color:#166534;font-size:.88rem;margin-bottom:1rem}}
+.msg-err{{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem 1rem;color:#991b1b;font-size:.88rem;margin-bottom:1rem}}
+</style></head>
+<body><div class="card">
+<div class="logo">📦</div>
+<h1>{BUSINESS_NAME}</h1>
+<p>Enter the email address you used when booking and we'll send you a link to view your orders.</p>
+{"<div class='msg-ok'>✅ Check your email — we sent you a secure link to view your orders.</div>" if sent else ""}
+{"<div class='msg-err'>⚠️ " + error + "</div>" if error else ""}
+<form method="POST" action="/my-orders/send-link">
+  <input type="email" name="email" placeholder="your@email.com" required autocomplete="email">
+  <button type="submit">Send My Orders Link →</button>
+</form>
+</div></body></html>"""
+    return html
+
+@app.route("/my-orders/send-link", methods=["POST"])
+def customer_portal_send_link():
+    import secrets as _sec
+    email = (request.form.get("email") or "").strip().lower()
+    if not email:
+        return redirect(url_for("customer_portal_request", error="Please enter an email address."))
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("customer_portal_request", error="Service unavailable. Try again shortly."))
+    try:
+        cur = conn.cursor()
+        # Check if email matches any booking
+        cur.execute("SELECT COUNT(*) FROM bookings WHERE LOWER(TRIM(email))=%s", (email,))
+        count = cur.fetchone()[0]
+        if count == 0:
+            cur.close(); conn.close()
+            # Don't reveal if email exists — show same "sent" message for security
+            return redirect(url_for("customer_portal_request", sent=1))
+        # Generate token
+        token = _sec.token_urlsafe(40)
+        cur.execute("""
+            INSERT INTO portal_tokens (email, token, expires_at)
+            VALUES (%s, %s, NOW() + INTERVAL '24 hours')
+        """, (email, token))
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"portal send-link error: {e}")
+        return redirect(url_for("customer_portal_request", error="Something went wrong. Please try again."))
+    # Send magic link email
+    link = f"{BASE_URL}/my-orders/access?token={token}"
+    html_email = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);padding:2rem;color:white;text-align:center">
+    <div style="font-size:2rem">📦</div>
+    <h2 style="margin:.5rem 0 0">Your Orders Link</h2>
+    <p style="margin:.3rem 0 0;opacity:.85">{BUSINESS_NAME}</p>
+  </div>
+  <div style="padding:2rem">
+    <p>Here's your secure link to view your orders and booking history. It expires in 24 hours.</p>
+    <div style="text-align:center;margin:1.5rem 0">
+      <a href="{link}" style="display:inline-block;background:#6366f1;color:white;padding:.85rem 2rem;border-radius:10px;font-weight:700;font-size:1rem;text-decoration:none">View My Orders →</a>
+    </div>
+    <p style="font-size:.8rem;color:#9ca3af">If you didn't request this, you can safely ignore this email.</p>
+  </div>
+</div></body></html>"""
+    plain = f"Here's your secure link to view your {BUSINESS_NAME} orders: {link} (expires in 24 hours)"
+    try:
+        _send_email(email, f"Your {BUSINESS_NAME} Orders Link", html_email, plain)
+    except Exception as e:
+        log.error(f"portal email error: {e}")
+    return redirect(url_for("customer_portal_request", sent=1))
+
+# ── Magic link access handler ─────────────────────────────────────────────────
+@app.route("/my-orders/access")
+def customer_portal_access():
+    token = request.args.get("token", "").strip()
+    if not token:
+        return redirect(url_for("customer_portal_request", error="Invalid link."))
+    conn = get_db()
+    if not conn:
+        return redirect(url_for("customer_portal_request", error="Service unavailable."))
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT * FROM portal_tokens
+            WHERE token=%s AND expires_at > NOW() AND used_at IS NULL
+        """, (token,))
+        row = cur.fetchone()
+        if not row:
+            cur.close(); conn.close()
+            return redirect(url_for("customer_portal_request", error="This link has expired or already been used. Please request a new one."))
+        email = row["email"]
+        # Mark token as used
+        cur.execute("UPDATE portal_tokens SET used_at=NOW() WHERE token=%s", (token,))
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"portal access error: {e}")
+        return redirect(url_for("customer_portal_request", error="Something went wrong. Please try again."))
+    session["portal_email"] = email
+    session.permanent = True
+    return redirect(url_for("customer_portal_home"))
+
+# ── Portal home: order history ────────────────────────────────────────────────
+@app.route("/my-orders/portal")
+def customer_portal_home():
+    email, redir = _portal_require_auth()
+    if redir: return redir
+    conn = get_db()
+    if not conn:
+        return "Service unavailable", 503
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT id, full_name, status, payment_status, event_start_date, event_end_date,
+                   event_start_time, setup_date, delivery_date, pickup_date, event_end_date,
+                   event_street, event_city, event_state, event_zip,
+                   items_json, grand_total, delivery_fee, late_night_fee, tax_amount, tax_rate,
+                   amount_paid, delivery_status, created_at
+            FROM bookings
+            WHERE LOWER(TRIM(email))=%s
+            ORDER BY created_at DESC
+        """, (email,))
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"portal home error: {e}")
+        rows = []
+
+    # Classify upcoming vs past
+    from datetime import date as _date
+    today = _date.today()
+    upcoming, past = [], []
+    for b in rows:
+        esd = b.get("event_start_date")
+        if hasattr(esd, "date"): esd = esd.date()
+        elif isinstance(esd, str): esd = datetime.strptime(esd[:10], "%Y-%m-%d").date() if esd else None
+        b["_event_date"] = esd
+        try:
+            items = json.loads(b.get("items_json") or "[]")
+        except Exception:
+            items = []
+        b["_items"] = items
+        subtotal = sum(float(i.get("total") or 0) for i in items)
+        b["_subtotal"] = subtotal
+        if b.get("status") in ("concluded", "cancelled", "denied") or (esd and esd < today):
+            past.append(b)
+        else:
+            upcoming.append(b)
+
+    def status_color(s):
+        return {"accepted":"#16a34a","pending":"#d97706","denied":"#dc2626","cancelled":"#6b7280",
+                "concluded":"#6366f1","confirmed":"#2563eb","agree_to_pay":"#0891b2","partial":"#ea580c"}.get(s,"#6b7280")
+    def fmt_date(d):
+        if not d: return "—"
+        if hasattr(d,"strftime"): return d.strftime("%b %-d, %Y")
+        try: return datetime.strptime(str(d)[:10],"%Y-%m-%d").strftime("%b %-d, %Y")
+        except: return str(d)
+
+    def booking_card(b, show_change_btn=True):
+        items_html = ""
+        for it in b["_items"]:
+            name = it.get("name","")
+            qty  = it.get("qty",1)
+            tot  = float(it.get("total") or 0)
+            items_html += f'<tr><td style="padding:.3rem .5rem .3rem 0;color:#374151">{qty}x {name}</td><td style="padding:.3rem 0;text-align:right;color:#374151">${tot:,.2f}</td></tr>'
+        subtotal   = b["_subtotal"]
+        del_fee    = float(b.get("delivery_fee") or 0)
+        late_fee   = float(b.get("late_night_fee") or 0)
+        tax_amt    = float(b.get("tax_amount") or 0)
+        grand      = float(b.get("grand_total") or 0)
+        paid       = float(b.get("amount_paid") or 0)
+        balance    = max(0, grand - paid)
+        s          = b.get("status","")
+        ds         = b.get("delivery_status","") or ""
+        can_change = show_change_btn and s in ("pending","accepted","confirmed","agree_to_pay") and ds not in ("delivered","picked_up")
+        ev_date    = fmt_date(b.get("_event_date"))
+        setup_d    = fmt_date(b.get("setup_date") or b.get("delivery_date"))
+        pickup_d   = fmt_date(b.get("pickup_date") or b.get("event_end_date"))
+        ds_badge   = ""
+        if ds == "delivered":   ds_badge = '<span style="background:#dcfce7;color:#166534;font-size:.72rem;font-weight:700;padding:.2rem .6rem;border-radius:99px;margin-left:.5rem">Delivered</span>'
+        elif ds == "picked_up": ds_badge = '<span style="background:#ede9fe;color:#5b21b6;font-size:.72rem;font-weight:700;padding:.2rem .6rem;border-radius:99px;margin-left:.5rem">Picked Up</span>'
+        return f"""
+<div style="background:white;border:1.5px solid #e5e7eb;border-radius:14px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.05)">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.75rem;gap:.75rem;flex-wrap:wrap">
+    <div>
+      <span style="font-weight:800;color:#1a202c;font-size:1rem">Booking #{b['id']}</span>
+      {ds_badge}
+    </div>
+    <span style="background:{status_color(s)}15;color:{status_color(s)};border:1px solid {status_color(s)}40;font-size:.75rem;font-weight:700;padding:.25rem .7rem;border-radius:99px;white-space:nowrap">{s.replace('_',' ').title()}</span>
+  </div>
+  <div style="font-size:.82rem;color:#6b7280;margin-bottom:.75rem;line-height:1.6">
+    <div>📅 Event: <strong style="color:#374151">{ev_date}</strong></div>
+    {"<div>🚚 Delivery: <strong style='color:#374151'>" + setup_d + "</strong></div>" if setup_d != "—" else ""}
+    {"<div>🔄 Pickup: <strong style='color:#374151'>" + pickup_d + "</strong></div>" if pickup_d != "—" else ""}
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem;margin-bottom:.75rem">
+    {items_html}
+    <tr style="border-top:1px solid #f3f4f6"><td style="padding:.4rem .5rem .2rem 0;color:#6b7280">Subtotal</td><td style="text-align:right;color:#6b7280">${subtotal:,.2f}</td></tr>
+    {"<tr><td style='padding:.2rem .5rem .2rem 0;color:#6b7280'>Delivery fee</td><td style='text-align:right;color:#6b7280'>${:.2f}</td></tr>".format(del_fee) if del_fee else ""}
+    {"<tr><td style='padding:.2rem .5rem .2rem 0;color:#6b7280'>Late night fee</td><td style='text-align:right;color:#6b7280'>${:.2f}</td></tr>".format(late_fee) if late_fee else ""}
+    {"<tr><td style='padding:.2rem .5rem .2rem 0;color:#6b7280'>Tax</td><td style='text-align:right;color:#6b7280'>${:.2f}</td></tr>".format(tax_amt) if tax_amt else ""}
+    <tr style="border-top:2px solid #e5e7eb"><td style="padding:.5rem .5rem .2rem 0;font-weight:800;color:#1a202c">Total</td><td style="text-align:right;font-weight:800;color:#1a202c">${grand:,.2f}</td></tr>
+    {"<tr><td style='padding:.2rem .5rem .2rem 0;color:#16a34a;font-weight:600'>Paid</td><td style='text-align:right;color:#16a34a;font-weight:600'>${:.2f}</td></tr>".format(paid) if paid else ""}
+    {"<tr><td style='padding:.2rem .5rem 0 0;color:#dc2626;font-weight:700'>Balance due</td><td style='text-align:right;color:#dc2626;font-weight:700'>${:.2f}</td></tr>".format(balance) if balance > 0.01 else ""}
+  </table>
+  {"<a href='/my-orders/change-request/" + str(b['id']) + "' style='display:block;width:100%;padding:.65rem;background:#6366f1;color:white;border:none;border-radius:8px;font-size:.88rem;font-weight:700;text-align:center;text-decoration:none;box-sizing:border-box'>✏️ Request a Change</a>" if can_change else ""}
+</div>"""
+
+    upcoming_html = "".join(booking_card(b, True) for b in upcoming) or '<p style="color:#9ca3af;text-align:center;padding:1rem">No upcoming orders.</p>'
+    past_html     = "".join(booking_card(b, False) for b in past) or '<p style="color:#9ca3af;text-align:center;padding:1rem">No past orders.</p>'
+    first_name    = (rows[0].get("full_name") or "").split()[0] if rows else "there"
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Orders — {BUSINESS_NAME}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;min-height:100vh;padding:0 0 3rem}}
+.header{{background:linear-gradient(135deg,#6366f1,#4f46e5);color:white;padding:1.5rem 1.25rem 1.25rem;text-align:center}}
+.header h1{{font-size:1.1rem;font-weight:800;margin-top:.3rem}}
+.header p{{font-size:.82rem;opacity:.85;margin-top:.2rem}}
+.container{{max-width:520px;margin:0 auto;padding:1.25rem 1rem}}
+.section-label{{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin:1.25rem 0 .6rem}}
+a.logout{{display:block;text-align:center;margin-top:1.5rem;font-size:.8rem;color:#9ca3af;text-decoration:none}}
+a.logout:hover{{color:#6b7280}}
+</style></head>
+<body>
+<div class="header">
+  <div style="font-size:1.5rem">📦</div>
+  <h1>{BUSINESS_NAME}</h1>
+  <p>Hi {first_name}! Here are your orders.</p>
+</div>
+<div class="container">
+  <div class="section-label">Upcoming Orders</div>
+  {upcoming_html}
+  <div class="section-label">Past Orders</div>
+  {past_html}
+  <a class="logout" href="/my-orders/logout">Sign out</a>
+</div></body></html>"""
+
+@app.route("/my-orders/logout")
+def customer_portal_logout():
+    session.pop("portal_email", None)
+    return redirect(url_for("customer_portal_request"))
+
+# ── Change request form ───────────────────────────────────────────────────────
+@app.route("/my-orders/change-request/<int:booking_id>")
+def customer_change_request_form(booking_id):
+    email, redir = _portal_require_auth()
+    if redir: return redir
+    conn = get_db()
+    if not conn: return "Service unavailable", 503
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s AND LOWER(TRIM(email))=%s", (booking_id, email))
+        row = cur.fetchone()
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"change-request form error: {e}")
+        return redirect(url_for("customer_portal_home"))
+    if not row:
+        return redirect(url_for("customer_portal_home"))
+    b = dict(row)
+    try:
+        items = json.loads(b.get("items_json") or "[]")
+    except Exception:
+        items = []
+    grand = float(b.get("grand_total") or 0)
+    del_fee  = float(b.get("delivery_fee") or 0)
+    late_fee = float(b.get("late_night_fee") or 0)
+    tax_rate = float(b.get("tax_rate") or 0)
+    # Subtotal = grand - fees - tax
+    subtotal = grand - del_fee - late_fee - float(b.get("tax_amount") or 0)
+    items_json_str = json.dumps(items)
+    products = get_products()
+    prod_opts = "".join(f'<option value="{p["name"]}" data-price="{float(p.get("price") or 0)}">{p["name"]} — ${float(p.get("price") or 0):.2f}</option>' for p in products)
+    items_rows = ""
+    for i, it in enumerate(items):
+        nm  = it.get("name","")
+        qty = int(it.get("qty",1))
+        up  = float(it.get("unit_price") or it.get("total",0)/max(qty,1))
+        tot = float(it.get("total") or 0)
+        items_rows += f"""<tr id="row-{i}" data-unit="{up}">
+  <td style="padding:.4rem .3rem"><strong>{nm}</strong></td>
+  <td style="padding:.4rem .3rem;text-align:center">
+    <input type="number" name="qty_{i}" value="{qty}" min="{qty}" style="width:60px;text-align:center;border:1px solid #d1d5db;border-radius:6px;padding:.3rem"
+      onchange="recalc()" oninput="recalc()">
+  </td>
+  <td style="padding:.4rem .3rem;text-align:right" id="tot-{i}">${tot:.2f}</td>
+  <input type="hidden" name="name_{i}" value="{nm}">
+  <input type="hidden" name="unit_{i}" value="{up}">
+</tr>"""
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Request Changes — Booking #{booking_id}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;padding:0 0 3rem}}
+.header{{background:linear-gradient(135deg,#6366f1,#4f46e5);padding:1.25rem;color:white;text-align:center}}
+.header h1{{font-size:1.05rem;font-weight:800}}
+.container{{max-width:520px;margin:0 auto;padding:1.25rem 1rem}}
+.card{{background:white;border-radius:12px;padding:1.25rem;margin-bottom:1rem;border:1px solid #e5e7eb}}
+label{{font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem}}
+input,textarea,select{{width:100%;border:1.5px solid #d1d5db;border-radius:8px;padding:.6rem .8rem;font-size:.9rem;outline:none}}
+input:focus,textarea:focus,select:focus{{border-color:#6366f1}}
+.btn-submit{{width:100%;padding:.85rem;background:#6366f1;color:white;border:none;border-radius:10px;font-size:1rem;font-weight:800;cursor:pointer;margin-top:.75rem}}
+.btn-submit:disabled{{background:#9ca3af;cursor:not-allowed}}
+.total-row{{display:flex;justify-content:space-between;font-size:.88rem;padding:.3rem 0;color:#6b7280}}
+.total-row.grand{{font-weight:800;color:#1a202c;border-top:2px solid #e5e7eb;padding-top:.6rem;margin-top:.3rem}}
+.warn{{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.6rem .8rem;color:#991b1b;font-size:.82rem;display:none;margin-top:.5rem}}
+a.back{{display:inline-block;margin-bottom:1rem;font-size:.82rem;color:#6366f1;text-decoration:none}}
+</style></head>
+<body>
+<div class="header">
+  <div style="font-size:1.3rem">✏️</div>
+  <h1>Request Changes — Booking #{booking_id}</h1>
+  <p style="font-size:.8rem;opacity:.85;margin-top:.2rem">{BUSINESS_NAME}</p>
+</div>
+<div class="container">
+<a class="back" href="/my-orders/portal">← Back to my orders</a>
+<p style="font-size:.83rem;color:#6b7280;margin-bottom:1rem;line-height:1.5">
+  You can increase quantities or add new items. The total cannot be lower than your original booking of <strong>${grand:,.2f}</strong>.
+  All changes are subject to review and confirmation.
+</p>
+<form method="POST" action="/my-orders/change-request/{booking_id}/submit">
+<div class="card">
+  <div style="font-size:.82rem;font-weight:700;color:#374151;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em">Current Items</div>
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+    <thead><tr style="font-size:.75rem;color:#9ca3af;text-transform:uppercase">
+      <th style="text-align:left;padding:.3rem .3rem .5rem">Item</th>
+      <th style="text-align:center;padding:.3rem .3rem .5rem">Qty</th>
+      <th style="text-align:right;padding:.3rem .3rem .5rem">Total</th>
+    </tr></thead>
+    <tbody id="items-tbody">{items_rows}</tbody>
+  </table>
+  <input type="hidden" name="item_count" value="{len(items)}">
+</div>
+
+<div class="card">
+  <div style="font-size:.82rem;font-weight:700;color:#374151;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em">Add New Item</div>
+  <label>Item</label>
+  <select id="add-select" style="margin-bottom:.5rem">
+    <option value="">— Select an item —</option>
+    {prod_opts}
+  </select>
+  <label>Quantity</label>
+  <input type="number" id="add-qty" value="1" min="1" style="margin-bottom:.5rem">
+  <button type="button" onclick="addItem()" style="width:100%;padding:.6rem;background:#f0fdf4;color:#16a34a;border:1.5px solid #86efac;border-radius:8px;font-size:.88rem;font-weight:700;cursor:pointer">+ Add Item</button>
+  <div id="added-items"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:.82rem;font-weight:700;color:#374151;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em">Price Summary</div>
+  <div class="total-row"><span>Items subtotal</span><span id="disp-subtotal">${subtotal:.2f}</span></div>
+  {"<div class='total-row'><span>Delivery fee</span><span>${:.2f}</span></div>".format(del_fee) if del_fee else ""}
+  {"<div class='total-row'><span>Late night fee</span><span>${:.2f}</span></div>".format(late_fee) if late_fee else ""}
+  {"<div class='total-row'><span>Tax</span><span id='disp-tax'>${:.2f}</span></div>".format(float(b.get('tax_amount') or 0)) if tax_rate else ""}
+  <div class="total-row grand"><span>New Total</span><span id="disp-total">${grand:.2f}</span></div>
+  <div class="warn" id="low-warn">⚠️ Your new total cannot be less than your original booking total of ${grand:,.2f}.</div>
+  <input type="hidden" name="original_total" value="{grand}">
+  <input type="hidden" name="del_fee" value="{del_fee}">
+  <input type="hidden" name="late_fee" value="{late_fee}">
+  <input type="hidden" name="tax_rate" value="{tax_rate}">
+</div>
+
+<div class="card">
+  <label>Note (optional)</label>
+  <textarea name="customer_note" rows="3" placeholder="Describe what you'd like to change..."></textarea>
+</div>
+
+<button type="submit" class="btn-submit" id="submit-btn">Submit Change Request</button>
+</form>
+</div>
+<script>
+var origTotal = {grand};
+var delFee    = {del_fee};
+var lateFee   = {late_fee};
+var taxRate   = {tax_rate};
+var addedItems = [];
+var addCount  = 0;
+
+function recalc() {{
+  var sub = 0;
+  // existing items
+  var rows = document.querySelectorAll('#items-tbody tr');
+  rows.forEach(function(r) {{
+    var qInput = r.querySelector('input[type=number]');
+    if (!qInput) return;
+    var unit = parseFloat(r.getAttribute('data-unit') || 0);
+    var qty  = parseInt(qInput.value) || 0;
+    var tot  = unit * qty;
+    var idx  = r.id.replace('row-','');
+    var td   = document.getElementById('tot-' + idx);
+    if (td) td.textContent = '$' + tot.toFixed(2);
+    sub += tot;
+  }});
+  // added items
+  addedItems.forEach(function(it) {{ sub += it.total; }});
+  var tax  = sub * taxRate;
+  var grand = sub + delFee + lateFee + tax;
+  document.getElementById('disp-subtotal').textContent = '$' + sub.toFixed(2);
+  var taxEl = document.getElementById('disp-tax');
+  if (taxEl) taxEl.textContent = '$' + tax.toFixed(2);
+  document.getElementById('disp-total').textContent = '$' + grand.toFixed(2);
+  var warn = document.getElementById('low-warn');
+  var btn  = document.getElementById('submit-btn');
+  if (grand < origTotal - 0.01) {{
+    warn.style.display = 'block';
+    btn.disabled = true;
+  }} else {{
+    warn.style.display = 'none';
+    btn.disabled = false;
+  }}
+}}
+
+function addItem() {{
+  var sel  = document.getElementById('add-select');
+  var qty  = parseInt(document.getElementById('add-qty').value) || 1;
+  var name = sel.value;
+  var opt  = sel.options[sel.selectedIndex];
+  var price = parseFloat(opt.getAttribute('data-price') || 0);
+  if (!name) return alert('Please select an item.');
+  var total = price * qty;
+  var idx = addCount++;
+  addedItems.push({{name:name, qty:qty, unit:price, total:total, idx:idx}});
+  var container = document.getElementById('added-items');
+  var div = document.createElement('div');
+  div.id = 'added-' + idx;
+  div.style.cssText = 'margin-top:.5rem;padding:.5rem .75rem;background:#f9fafb;border-radius:8px;font-size:.84rem;display:flex;justify-content:space-between;align-items:center';
+  div.innerHTML = '<span>' + qty + 'x ' + name + ' — $' + total.toFixed(2) + '</span>' +
+    '<button type="button" onclick="removeAdded(' + idx + ')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.85rem;font-weight:700">✕</button>';
+  container.appendChild(div);
+  // Add hidden inputs for form submission
+  var hName = document.createElement('input'); hName.type='hidden'; hName.name='add_name_'+idx; hName.value=name; div.appendChild(hName);
+  var hQty  = document.createElement('input'); hQty.type='hidden';  hQty.name='add_qty_'+idx;  hQty.value=qty;  div.appendChild(hQty);
+  var hUnit = document.createElement('input'); hUnit.type='hidden'; hUnit.name='add_unit_'+idx; hUnit.value=price; div.appendChild(hUnit);
+  var hTot  = document.createElement('input'); hTot.type='hidden';  hTot.name='add_tot_'+idx;  hTot.value=total; div.appendChild(hTot);
+  var hIdx  = document.createElement('input'); hIdx.type='hidden';  hIdx.name='add_idx'; hIdx.value=idx; div.appendChild(hIdx);
+  sel.value=''; document.getElementById('add-qty').value=1;
+  recalc();
+}}
+function removeAdded(idx) {{
+  addedItems = addedItems.filter(function(it){{return it.idx!==idx;}});
+  var el = document.getElementById('added-' + idx);
+  if (el) el.remove();
+  recalc();
+}}
+recalc();
+</script>
+</body></html>"""
+
+@app.route("/my-orders/change-request/<int:booking_id>/submit", methods=["POST"])
+def customer_change_request_submit(booking_id):
+    email, redir = _portal_require_auth()
+    if redir: return redir
+    conn = get_db()
+    if not conn: return "Service unavailable", 503
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s AND LOWER(TRIM(email))=%s", (booking_id, email))
+        row = cur.fetchone()
+        if not row:
+            cur.close(); conn.close()
+            return redirect(url_for("customer_portal_home"))
+        b = dict(row)
+    except Exception as e:
+        log.error(f"change-request submit fetch error: {e}")
+        return redirect(url_for("customer_portal_home"))
+
+    # Build current items list
+    try:
+        current_items = json.loads(b.get("items_json") or "[]")
+    except Exception:
+        current_items = []
+    original_total = float(b.get("grand_total") or 0)
+
+    # Build requested items from form
+    del_fee  = float(request.form.get("del_fee") or 0)
+    late_fee = float(request.form.get("late_fee") or 0)
+    tax_rate = float(request.form.get("tax_rate") or 0)
+    item_count = int(request.form.get("item_count") or 0)
+    requested_items = []
+    for i in range(item_count):
+        name = request.form.get(f"name_{i}", "")
+        qty  = int(request.form.get(f"qty_{i}", 1) or 1)
+        unit = float(request.form.get(f"unit_{i}", 0) or 0)
+        if name:
+            requested_items.append({"name": name, "qty": qty, "unit_price": unit, "total": round(unit * qty, 2)})
+    # Added items
+    add_indices = request.form.getlist("add_idx")
+    for idx in add_indices:
+        name  = request.form.get(f"add_name_{idx}", "")
+        qty   = int(request.form.get(f"add_qty_{idx}", 1) or 1)
+        unit  = float(request.form.get(f"add_unit_{idx}", 0) or 0)
+        total = float(request.form.get(f"add_tot_{idx}", 0) or 0)
+        if name:
+            requested_items.append({"name": name, "qty": qty, "unit_price": unit, "total": total})
+
+    new_subtotal = sum(float(it["total"]) for it in requested_items)
+    new_tax      = new_subtotal * tax_rate
+    new_total    = new_subtotal + del_fee + late_fee + new_tax
+    customer_note = request.form.get("customer_note", "").strip()
+
+    if new_total < original_total - 0.01:
+        return redirect(url_for("customer_change_request_form", booking_id=booking_id))
+
+    try:
+        cur2 = conn.cursor()
+        cur2.execute("""
+            INSERT INTO change_requests
+              (booking_id, customer_email, current_items, requested_items, current_total, requested_total, customer_note)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (booking_id, email,
+              json.dumps(current_items), json.dumps(requested_items),
+              original_total, round(new_total, 2),
+              customer_note or None))
+        conn.commit()
+        cur2.close(); conn.close()
+    except Exception as e:
+        log.error(f"change-request insert error: {e}")
+        return redirect(url_for("customer_portal_home"))
+
+    # Notify owner
+    diff = new_total - original_total
+    curr_html = "".join(f"<li>{it.get('qty',1)}x {it.get('name','')} — ${float(it.get('total',0)):,.2f}</li>" for it in current_items)
+    req_html  = "".join(f"<li>{it.get('qty',1)}x {it.get('name','')} — ${float(it.get('total',0)):,.2f}</li>" for it in requested_items)
+    notif_html = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:540px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);padding:1.5rem;color:white;text-align:center">
+    <div style="font-size:1.8rem">✏️</div>
+    <h2 style="margin:.4rem 0 0">Change Request — Booking #{booking_id}</h2>
+  </div>
+  <div style="padding:1.5rem">
+    <p><strong>{b.get('full_name','')}</strong> ({email}) has requested a change to booking #{booking_id}.</p>
+    <h3 style="margin:1rem 0 .4rem;font-size:.9rem;color:#6b7280;text-transform:uppercase">Current Items</h3>
+    <ul style="margin:0;padding-left:1.25rem;font-size:.9rem">{curr_html}</ul>
+    <p style="font-size:.88rem;margin:.4rem 0 0">Current total: <strong>${original_total:,.2f}</strong></p>
+    <h3 style="margin:1rem 0 .4rem;font-size:.9rem;color:#6366f1;text-transform:uppercase">Requested Items</h3>
+    <ul style="margin:0;padding-left:1.25rem;font-size:.9rem">{req_html}</ul>
+    <p style="font-size:.88rem;margin:.4rem 0 0">New total: <strong>${new_total:,.2f}</strong> ({'+' if diff>=0 else ''}{diff:,.2f})</p>
+    {"<p style='margin:.5rem 0 0;font-size:.88rem'><strong>Customer note:</strong> " + customer_note + "</p>" if customer_note else ""}
+    <div style="margin-top:1.25rem;text-align:center">
+      <a href="{BASE_URL}/admin/booking/{booking_id}" style="display:inline-block;background:#6366f1;color:white;padding:.6rem 1.5rem;border-radius:8px;font-weight:700;font-size:.9rem;text-decoration:none">Review in Admin →</a>
+    </div>
+  </div>
+</div></body></html>"""
+    notif_plain = f"Change request from {b.get('full_name','')} for booking #{booking_id}. New total: ${new_total:,.2f}. Review at {BASE_URL}/admin/booking/{booking_id}"
+    try:
+        if OWNER_EMAIL:
+            _send_email(OWNER_EMAIL, f"Change Request — Booking #{booking_id} ({b.get('full_name','')})", notif_html, notif_plain)
+    except Exception as e:
+        log.error(f"change-request owner notify error: {e}")
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Request Submitted</title>
+<style>*{{box-sizing:border-box;margin:0;padding:0}}body{{font-family:-apple-system,sans-serif;background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem}}.card{{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.10);padding:2.5rem 2rem;width:100%;max-width:420px;text-align:center}}</style>
+</head><body><div class="card">
+<div style="font-size:2.5rem;margin-bottom:1rem">✅</div>
+<h1 style="font-size:1.2rem;font-weight:800;color:#1a202c;margin-bottom:.5rem">Request Submitted!</h1>
+<p style="font-size:.88rem;color:#6b7280;margin-bottom:1.5rem;line-height:1.5">
+  We've received your change request for booking #{booking_id} and will review it shortly. You'll hear from us by email once it's been approved or denied.
+</p>
+<a href="/my-orders/portal" style="display:inline-block;background:#6366f1;color:white;padding:.7rem 1.75rem;border-radius:10px;font-weight:700;font-size:.9rem;text-decoration:none">Back to My Orders</a>
+</div></body></html>"""
+
+# ── Admin: view change requests on booking page ───────────────────────────────
+@app.route("/admin/change-requests")
+@admin_required
+def admin_change_requests():
+    conn = get_db()
+    rows = []
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("""
+                SELECT cr.*, b.full_name
+                FROM change_requests cr
+                JOIN bookings b ON b.id = cr.booking_id
+                ORDER BY cr.requested_at DESC
+            """)
+            rows = [dict(r) for r in cur.fetchall()]
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"admin change requests error: {e}")
+    pending = [r for r in rows if r["status"] == "pending"]
+    resolved = [r for r in rows if r["status"] != "pending"]
+
+    def fmt_dt(d):
+        if not d: return "—"
+        if hasattr(d,"strftime"): return d.strftime("%b %-d, %Y %-I:%M %p")
+        return str(d)[:16]
+
+    def req_row(r):
+        curr = r.get("current_items") or []
+        req  = r.get("requested_items") or []
+        if isinstance(curr, str):
+            try: curr = json.loads(curr)
+            except: curr = []
+        if isinstance(req, str):
+            try: req = json.loads(req)
+            except: req = []
+        curr_txt = ", ".join(f"{it.get('qty',1)}x {it.get('name','')}" for it in curr)
+        req_txt  = ", ".join(f"{it.get('qty',1)}x {it.get('name','')}" for it in req)
+        diff     = float(r.get("requested_total") or 0) - float(r.get("current_total") or 0)
+        sc = {"pending":"#d97706","approved":"#16a34a","denied":"#dc2626"}.get(r["status"],"#6b7280")
+        return f"""
+<div style="background:white;border:1.5px solid #e5e7eb;border-radius:12px;padding:1.1rem;margin-bottom:.85rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;gap:.5rem">
+    <div>
+      <strong>Booking #{r['booking_id']}</strong> — {r.get('full_name','')}
+      <span style="font-size:.75rem;color:#6b7280;margin-left:.5rem">{fmt_dt(r.get('requested_at'))}</span>
+    </div>
+    <span style="background:{sc}20;color:{sc};border:1px solid {sc}40;font-size:.75rem;font-weight:700;padding:.2rem .6rem;border-radius:99px">{r['status'].title()}</span>
+  </div>
+  <div style="font-size:.82rem;color:#6b7280;margin-bottom:.4rem">Current: {curr_txt} — <strong>${float(r.get('current_total') or 0):,.2f}</strong></div>
+  <div style="font-size:.82rem;color:#374151;margin-bottom:.4rem">Requested: {req_txt} — <strong>${float(r.get('requested_total') or 0):,.2f}</strong> ({'+' if diff>=0 else ''}{diff:,.2f})</div>
+  {("<div style='font-size:.82rem;color:#374151;margin-bottom:.6rem'>Note: " + str(r.get('customer_note','')) + "</div>") if r.get('customer_note') else ""}
+  {('<div style="display:flex;gap:.5rem;flex-wrap:wrap">'
+     '<form method="POST" action="/admin/change-requests/' + str(r["id"]) + '/respond" style="margin:0">'
+     '<input type="hidden" name="action" value="approve">'
+     '<button style="background:#16a34a;color:white;border:none;border-radius:7px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">✅ Approve</button></form>'
+     '<form method="POST" action="/admin/change-requests/' + str(r["id"]) + '/respond" style="margin:0">'
+     '<input type="hidden" name="action" value="deny">'
+     '<button style="background:#dc2626;color:white;border:none;border-radius:7px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">✕ Deny</button></form>'
+     '<a href="/admin/booking/' + str(r["booking_id"]) + '" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:7px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;text-decoration:none">View Booking</a>'
+     '</div>') if r["status"]=="pending" else
+    ('<a href="/admin/booking/' + str(r["booking_id"]) + '" style="font-size:.8rem;color:#6366f1;text-decoration:none">View Booking</a>')}
+</div>"""
+
+    pending_html  = "".join(req_row(r) for r in pending)  or '<p style="color:#9ca3af;font-size:.88rem">No pending requests.</p>'
+    resolved_html = "".join(req_row(r) for r in resolved) or '<p style="color:#9ca3af;font-size:.88rem">None yet.</p>'
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Change Requests</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;min-height:100vh;padding:1.5rem 1rem}}
+h1{{font-size:1.2rem;font-weight:800;color:#1a202c;margin-bottom:1.25rem}}
+.section-label{{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin:1.25rem 0 .6rem}}
+.back{{font-size:.82rem;color:#6366f1;text-decoration:none;display:inline-block;margin-bottom:1rem}}
+</style></head>
+<body style="max-width:600px;margin:0 auto">
+<a class="back" href="/admin">← Admin</a>
+<h1>✏️ Change Requests</h1>
+<div class="section-label">Pending ({len(pending)})</div>
+{pending_html}
+<div class="section-label">Resolved</div>
+{resolved_html}
+</body></html>"""
+
+@app.route("/admin/change-requests/<int:cr_id>/respond", methods=["POST"])
+@admin_required
+def admin_change_request_respond(cr_id):
+    action = request.form.get("action","")
+    if action not in ("approve","deny"):
+        return redirect(url_for("admin_change_requests"))
+    conn = get_db()
+    if not conn: return redirect(url_for("admin_change_requests"))
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM change_requests WHERE id=%s", (cr_id,))
+        row = cur.fetchone()
+        if not row:
+            cur.close(); conn.close()
+            return redirect(url_for("admin_change_requests"))
+        cr = dict(row)
+        cur.execute("UPDATE change_requests SET status=%s, responded_at=NOW() WHERE id=%s",
+                    (action + "d", cr_id))
+        if action == "approve":
+            req_items = cr.get("requested_items") or []
+            if isinstance(req_items, str):
+                try: req_items = json.loads(req_items)
+                except: req_items = []
+            new_total = float(cr.get("requested_total") or 0)
+            cur.execute("""
+                UPDATE bookings SET items_json=%s, grand_total=%s WHERE id=%s
+            """, (json.dumps(req_items), new_total, cr["booking_id"]))
+        conn.commit()
+        # Notify customer
+        booking_id = cr["booking_id"]
+        cust_email = cr.get("customer_email","")
+        new_total  = float(cr.get("requested_total") or 0)
+        if cust_email:
+            if action == "approve":
+                subj = f"Your Change Request Was Approved — Booking #{booking_id}"
+                body = f"Great news! Your change request for booking #{booking_id} has been approved. Your new total is ${new_total:,.2f}. View your orders at {BASE_URL}/my-orders"
+                html_n = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:500px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#16a34a,#15803d);padding:1.5rem;color:white;text-align:center">
+    <div style="font-size:1.8rem">✅</div><h2 style="margin:.4rem 0 0">Change Request Approved!</h2>
+  </div>
+  <div style="padding:1.5rem">
+    <p>Your change request for booking <strong>#{booking_id}</strong> has been approved.</p>
+    <p style="margin:.75rem 0">New total: <strong>${new_total:,.2f}</strong></p>
+    <div style="text-align:center;margin-top:1.25rem">
+      <a href="{BASE_URL}/my-orders" style="display:inline-block;background:#16a34a;color:white;padding:.65rem 1.5rem;border-radius:8px;font-weight:700;text-decoration:none">View My Orders</a>
+    </div>
+  </div>
+</div></body></html>"""
+            else:
+                subj = f"Your Change Request — Booking #{booking_id}"
+                body = f"Unfortunately your change request for booking #{booking_id} could not be accommodated at this time. Please contact us if you have questions."
+                html_n = f"""<html><body style="font-family:-apple-system,sans-serif;background:#f0f4f8;padding:2rem 1rem">
+<div style="max-width:500px;margin:0 auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#6b7280,#4b5563);padding:1.5rem;color:white;text-align:center">
+    <div style="font-size:1.8rem">📋</div><h2 style="margin:.4rem 0 0">Change Request Update</h2>
+  </div>
+  <div style="padding:1.5rem">
+    <p>We're sorry — your change request for booking <strong>#{booking_id}</strong> could not be accommodated at this time.</p>
+    <p style="margin:.75rem 0;font-size:.88rem;color:#6b7280">Please contact us if you have any questions or if you'd like to discuss alternatives.</p>
+  </div>
+</div></body></html>"""
+            try:
+                _send_email(cust_email, subj, html_n, body)
+            except Exception as e:
+                log.error(f"change-request customer notify error: {e}")
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"change-request respond error: {e}")
+    return redirect(url_for("admin_change_requests"))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
