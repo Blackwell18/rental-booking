@@ -3462,7 +3462,7 @@ ADMIN_DASH_HTML = """
     <a href="/driver/{{ today }}" class="sb-link"><span class="sb-icon">🚚</span> Driver View</a>
     <a href="/admin/formsite-import" class="sb-link"><span class="sb-icon">📥</span> Import</a>
     <a href="/admin/tax-report" class="sb-link"><span class="sb-icon">💰</span> Tax Report</a>
-    <a href="/admin/change-requests" class="sb-link"><span class="sb-icon">✏️</span> Changes</a>
+    <a href="/admin/change-requests" class="sb-link" style="{% if pending_changes %}background:rgba(239,68,68,.15);color:#fca5a5;font-weight:700;{% endif %}"><span class="sb-icon">✏️</span> Changes{% if pending_changes %}<span style="margin-left:auto;background:#ef4444;color:white;border-radius:99px;padding:.05rem .45rem;font-size:.72rem;font-weight:800">{{ pending_changes }}</span>{% endif %}</a>
   </nav>
   <div class="sb-bottom">
     <a href="/admin/download-backup" class="sb-link"><span class="sb-icon">💾</span> Backup</a>
@@ -3482,6 +3482,24 @@ ADMIN_DASH_HTML = """
   </div>
 
   <div class="page-body">
+
+    {% if pending_changes %}
+    <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:10px;padding:.9rem 1.1rem;margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+        <div style="display:flex;align-items:center;gap:.5rem;font-weight:700;color:#92400e;font-size:.9rem">
+          <span style="font-size:1.1rem">✏️</span>
+          {{ pending_changes }} pending change request{{ 's' if pending_changes != 1 else '' }} — customer{{ 's' if pending_changes != 1 else '' }} waiting for your response!
+        </div>
+        <a href="/admin/change-requests" style="background:#f59e0b;color:white;border-radius:7px;padding:.35rem .9rem;font-size:.82rem;font-weight:700;text-decoration:none;white-space:nowrap">Review Now →</a>
+      </div>
+      {% for cr in pending_change_list %}
+      <div style="margin-top:.4rem;font-size:.82rem;color:#78350f">
+        • <strong>{{ cr.full_name }}</strong> (Booking #{{ cr.booking_id }})
+        — requested {{ cr.requested_at.strftime('%b %-d at %-I:%M %p') if cr.requested_at and cr.requested_at.strftime else '' }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     {% if inv_conflicts %}
     <div style="background:#fef2f2;border:2px solid #f87171;border-radius:10px;padding:.9rem 1.1rem;margin-bottom:1.25rem">
@@ -8802,6 +8820,26 @@ def admin_dashboard():
     for _c in inv_conflicts:
         conflict_map.setdefault(_c["booking_id"], []).append(_c)
 
+    # Pending change requests count
+    pending_changes = 0
+    pending_change_list = []
+    try:
+        conn_cr = get_db()
+        if conn_cr:
+            cur_cr = conn_cr.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur_cr.execute("""
+                SELECT cr.id, cr.booking_id, cr.requested_at, b.full_name
+                FROM change_requests cr
+                JOIN bookings b ON b.id = cr.booking_id
+                WHERE cr.status = 'pending'
+                ORDER BY cr.requested_at ASC
+            """)
+            pending_change_list = [dict(r) for r in cur_cr.fetchall()]
+            pending_changes = len(pending_change_list)
+            cur_cr.close(); conn_cr.close()
+    except Exception as e:
+        log.error(f"pending changes count error: {e}")
+
     # Going out today / Coming back today
     going_out   = []
     coming_back = []
@@ -8872,6 +8910,8 @@ def admin_dashboard():
         going_out=going_out,
         coming_back=coming_back,
         today_label=date.today().strftime('%A, %B %-d %Y'),
+        pending_changes=pending_changes,
+        pending_change_list=pending_change_list,
     )
 
 
@@ -16711,6 +16751,16 @@ def customer_change_request_submit(booking_id):
             _send_email(OWNER_EMAIL, f"Change Request — Booking #{booking_id} ({b.get('full_name','')})", notif_html, notif_plain)
     except Exception as e:
         log.error(f"change-request owner notify error: {e}")
+    # SMS alert to admin
+    try:
+        first_name_cr = (b.get('full_name') or '').split()[0] or 'A customer'
+        note_part = f" Note: {customer_note[:80]}" if customer_note else ""
+        send_sms(BUSINESS_PHONE or "2037517964",
+            f"\u270f\ufe0f Change request from {first_name_cr} (Booking #{booking_id}). "
+            f"${original_total:,.2f} \u2192 ${new_total:,.2f} (+${diff:,.2f}).{note_part} "
+            f"Review: {BASE_URL}/admin/change-requests")
+    except Exception as e:
+        log.error(f"change-request SMS notify error: {e}")
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head>
