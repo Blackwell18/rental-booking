@@ -8544,8 +8544,8 @@ def admin_dashboard():
 
             cur.execute("""
                 SELECT COUNT(*) FROM bookings
-                WHERE COALESCE(delivery_date, setup_date, event_start_date) > %s
-                  AND COALESCE(delivery_date, setup_date, event_start_date) <= %s
+                WHERE GREATEST(COALESCE(delivery_date, setup_date, event_start_date), COALESCE(event_start_date, delivery_date, setup_date)) > %s
+                  AND GREATEST(COALESCE(delivery_date, setup_date, event_start_date), COALESCE(event_start_date, delivery_date, setup_date)) <= %s
                   AND status NOT IN ('cancelled','denied')
                   AND (archived IS NULL OR archived = FALSE)
             """, (today_dt.isoformat(), in_8_days))
@@ -8589,8 +8589,12 @@ def admin_dashboard():
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "upcoming":
-                wheres.append("COALESCE(delivery_date, setup_date, event_start_date) > %s"); params.append(today_dt.isoformat())
-                wheres.append("COALESCE(delivery_date, setup_date, event_start_date) <= %s"); params.append(in_8_days)
+                # Use GREATEST so a stale delivery_date doesn't hide a future event.
+                # A booking is "upcoming" if its event OR delivery falls in the window.
+                wheres.append("""(
+                    GREATEST(COALESCE(delivery_date, setup_date, event_start_date), COALESCE(event_start_date, delivery_date, setup_date)) > %s
+                    AND GREATEST(COALESCE(delivery_date, setup_date, event_start_date), COALESCE(event_start_date, delivery_date, setup_date)) <= %s
+                )"""); params.append(today_dt.isoformat()); params.append(in_8_days)
                 wheres.append("status NOT IN ('cancelled','denied')")
                 wheres.append("(archived IS NULL OR archived = FALSE)")
             elif tab == "still_waiting":
