@@ -16139,15 +16139,29 @@ def customer_portal_home():
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
             SELECT id, full_name, status, payment_status, event_start_date, event_end_date,
-                   event_start_time, setup_date, delivery_date, pickup_date, event_end_date,
+                   event_start_time, setup_date, delivery_date, pickup_date,
                    event_street, event_city, event_state, event_zip,
                    items_json, grand_total, delivery_fee, late_night_fee, tax_amount, tax_rate,
-                   amount_paid, delivery_status, created_at
+                   amount_paid, delivery_status, stripe_payment_link, final_payment_link,
+                   created_at
             FROM bookings
             WHERE LOWER(TRIM(email))=%s
             ORDER BY created_at DESC
         """, (email,))
         rows = [dict(r) for r in cur.fetchall()]
+        # Fetch active payment links for each booking
+        booking_ids = [r["id"] for r in rows]
+        pay_links_map = {}
+        if booking_ids:
+            cur2 = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur2.execute(
+                "SELECT booking_id, label, amount, url FROM payment_links "
+                "WHERE booking_id=ANY(%s) AND status='active' ORDER BY created_at DESC",
+                (booking_ids,)
+            )
+            for pl in cur2.fetchall():
+                pay_links_map.setdefault(pl["booking_id"], []).append(dict(pl))
+            cur2.close()
         cur.close(); conn.close()
     except Exception as e:
         log.error(f"portal home error: {e}")
@@ -16182,6 +16196,7 @@ def customer_portal_home():
         b["_items"] = items
         subtotal = sum(float(i.get("total") or 0) for i in items)
         b["_subtotal"] = subtotal
+        b["_pay_links"] = pay_links_map.get(b["id"], [])
         ds = (b.get("delivery_status") or "")
         is_done = (
             b.get("status") in ("concluded", "cancelled", "denied")
@@ -16201,6 +16216,38 @@ def customer_portal_home():
         if hasattr(d,"strftime"): return d.strftime("%b %-d, %Y")
         try: return datetime.strptime(str(d)[:10],"%Y-%m-%d").strftime("%b %-d, %Y")
         except: return str(d)
+
+    def _build_pay_buttons(b):
+        """Return HTML pay button(s) for a booking if payment is outstanding."""
+        grand  = float(b.get("grand_total") or 0)
+        paid   = float(b.get("amount_paid") or 0)
+        balance = round(grand - paid, 2)
+        if balance <= 0.01:
+            return ""  # fully paid
+        # Prefer explicit payment links from payment_links table; fallback to stripe_payment_link
+        active_links = b.get("_pay_links") or []
+        pay_url = None
+        pay_label = None
+        if active_links:
+            pay_url   = active_links[0]["url"]
+            pay_label = active_links[0].get("label") or "Pay Now"
+        elif b.get("final_payment_link"):
+            pay_url   = b["final_payment_link"]
+            pay_label = f"Final Payment — ${balance:,.2f}"
+        elif b.get("stripe_payment_link"):
+            pay_url   = b["stripe_payment_link"]
+            pay_label = "Pay Deposit"
+        if not pay_url:
+            return ""
+        btn_style = (
+            "display:block;width:100%;padding:.65rem;background:#16a34a;"
+            "color:white;border:none;border-radius:8px;font-size:.88rem;font-weight:700;"
+            "text-align:center;text-decoration:none;box-sizing:border-box;margin-top:.5rem"
+        )
+        return (
+            f'<a href="{pay_url}" target="_blank" rel="noopener" style="{btn_style}">'
+            f'💳 {pay_label} — ${balance:,.2f}</a>'
+        )
 
     def booking_card(b, show_change_btn=True):
         items_html = ""
@@ -16249,7 +16296,8 @@ def customer_portal_home():
     {"<tr><td style='padding:.2rem .5rem .2rem 0;color:#16a34a;font-weight:600'>Paid</td><td style='text-align:right;color:#16a34a;font-weight:600'>${:.2f}</td></tr>".format(paid) if paid else ""}
     {"<tr><td style='padding:.2rem .5rem 0 0;color:#dc2626;font-weight:700'>Balance due</td><td style='text-align:right;color:#dc2626;font-weight:700'>${:.2f}</td></tr>".format(balance) if balance > 0.01 else ""}
   </table>
-  {"<a href='/my-orders/change-request/" + str(b['id']) + "' style='display:block;width:100%;padding:.65rem;background:#6366f1;color:white;border:none;border-radius:8px;font-size:.88rem;font-weight:700;text-align:center;text-decoration:none;box-sizing:border-box'>✏️ Request a Change</a>" if can_change else ""}
+  {"<a href='/my-orders/change-request/" + str(b['id']) + "' style='display:block;width:100%;padding:.65rem;background:#6366f1;color:white;border:none;border-radius:8px;font-size:.88rem;font-weight:700;text-align:center;text-decoration:none;box-sizing:border-box;margin-top:.5rem'>✏️ Request a Change</a>" if can_change else ""}
+  {_build_pay_buttons(b)}
 </div>"""
 
     upcoming_html = "".join(booking_card(b, True) for b in upcoming) or '<p style="color:#9ca3af;text-align:center;padding:1rem">No upcoming orders.</p>'
