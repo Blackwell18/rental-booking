@@ -1283,6 +1283,10 @@ def send_customer_email(b):
     <h2 style="margin:0">Request Received!</h2>
     <p style="margin:.5rem 0 0;opacity:.85">{BUSINESS_NAME}</p>
   </div>
+
+
+  <div style="background:#eef2ff;border-top:3px solid #6366f1;border-bottom:3px solid #6366f1;padding:1.1rem 2rem;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
+
   <div style="padding:2rem">
     <p>Hi <strong>{first}</strong>,</p>
     <p style="color:#4a5568;line-height:1.7;margin:.75rem 0">
@@ -1348,7 +1352,7 @@ def send_customer_email(b):
     </p>
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">- The {BUSINESS_NAME} Team</p>
 
-    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
+    <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:2px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
   </div>
 </div></body></html>"""
 
@@ -1485,6 +1489,10 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
     <p style="margin:.5rem 0 0;opacity:.88;font-size:.95rem">{header_sub}</p>
   </div>
 
+
+
+  <div style="background:#eef2ff;border-top:3px solid #6366f1;border-bottom:3px solid #6366f1;padding:1.1rem 2rem;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
+
   <div style="background:white;padding:2rem;border-radius:0 0 12px 12px;box-shadow:0 4px 16px rgba(0,0,0,.08)">
 
     <p style="color:#2d3748;font-size:1.05rem;margin-bottom:.75rem">Hi <strong>{first}</strong>,</p>
@@ -1557,7 +1565,7 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
     <p style="color:#2d3748;font-weight:600;margin-top:1.75rem">&mdash; The {BUSINESS_NAME} Team</p>
     {f'<p style="font-size:.85rem;color:#718096">Questions? Call us at {BUSINESS_PHONE}</p>' if BUSINESS_PHONE else ""}
 
-    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
+    <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:2px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
   </div>
 </div></body></html>"""
 
@@ -1657,6 +1665,10 @@ def send_receipt_email(b):
     <h2 style="margin:0">Payment Receipt</h2>
     <p style="margin:.4rem 0 0;opacity:.85">{BUSINESS_NAME}</p>
   </div>
+
+
+  <div style="background:#eef2ff;border-top:3px solid #6366f1;border-bottom:3px solid #6366f1;padding:1.1rem 2rem;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
+
   <div style="padding:2rem">
     <p>Hi <strong>{first}</strong>,</p>
     <p style="color:#4a5568;line-height:1.7">Thank you so much for your business! We truly appreciate you choosing {BUSINESS_NAME} and look forward to making your event a great one.</p>
@@ -1691,7 +1703,7 @@ def send_receipt_email(b):
     {f'<p style="color:#4a5568;font-size:.9rem">Questions? Call <strong>{BUSINESS_PHONE}</strong> or reply to this email.</p>' if BUSINESS_PHONE else ''}
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">With gratitude,<br>— The {BUSINESS_NAME} Team</p>
 
-    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
+    <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:2px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
   </div>
 </div></body></html>"""
     plain = (f"RECEIPT — Order #{bid}\n{BUSINESS_NAME}\n\n"
@@ -1730,7 +1742,7 @@ def send_denied_email(b):
     {f'<p style="color:#4a5568;margin:.75rem 0">You can reach us at <strong>{BUSINESS_PHONE}</strong>.</p>' if BUSINESS_PHONE else ""}
     <p style="color:#2d3748;font-weight:600;margin-top:1.5rem">— The {BUSINESS_NAME} Team</p>
 
-    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
+    <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:2px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
   </div>
 </div></body></html>"""
     plain = f"Hi {first},\n\nThank you for your interest in {BUSINESS_NAME}. Unfortunately, we are unable to accommodate your rental request for {_fmt_date(b.get('event_start_date'))} at this time.\n\nWe hope to serve you in the future.{f' Please call {BUSINESS_PHONE} if you have questions.' if BUSINESS_PHONE else ''}\n\n— {BUSINESS_NAME}"
@@ -1803,7 +1815,7 @@ def send_denied_inventory_email(b, short_items):
 
     <p style="margin:0;color:#2d3748;font-size:.95rem;font-weight:600">— The {BUSINESS_NAME} Team</p>
 
-    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
+    <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:2px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
   </div>
 </div></body></html>"""
 
@@ -1895,6 +1907,10 @@ def send_final_payment_email(b, remaining_amount, payment_link):
     <p style="margin:.5rem 0 0;opacity:.88;font-size:.95rem">Booking #{b.get('id')} &bull; {event_date}</p>
   </div>
 
+
+
+  <div style="background:#eef2ff;border-top:3px solid #6366f1;border-bottom:3px solid #6366f1;padding:1.1rem 2rem;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
+
   <div style="background:white;padding:2rem;border-radius:0 0 12px 12px;box-shadow:0 4px 16px rgba(0,0,0,.08)">
 
     <p style="color:#2d3748;font-size:1.05rem;margin-bottom:.75rem">Hi <strong>{first}</strong>,</p>
@@ -1980,7 +1996,7 @@ def send_final_payment_email(b, remaining_amount, payment_link):
 
     <p style="color:#2d3748;font-weight:600;margin-top:1.75rem">&mdash; The {BUSINESS_NAME} Team</p>
 
-    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
+    <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:2px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.9rem 2.5rem;border-radius:10px;font-weight:800;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,.35)">📦 View &amp; Manage My Order</a><p style="margin:.45rem 0 0;font-size:.8rem;color:#4338ca;font-weight:600">Track delivery &middot; Pay online &middot; Request changes</p></div>
   </div>
 </div></body></html>"""
 
@@ -13103,7 +13119,7 @@ def send_delivery_confirmation(b, image_bytes=None, image_filename="photo.jpg"):
     phone = b.get("phone")
     if phone:
         _pod_url = f"{BASE_URL}/delivery/photo/{bid}" if (image_bytes and BASE_URL) else None
-        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} rental items (booking #{bid}) have been delivered! 🎉 Enjoy your event! View your orders: {BASE_URL}/my-orders", media_url=_pod_url)
+        send_sms(phone, f"Hi {first}! Your {BUSINESS_NAME} items (booking #{bid}) were delivered! 🎉 View your order: {BASE_URL}/my-orders", media_url=_pod_url)
 
 
 def send_pickup_confirmation(b):
@@ -13142,7 +13158,7 @@ def send_pickup_confirmation(b):
         _send_email(email, f"Thank You from {BUSINESS_NAME} — We Hope Your Event Was Amazing! 🎉", html, plain)
     phone = b.get("phone")
     if phone:
-        send_sms(phone, f"Hi {first}! Thank you so much for allowing {BUSINESS_NAME} to be part of your event 🙏 We hope it was everything you envisioned! If you have a moment, we\'d love a Google review: {review_url} — it means the world to us! View your orders: {BASE_URL}/my-orders Reply STOP to opt out.")
+        send_sms(phone, f"Hi {first}! Thank you for choosing {BUSINESS_NAME}! 🙏 View your orders: {BASE_URL}/my-orders | Leave us a review: {review_url} | Reply STOP to opt out.")
 
 
 DRIVER_VIEW_HTML = """
