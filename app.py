@@ -16327,6 +16327,10 @@ def customer_portal_home():
     upcoming_html = "".join(booking_card(b, True) for b in upcoming) or '<p style="color:#9ca3af;text-align:center;padding:1rem">No upcoming orders.</p>'
     past_html     = "".join(booking_card(b, False) for b in past) or '<p style="color:#9ca3af;text-align:center;padding:1rem">No past orders.</p>'
     first_name    = (rows[0].get("full_name") or "").split()[0] if rows else "there"
+    _msg_banner   = ('<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;'
+                     'padding:.75rem 1rem;margin:1rem 1rem 0;font-size:.85rem;color:#166534;font-weight:600">'
+                     '&#x2705; Your message was sent! We\'ll be in touch soon.</div>'
+                     if request.args.get("msg_sent") else "")
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -16349,11 +16353,22 @@ a.logout:hover{{color:#6b7280}}
   <h1>{BUSINESS_NAME}</h1>
   <p>Hi {first_name}! Here are your orders.</p>
 </div>
+{_msg_banner}
 <div class="container">
   <div class="section-label">Upcoming Orders</div>
   {upcoming_html}
   <div class="section-label">Past Orders</div>
   {past_html}
+  <div class="section-label" style="margin-top:1.75rem">Send Us a Message</div>
+  <div style="background:white;border:1.5px solid #e5e7eb;border-radius:14px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.05)">
+    <p style="font-size:.83rem;color:#6b7280;margin-bottom:.75rem">Have a question about your order? Send us a quick message and we\'ll get back to you.</p>
+    <form method="POST" action="/my-orders/send-message">
+      <textarea name="message" placeholder="Type your message here..." required
+        style="width:100%;padding:.75rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem;resize:vertical;min-height:90px;outline:none;font-family:inherit;box-sizing:border-box"></textarea>
+      <button type="submit"
+        style="width:100%;margin-top:.6rem;padding:.75rem;background:#1a365d;color:white;border:none;border-radius:8px;font-size:.92rem;font-weight:700;cursor:pointer">💬 Send Message</button>
+    </form>
+  </div>
   <a class="logout" href="/my-orders/logout">Sign out</a>
 </div></body></html>"""
 
@@ -16363,6 +16378,31 @@ def customer_portal_logout():
     return redirect(url_for("customer_portal_request"))
 
 # ── Change request form ───────────────────────────────────────────────────────
+@app.route("/my-orders/send-message", methods=["POST"])
+def customer_portal_send_message():
+    email, redir = _portal_require_auth()
+    if redir: return redir
+    message = (request.form.get("message") or "").strip()
+    if not message:
+        return redirect(url_for("customer_portal_home"))
+    # Look up customer name from their most recent booking
+    name = email
+    try:
+        conn = get_db()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("SELECT full_name FROM bookings WHERE LOWER(TRIM(email))=%s ORDER BY created_at DESC LIMIT 1", (email,))
+            row = cur.fetchone()
+            if row: name = row[0]
+            cur.close(); conn.close()
+    except Exception: pass
+    sms_body = f"📩 Portal message from {name} ({email}):\n{message}"
+    try:
+        send_sms("2037517964", sms_body)
+    except Exception as e:
+        log.error(f"portal send-message SMS error: {e}")
+    return redirect(url_for("customer_portal_home") + "?msg_sent=1")
+
 @app.route("/my-orders/change-request/<int:booking_id>")
 def customer_change_request_form(booking_id):
     email, redir = _portal_require_auth()
@@ -16696,7 +16736,9 @@ def admin_change_requests():
         try:
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute("""
-                SELECT cr.*, b.full_name
+                SELECT cr.*,
+                       b.full_name, b.event_start_date, b.event_end_date,
+                       b.setup_date, b.delivery_date
                 FROM change_requests cr
                 JOIN bookings b ON b.id = cr.booking_id
                 ORDER BY cr.requested_at DESC
@@ -16705,7 +16747,7 @@ def admin_change_requests():
             cur.close(); conn.close()
         except Exception as e:
             log.error(f"admin change requests error: {e}")
-    pending = [r for r in rows if r["status"] == "pending"]
+    pending  = [r for r in rows if r["status"] == "pending"]
     resolved = [r for r in rows if r["status"] != "pending"]
 
     def fmt_dt(d):
@@ -16713,41 +16755,132 @@ def admin_change_requests():
         if hasattr(d,"strftime"): return d.strftime("%b %-d, %Y %-I:%M %p")
         return str(d)[:16]
 
+    def _items(raw):
+        if isinstance(raw, str):
+            try: raw = json.loads(raw)
+            except: raw = []
+        return raw or []
+
+    def _item_map(items):
+        """name.lower() → {qty, total, unit_price}"""
+        m = {}
+        for it in items:
+            k = (it.get("name") or "").strip().lower()
+            if k: m[k] = it
+        return m
+
     def req_row(r):
-        curr = r.get("current_items") or []
-        req  = r.get("requested_items") or []
-        if isinstance(curr, str):
-            try: curr = json.loads(curr)
-            except: curr = []
-        if isinstance(req, str):
-            try: req = json.loads(req)
-            except: req = []
-        curr_txt = ", ".join(f"{it.get('qty',1)}x {it.get('name','')}" for it in curr)
-        req_txt  = ", ".join(f"{it.get('qty',1)}x {it.get('name','')}" for it in req)
-        diff     = float(r.get("requested_total") or 0) - float(r.get("current_total") or 0)
+        curr_items = _items(r.get("current_items"))
+        req_items  = _items(r.get("requested_items"))
+        curr_map   = _item_map(curr_items)
+        req_map    = _item_map(req_items)
+        all_names  = sorted(set(list(curr_map.keys()) + list(req_map.keys())))
+        curr_total = float(r.get("current_total") or 0)
+        req_total  = float(r.get("requested_total") or 0)
+        diff       = req_total - curr_total
+
+        # ── Inventory check for requested items ──────────────────────────────
+        # Determine date range from the booking
+        start_str = str(r.get("setup_date") or r.get("delivery_date") or r.get("event_start_date") or "")[:10]
+        end_str   = str(r.get("event_end_date") or r.get("event_start_date") or "")[:10]
+        avail = {}
+        inv_warnings = []
+        if start_str and end_str:
+            try:
+                avail = get_available(start_str, end_str, exclude_id=r["booking_id"])
+                products = get_products()
+                name_to_prod = {p["name"].strip().lower(): p for p in products}
+                for it in req_items:
+                    nm = (it.get("name") or "").strip().lower()
+                    prod = name_to_prod.get(nm)
+                    if prod:
+                        pid = prod["id"]
+                        req_qty  = int(it.get("qty") or 0)
+                        avail_qty = avail.get(pid, 0)
+                        if req_qty > avail_qty:
+                            short = req_qty - avail_qty
+                            inv_warnings.append(
+                                f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:7px;'
+                                f'padding:.4rem .75rem;font-size:.8rem;color:#991b1b;font-weight:700;margin-bottom:.3rem">'
+                                f'⚠️ {it.get("name")}: needs {req_qty}, only {avail_qty} available ({short} short)</div>'
+                            )
+            except Exception as e:
+                log.error(f"change-req inv check: {e}")
+
+        # ── Build side-by-side rows ───────────────────────────────────────────
+        table_rows = ""
+        for nm in all_names:
+            ci = curr_map.get(nm)
+            ri = req_map.get(nm)
+            display_name = (ci or ri).get("name", nm.title())
+            c_qty  = ci.get("qty",0)  if ci else 0
+            c_tot  = float(ci.get("total",0)) if ci else 0
+            r_qty  = ri.get("qty",0)  if ri else 0
+            r_tot  = float(ri.get("total",0)) if ri else 0
+            # Row highlight
+            if ci and ri:
+                if c_qty == r_qty:
+                    bg = "white"
+                else:
+                    bg = "#fffbeb"  # changed — amber
+            elif ri:
+                bg = "#f0fdf4"  # added — green
+            else:
+                bg = "#fef2f2"  # removed — red
+            c_cell = f"{c_qty}x &nbsp; ${c_tot:,.2f}" if ci else '<span style="color:#9ca3af">—</span>'
+            r_cell = f"{r_qty}x &nbsp; ${r_tot:,.2f}" if ri else '<span style="color:#9ca3af">—</span>'
+            table_rows += f"""<tr style="background:{bg};border-bottom:1px solid #f3f4f6">
+  <td style="padding:.45rem .7rem;font-size:.83rem;color:#374151;font-weight:500">{display_name}</td>
+  <td style="padding:.45rem .7rem;font-size:.83rem;text-align:right;color:#374151">{c_cell}</td>
+  <td style="padding:.45rem .7rem;font-size:.83rem;text-align:right;color:#374151">{r_cell}</td>
+</tr>"""
+
+        # Totals row
+        table_rows += f"""<tr style="background:#f8fafc;border-top:2px solid #e5e7eb">
+  <td style="padding:.5rem .7rem;font-size:.85rem;font-weight:700;color:#1a202c">TOTAL</td>
+  <td style="padding:.5rem .7rem;font-size:.85rem;text-align:right;font-weight:700;color:#1a202c">${curr_total:,.2f}</td>
+  <td style="padding:.5rem .7rem;font-size:.85rem;text-align:right;font-weight:700;color:{'#16a34a' if diff>=0 else '#dc2626'}">${req_total:,.2f} <span style="font-size:.75rem">({'+' if diff>=0 else ''}{diff:,.2f})</span></td>
+</tr>"""
+
         sc = {"pending":"#d97706","approved":"#16a34a","denied":"#dc2626"}.get(r["status"],"#6b7280")
+        inv_html = "".join(inv_warnings)
+        actions_html = (
+            '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">'
+            '<form method="POST" action="/admin/change-requests/' + str(r["id"]) + '/respond" style="margin:0">'
+            '<input type="hidden" name="action" value="approve">'
+            '<button style="background:#16a34a;color:white;border:none;border-radius:7px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer">✅ Approve</button></form>'
+            '<form method="POST" action="/admin/change-requests/' + str(r["id"]) + '/respond" style="margin:0">'
+            '<input type="hidden" name="action" value="deny">'
+            '<button style="background:#dc2626;color:white;border:none;border-radius:7px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer">✕ Deny</button></form>'
+            '<a href="/admin/booking/' + str(r["booking_id"]) + '" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:7px;padding:.5rem 1.1rem;font-size:.85rem;font-weight:600;text-decoration:none">View Booking</a>'
+            '</div>'
+        ) if r["status"] == "pending" else (
+            '<a href="/admin/booking/' + str(r["booking_id"]) + '" style="font-size:.8rem;color:#6366f1;text-decoration:none;display:inline-block;margin-top:.5rem">View Booking</a>'
+        )
+
         return f"""
-<div style="background:white;border:1.5px solid #e5e7eb;border-radius:12px;padding:1.1rem;margin-bottom:.85rem">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;gap:.5rem">
+<div style="background:white;border:1.5px solid #e5e7eb;border-radius:12px;padding:1.1rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.05)">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem">
     <div>
-      <strong>Booking #{r['booking_id']}</strong> — {r.get('full_name','')}
-      <span style="font-size:.75rem;color:#6b7280;margin-left:.5rem">{fmt_dt(r.get('requested_at'))}</span>
+      <div style="font-weight:800;font-size:.95rem;color:#1a202c">Booking #{r['booking_id']} — {r.get('full_name','')}</div>
+      <div style="font-size:.75rem;color:#6b7280;margin-top:.15rem">Requested {fmt_dt(r.get('requested_at'))}</div>
     </div>
-    <span style="background:{sc}20;color:{sc};border:1px solid {sc}40;font-size:.75rem;font-weight:700;padding:.2rem .6rem;border-radius:99px">{r['status'].title()}</span>
+    <span style="background:{sc}20;color:{sc};border:1px solid {sc}40;font-size:.75rem;font-weight:700;padding:.25rem .65rem;border-radius:99px">{r['status'].title()}</span>
   </div>
-  <div style="font-size:.82rem;color:#6b7280;margin-bottom:.4rem">Current: {curr_txt} — <strong>${float(r.get('current_total') or 0):,.2f}</strong></div>
-  <div style="font-size:.82rem;color:#374151;margin-bottom:.4rem">Requested: {req_txt} — <strong>${float(r.get('requested_total') or 0):,.2f}</strong> ({'+' if diff>=0 else ''}{diff:,.2f})</div>
-  {("<div style='font-size:.82rem;color:#374151;margin-bottom:.6rem'>Note: " + str(r.get('customer_note','')) + "</div>") if r.get('customer_note') else ""}
-  {('<div style="display:flex;gap:.5rem;flex-wrap:wrap">'
-     '<form method="POST" action="/admin/change-requests/' + str(r["id"]) + '/respond" style="margin:0">'
-     '<input type="hidden" name="action" value="approve">'
-     '<button style="background:#16a34a;color:white;border:none;border-radius:7px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">✅ Approve</button></form>'
-     '<form method="POST" action="/admin/change-requests/' + str(r["id"]) + '/respond" style="margin:0">'
-     '<input type="hidden" name="action" value="deny">'
-     '<button style="background:#dc2626;color:white;border:none;border-radius:7px;padding:.4rem .9rem;font-size:.82rem;font-weight:700;cursor:pointer">✕ Deny</button></form>'
-     '<a href="/admin/booking/' + str(r["booking_id"]) + '" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:7px;padding:.4rem .9rem;font-size:.82rem;font-weight:600;text-decoration:none">View Booking</a>'
-     '</div>') if r["status"]=="pending" else
-    ('<a href="/admin/booking/' + str(r["booking_id"]) + '" style="font-size:.8rem;color:#6366f1;text-decoration:none">View Booking</a>')}
+  {inv_html}
+  <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;font-size:.83rem">
+    <thead>
+      <tr style="background:#f0f4f8">
+        <th style="padding:.4rem .7rem;text-align:left;color:#6b7280;font-size:.75rem;font-weight:700;text-transform:uppercase">Item</th>
+        <th style="padding:.4rem .7rem;text-align:right;color:#6b7280;font-size:.75rem;font-weight:700;text-transform:uppercase">Current</th>
+        <th style="padding:.4rem .7rem;text-align:right;color:#6b7280;font-size:.75rem;font-weight:700;text-transform:uppercase">Requested</th>
+      </tr>
+    </thead>
+    <tbody>{table_rows}</tbody>
+  </table>
+  <div style="font-size:.72rem;color:#9ca3af;margin-top:.35rem">🟩 Added &nbsp; 🟨 Changed &nbsp; 🟥 Removed</div>
+  {('<div style="margin-top:.6rem;padding:.5rem .75rem;background:#f7f7f7;border-radius:7px;font-size:.82rem;color:#374151"><strong>Customer note:</strong> ' + str(r.get('customer_note','')) + '</div>') if r.get('customer_note') else ''}
+  {actions_html}
 </div>"""
 
     pending_html  = "".join(req_row(r) for r in pending)  or '<p style="color:#9ca3af;font-size:.88rem">No pending requests.</p>'
@@ -16756,7 +16889,7 @@ def admin_change_requests():
     return f"""<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Change Requests</title>
+<title>Change Requests — {BUSINESS_NAME}</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;min-height:100vh;padding:1.5rem 1rem}}
@@ -16764,7 +16897,7 @@ h1{{font-size:1.2rem;font-weight:800;color:#1a202c;margin-bottom:1.25rem}}
 .section-label{{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin:1.25rem 0 .6rem}}
 .back{{font-size:.82rem;color:#6366f1;text-decoration:none;display:inline-block;margin-bottom:1rem}}
 </style></head>
-<body style="max-width:600px;margin:0 auto">
+<body style="max-width:700px;margin:0 auto">
 <a class="back" href="/admin">← Admin</a>
 <h1>✏️ Change Requests</h1>
 <div class="section-label">Pending ({len(pending)})</div>
