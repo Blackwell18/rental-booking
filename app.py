@@ -1066,7 +1066,7 @@ def _send_email(to, subject, html, plain, reply_to=None):
         log.error(f"Email error: {e}")
 
 
-def send_sms(to_number, message, media_url=None):
+def send_sms(to_number, message, media_url=None, _admin=False):
     """Send an SMS via Twilio. Returns True on success, False on failure."""
     if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER):
         log.warning("Twilio not configured — SMS not sent")
@@ -1081,6 +1081,12 @@ def send_sms(to_number, message, media_url=None):
         log.warning(f"SMS skipped — bad number: {to_number}")
         return False
     to_e164 = "+" + digits
+    if not _admin:
+        disclaimer = (
+            "\n\n— Please do not reply to this number. "
+            "To reach us directly, call or text us at (203) 751-7964."
+        )
+        message = message + disclaimer
     try:
         resp = requests.post(
             f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json",
@@ -10688,7 +10694,7 @@ def twilio_incoming_sms():
     body        = request.form.get("Body", "").strip()
     owner_phone = "+12037517964"
     if body and from_number:
-        send_sms(owner_phone, f"Reply from {from_number}: {body}")
+        send_sms(owner_phone, f"Reply from {from_number}: {body}", _admin=True)
     # Return empty TwiML so Twilio doesn't send an auto-response
     return '<Response></Response>', 200, {"Content-Type": "text/xml"}
 
@@ -16438,7 +16444,7 @@ def customer_portal_send_message():
     except Exception: pass
     sms_body = f"📩 Portal message from {name} ({email}):\n{message}"
     try:
-        send_sms("2037517964", sms_body)
+        send_sms("2037517964", sms_body, _admin=True)
     except Exception as e:
         log.error(f"portal send-message SMS error: {e}")
     return redirect(url_for("customer_portal_home") + "?msg_sent=1")
@@ -16758,7 +16764,7 @@ def customer_change_request_submit(booking_id):
         send_sms(BUSINESS_PHONE or "2037517964",
             f"\u270f\ufe0f Change request from {first_name_cr} (Booking #{booking_id}). "
             f"${original_total:,.2f} \u2192 ${new_total:,.2f} (+${diff:,.2f}).{note_part} "
-            f"Review: {BASE_URL}/admin/change-requests")
+            f"Review: {BASE_URL}/admin/change-requests", _admin=True)
     except Exception as e:
         log.error(f"change-request SMS notify error: {e}")
 
