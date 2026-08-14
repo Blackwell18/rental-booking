@@ -3485,6 +3485,11 @@ ADMIN_DASH_HTML = """
       <input type="text" class="search-input" id="dash-search" placeholder="Search bookings…" oninput="filterDash(this.value)">
       <span class="search-count" id="dash-count"></span>
     </div>
+    <button id="refresh-btn" onclick="doRefresh()" title="Refresh dashboard"
+      style="display:flex;align-items:center;gap:.35rem;padding:.4rem .85rem;background:#f0f2f5;border:1px solid #d1d5db;border-radius:8px;font-size:.82rem;font-weight:600;color:#374151;cursor:pointer;transition:background .12s;flex-shrink:0">
+      <span id="refresh-icon" style="font-size:1rem;line-height:1;display:inline-block;transition:transform .4s">🔄</span>
+      <span>Refresh</span>
+    </button>
   </div>
 
   <div class="page-body">
@@ -3916,6 +3921,33 @@ table{border-collapse:collapse}
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wrapTables);}
   else{wrapTables();}
 })();
+</script>
+<script>
+// ── Auto-refresh on app resume ──────────────────────────────────────────────
+(function(){
+  var hiddenAt = null;
+  var THRESHOLD = 60 * 1000; // 60 seconds hidden before auto-reload
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){
+      hiddenAt = Date.now();
+    } else {
+      if(hiddenAt && (Date.now() - hiddenAt) >= THRESHOLD){
+        doRefresh();
+      }
+      hiddenAt = null;
+    }
+  });
+})();
+
+// ── Manual refresh button ───────────────────────────────────────────────────
+function doRefresh(){
+  var icon = document.getElementById('refresh-icon');
+  var btn  = document.getElementById('refresh-btn');
+  if(icon){ icon.style.transform = 'rotate(360deg)'; }
+  if(btn){  btn.style.opacity = '.5'; btn.style.pointerEvents = 'none'; }
+  setTimeout(function(){ location.reload(); }, 300);
+}
 </script>
 </body></html>
 """
