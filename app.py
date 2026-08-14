@@ -1556,6 +1556,8 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
 
     <p style="color:#2d3748;font-weight:600;margin-top:1.75rem">&mdash; The {BUSINESS_NAME} Team</p>
     {f'<p style="font-size:.85rem;color:#718096">Questions? Call us at {BUSINESS_PHONE}</p>' if BUSINESS_PHONE else ""}
+
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e2e8f0;text-align:center"><a href="{BASE_URL}/my-orders" style="display:inline-block;background:#6366f1;color:white;padding:.55rem 1.25rem;border-radius:8px;font-weight:700;font-size:.82rem;text-decoration:none">📦 View My Orders</a></div>
   </div>
 </div></body></html>"""
 
