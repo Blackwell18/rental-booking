@@ -10550,13 +10550,19 @@ def admin_delivery_action(booking_id):
         else:
             cur.execute("UPDATE bookings SET delivery_status='delivered',delivered_at=NOW() WHERE id=%s",(booking_id,))
         conn.commit(); cur.close()
-        try: send_delivery_confirmation(b, image_bytes, image_filename)
-        except Exception as e: log.error(f"Delivery notify error: {e}")
+        import threading as _t1
+        def _bg_deliver(b_,img_,fn_):
+            try: send_delivery_confirmation(b_,img_,fn_)
+            except Exception as e: log.error(f"Delivery notify error: {e}")
+        _t1.Thread(target=_bg_deliver,args=(b,image_bytes,image_filename),daemon=True).start()
     elif action == "pickup":
         cur.execute("UPDATE bookings SET delivery_status='picked_up',picked_up_at=NOW() WHERE id=%s",(booking_id,))
         conn.commit(); cur.close()
-        try: send_pickup_confirmation(b)
-        except Exception as e: log.error(f"Pickup notify error: {e}")
+        import threading as _t2
+        def _bg_pickup(b_):
+            try: send_pickup_confirmation(b_)
+            except Exception as e: log.error(f"Pickup notify error: {e}")
+        _t2.Thread(target=_bg_pickup,args=(b,),daemon=True).start()
     elif action == "undo_deliver":
         cur.execute("UPDATE bookings SET delivery_status=NULL,delivered_at=NULL WHERE id=%s",(booking_id,))
         conn.commit(); cur.close()
@@ -13629,10 +13635,11 @@ def driver_action(booking_id):
         )
         conn.commit()
         cur.close()
-        try:
-            send_delivery_confirmation(b, image_bytes, image_filename)
-        except Exception as e:
-            log.error(f"Delivery notification error: {e}")
+        import threading as _t4
+        def _bg_drv_dlv(b_, img_, fn_):
+            try: send_delivery_confirmation(b_, img_, fn_)
+            except Exception as e: log.error(f"Delivery notification error: {e}")
+        _t4.Thread(target=_bg_drv_dlv, args=(b, image_bytes, image_filename), daemon=True).start()
 
     elif action == "pickup":
         cur.execute(
@@ -13641,10 +13648,11 @@ def driver_action(booking_id):
         )
         conn.commit()
         cur.close()
-        try:
-            send_pickup_confirmation(b)
-        except Exception as e:
-            log.error(f"Pickup notification error: {e}")
+        import threading as _t3
+        def _bg_pkup(b_):
+            try: send_pickup_confirmation(b_)
+            except Exception as e: log.error(f"Pickup notification error: {e}")
+        _t3.Thread(target=_bg_pkup,args=(b,),daemon=True).start()
 
     elif action == "undo_deliver":
         cur.execute(
