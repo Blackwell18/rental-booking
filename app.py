@@ -5608,8 +5608,16 @@ ADMIN_BOOKING_HTML = """
     <span style="font-size:.75rem;font-weight:600;color:#6b7280;white-space:nowrap">Delivery:</span>
     {% if not b.delivery_status %}
       <button onclick="openAdminDeliverModal()" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;cursor:pointer">&#x1F4E6; Mark Delivered</button>
+      {% if b.phone %}
+      <button onclick="bookingNotify('delivery')" id="bk-notify-delivery"
+        style="background:#f97316;color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;cursor:pointer">&#x1F69A; Notify: Delivering</button>
+      {% endif %}
     {% elif b.delivery_status == 'delivered' %}
       <span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:.18rem .65rem;font-size:.75rem;font-weight:700">&#x1F69A; Delivered</span>
+      {% if b.phone %}
+      <button onclick="bookingNotify('pickup')" id="bk-notify-pickup"
+        style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;cursor:pointer">&#x1F504; Notify: Picking Up</button>
+      {% endif %}
       <form method="POST" action="/admin/booking/{{ b.id }}/set-delivery" style="display:inline;margin:0">
         <input type="hidden" name="status" value="picked_up">
         <button style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;cursor:pointer">&#x1F504; Mark Picked Up</button>
@@ -7071,6 +7079,27 @@ document.getElementById('admin-deliver-modal').addEventListener('click',function
 });
 </script>
 <input type="file" id="admin-camera-input" accept="image/*" capture="environment" style="display:none" onchange="adminPhotoPreview(this)">
+<script>
+function bookingNotify(routeType) {
+  var btnId = routeType === 'pickup' ? 'bk-notify-pickup' : 'bk-notify-delivery';
+  var btn = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+  fetch('/admin/booking/{{ b.id }}/on-route', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({route_type: routeType})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (btn) {
+      btn.textContent = d.ok ? '✅ Sent!' : '❌ Failed';
+      btn.style.background = d.ok ? '#16a34a' : '#dc2626';
+      btn.disabled = false;
+    }
+  })
+  .catch(function(){ if (btn) { btn.textContent = '❌ Error'; btn.style.background='#dc2626'; btn.disabled=false; } });
+}
+</script>
 </body></html>
 """
 
