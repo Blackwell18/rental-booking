@@ -3440,7 +3440,23 @@ ADMIN_DASH_HTML = """
       .page-content{margin-left:0}
       .mobile-menu-btn{display:block}
       .day-panels{grid-template-columns:1fr}
-      .page-body{padding:1rem}
+      .page-body{padding:.75rem}
+      /* Dashboard header: search collapses below, refresh icon-only */
+      .page-header{flex-wrap:wrap;gap:.5rem;padding:.65rem 1rem}
+      .page-header h1{font-size:1.1rem}
+      .search-wrap{order:3;flex-basis:100%;margin:0}
+      .search-input{width:100%!important}
+      #refresh-btn span:last-child{display:none}
+      #refresh-btn{padding:.4rem .55rem}
+      /* Stat cards: slightly smaller on mobile */
+      .stat-card-value{font-size:1.4rem}
+      /* Table rows: larger tap targets */
+      td{padding:.7rem .65rem!important}
+      /* Booking rows in day panels */
+      .booking-row{padding:.65rem 1rem}
+      .bk-name{font-size:.9rem}
+      /* Action buttons in table */
+      .btn{padding:.35rem .55rem!important;font-size:.73rem!important}
     }
     .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:99}
     .overlay.show{display:block}
@@ -5448,12 +5464,42 @@ ADMIN_BOOKING_HTML = """
     header h1{font-size:1.2rem}
     .container{max-width:1100px;margin:0 auto;padding:.85rem 1rem .5rem}
     .card{background:white;border-radius:12px;box-shadow:0 1px 8px rgba(0,0,0,.06);padding:1.25rem 1.5rem;margin-bottom:0}
+    /* Mobile: make hdr-del delivery buttons a clean stacked grid */
+    @media(max-width:600px){
+      .hdr-del{display:grid!important;grid-template-columns:1fr 1fr;gap:.4rem!important;align-items:stretch!important}
+      .hdr-del button{width:100%!important;padding:.55rem .5rem!important;font-size:.8rem!important;min-height:42px;justify-content:center}
+      .hdr-del form{display:contents}
+      .hdr-del span[style]{grid-column:1/-1}
+    }
     .card h2{font-size:.82rem;font-weight:700;color:#6b7280;border-bottom:1px solid #f1f5f9;padding-bottom:.45rem;margin-bottom:.85rem;text-transform:uppercase;letter-spacing:.05em}
     .row{display:grid;grid-template-columns:140px 1fr;gap:.4rem .65rem;font-size:.88rem}
     .row .k{color:#9ca3af;font-size:.82rem}
     .row .v{font-weight:500;color:#111827}
     .badge{display:inline-block;padding:.2rem .7rem;border-radius:20px;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:0}
-    @media(max-width:768px){[style*="grid-template-columns:1fr 360px"]{grid-template-columns:1fr!important}[style*="position:sticky"]{position:relative!important}}
+    @media(max-width:768px){
+      [style*="grid-template-columns:1fr 360px"]{grid-template-columns:1fr!important}
+      [style*="position:sticky"]{position:relative!important}
+      /* Header area: stack booking # and actions vertically */
+      .pg-hdr{flex-wrap:wrap;padding:.6rem .85rem;gap:.4rem}
+      /* Delivery row: stack buttons as a grid on small screens */
+      .hdr-del{flex-direction:column!important;align-items:stretch!important;gap:.4rem!important}
+      .hdr-del button,.hdr-del a,.hdr-del form{width:100%}
+      .hdr-del form button{width:100%}
+      /* Make all action buttons in the top bar full-width on tiny screens */
+      .card{padding:1rem!important}
+      /* Table: smaller font on mobile */
+      table{font-size:.82rem}
+      th,td{padding:6px 8px!important}
+    }
+    @media(max-width:480px){
+      [style*="margin-left:auto"]{margin-left:0!important;width:100%}
+      [style*="display:flex;gap:.5rem;flex-wrap:wrap"]{flex-direction:column}
+      [style*="display:flex;gap:.5rem;flex-wrap:wrap"] form,
+      [style*="display:flex;gap:.5rem;flex-wrap:wrap"] button,
+      [style*="display:flex;gap:.5rem;flex-wrap:wrap"] a{width:100%!important}
+      [style*="display:flex;gap:.5rem;flex-wrap:wrap"] button,
+      [style*="display:flex;gap:.5rem;flex-wrap:wrap"] a{display:block!important;text-align:center!important;box-sizing:border-box!important}
+    }
     .badge-pending{background:#fefcbf;color:#975a16}
     .badge-accepted{background:#bee3f8;color:#2c5282}
     .badge-confirmed{background:#bee3f8;color:#2c5282}
@@ -11421,6 +11467,30 @@ ADMIN_ROUTE_HTML = """
     .stop-eta.show{display:block}
     .stop-eta.late{background:#dc2626}
     @media(max-width:520px){.btn-launch{font-size:.78rem;padding:.45rem .8rem}}
+    @media(max-width:768px){
+      .main{padding:.75rem}
+      /* Stop cards: full-width primary action buttons */
+      .stop{padding:.85rem 1rem;gap:.65rem}
+      .stop-name{font-size:1rem}
+      .stop-addr{font-size:.88rem}
+      /* Primary action buttons: easy to tap */
+      [style*="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom"]{
+        flex-direction:column;gap:.35rem
+      }
+      [style*="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom"] button,
+      [style*="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom"] span{
+        width:100%!important;padding:.65rem 1rem!important;font-size:.88rem!important;
+        min-height:44px;justify-content:center;display:flex!important;align-items:center
+      }
+      /* Secondary action buttons: keep small but easy to tap */
+      .btn-sm{padding:.4rem .75rem!important;font-size:.8rem!important;min-height:38px}
+      /* Date row */
+      .date-row{gap:.5rem}
+      .date-row input[type=date]{font-size:.85rem;padding:.4rem .6rem}
+      /* Launch strip wrap */
+      .launch-strip{gap:.45rem}
+      .btn-launch{padding:.55rem .85rem!important;font-size:.82rem!important}
+    }
   </style>
 </head>
 <body>
