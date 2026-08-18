@@ -11629,6 +11629,48 @@ ADMIN_ROUTE_HTML = """
       {% if b.items_summary %}
       <div class="stop-meta" style="margin-top:.25rem">📦 {{ b.items_summary }}</div>
       {% endif %}
+      <!-- ★ PRIMARY ACTIONS — top, context-sensitive ★ -->
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.55rem">
+        {% if b.delivery_status == 'picked_up' %}
+          <span class="btn-sm" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;cursor:default;font-weight:700">✅ Picked Up — Complete</span>
+        {% elif b.delivery_status == 'delivered' %}
+          {% if b.phone %}
+          <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}', 'pickup')"
+                  id="onroute-pickup-btn-{{ b.id }}"
+                  class="btn-sm" style="background:#7c3aed;color:#fff;border:1px solid #6d28d9;cursor:pointer;font-weight:700">
+            🔄 Notify: Picking Up
+          </button>
+          {% endif %}
+          {% if view == 'pickup' %}
+          <button onclick="routeMarkPickup({{ b.id }}, this)"
+                  class="btn-sm" style="background:#16a34a;color:#fff;border:1px solid #15803d;cursor:pointer;font-weight:700">
+            ✅ Mark Picked Up
+          </button>
+          {% else %}
+          <span class="btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;cursor:default;font-weight:700">📦 Delivered</span>
+          {% endif %}
+        {% else %}
+          {% if b.phone %}
+          <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}', 'delivery')"
+                  id="onroute-delivery-btn-{{ b.id }}"
+                  class="btn-sm" style="background:#f97316;color:#fff;border:1px solid #ea580c;cursor:pointer;font-weight:700">
+            🚚 Notify: Delivering
+          </button>
+          {% endif %}
+          {% if view == 'pickup' %}
+          <button onclick="routeMarkPickup({{ b.id }}, this)"
+                  class="btn-sm" style="background:#16a34a;color:#fff;border:1px solid #15803d;cursor:pointer;font-weight:700">
+            ✅ Mark Picked Up
+          </button>
+          {% else %}
+          <button onclick="routeMarkDelivered({{ b.id }}, this)"
+                  class="btn-sm" style="background:#2563eb;color:#fff;border:1px solid #1d4ed8;cursor:pointer;font-weight:700">
+            📦 Mark Delivered
+          </button>
+          {% endif %}
+        {% endif %}
+      </div>
+      <!-- Secondary: nav, call, admin link -->
       <div class="stop-actions">
         <a href="/admin/booking/{{ b.id }}" class="btn-sm btn-view">👁 #{{ b.id }}</a>
         {% if b.nav_address %}
@@ -11641,34 +11683,6 @@ ADMIN_ROUTE_HTML = """
         {% endif %}
         {% if b.phone %}
         <a href="tel:{{ b.phone }}" class="btn-sm">📞 Call</a>
-        {% endif %}
-        {% if b.phone %}
-        <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}', 'delivery')"
-                id="onroute-delivery-btn-{{ b.id }}"
-                class="btn-sm" style="background:#f97316;color:#fff;border-color:#ea580c;cursor:pointer">
-          🚚 Notify: Delivering
-        </button>
-        <button onclick="sendOnRoute({{ b.id }}, '{{ b.nav_address|replace("'","\'") }}', 'pickup')"
-                id="onroute-pickup-btn-{{ b.id }}"
-                class="btn-sm" style="background:#7c3aed;color:#fff;border-color:#6d28d9;cursor:pointer">
-          🔄 Notify: Picking Up
-        </button>
-        {% endif %}
-        {% if view == 'pickup' and b.delivery_status != 'picked_up' %}
-        <button onclick="routeMarkPickup({{ b.id }}, this)"
-                class="btn-sm" style="background:#16a34a;color:#fff;border-color:#15803d;cursor:pointer">
-          ✅ Mark Picked Up
-        </button>
-        {% elif view == 'pickup' and b.delivery_status == 'picked_up' %}
-        <span class="btn-sm" style="background:#f0fdf4;color:#15803d;border-color:#86efac;cursor:default">✅ Picked Up</span>
-        {% endif %}
-        {% if view != 'pickup' and b.delivery_status != 'delivered' and b.delivery_status != 'picked_up' %}
-        <button onclick="routeMarkDelivered({{ b.id }}, this)"
-                class="btn-sm" style="background:#2563eb;color:#fff;border-color:#1d4ed8;cursor:pointer">
-          📦 Mark Delivered
-        </button>
-        {% elif view != 'pickup' and b.delivery_status == 'delivered' %}
-        <span class="btn-sm" style="background:#eff6ff;color:#1d4ed8;border-color:#93c5fd;cursor:default">📦 Delivered</span>
         {% endif %}
         {% if b.route_override %}
         <form method="POST" action="/admin/route/override/{{ b.id }}" style="display:inline">
@@ -13339,12 +13353,26 @@ DRIVER_VIEW_HTML = """
   <div class="action-bar">
     {% if s.state == 'none' %}
     <button class="btn-deliver" onclick="openDeliverModal({{ s.id }})">📦 Mark Delivered</button>
+    {% if s.phone %}
+    <button onclick="driverNotify({{ s.id }}, '{{ s.address|replace("'","\'") }}', 'delivery')"
+            id="drv-notify-{{ s.id }}"
+            style="width:100%;margin-top:.5rem;padding:.7rem;background:#f97316;color:white;border:none;border-radius:10px;font-size:.88rem;font-weight:700;cursor:pointer">
+      🚚 Notify: On My Way to Deliver
+    </button>
+    {% endif %}
     {% elif s.state == 'delivered' %}
     <div class="delivered-row">
       <span class="delivered-label">✅ Delivered</span>
       <button class="btn-pickup" onclick="doAction({{ s.id }}, 'pickup')">🔄 Mark Picked Up</button>
       <button class="btn-undo" onclick="doAction({{ s.id }}, 'undo_deliver')" title="Undo">↩</button>
     </div>
+    {% if s.phone %}
+    <button onclick="driverNotify({{ s.id }}, '{{ s.address|replace("'","\'") }}', 'pickup')"
+            id="drv-notify-{{ s.id }}"
+            style="width:100%;margin-top:.5rem;padding:.7rem;background:#7c3aed;color:white;border:none;border-radius:10px;font-size:.88rem;font-weight:700;cursor:pointer">
+      🔄 Notify: On My Way to Pick Up
+    </button>
+    {% endif %}
     {% else %}
     <div class="complete-bar">✅ Picked Up — Complete</div>
     {% endif %}
@@ -13396,6 +13424,27 @@ DRIVER_VIEW_HTML = """
 
 <script>
 var _deliverId = null;
+
+function driverNotify(bookingId, address, routeType) {
+  var btn = document.getElementById('drv-notify-' + bookingId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+  fetch('/admin/booking/' + bookingId + '/on-route', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({route_type: routeType})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (btn) {
+      btn.textContent = d.ok ? '✅ Sent!' : '❌ Failed';
+      btn.style.background = d.ok ? '#16a34a' : '#dc2626';
+    }
+    if (d.ok && address) {
+      window.open('https://maps.apple.com/?daddr=' + encodeURIComponent(address) + '&dirflg=d', '_blank');
+    }
+  })
+  .catch(function(){ if (btn) { btn.textContent = '❌ Error'; btn.style.background = '#dc2626'; } });
+}
 
 function openDeliverModal(id) {
   _deliverId = id;
