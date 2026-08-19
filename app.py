@@ -10301,10 +10301,12 @@ def apply_weekend_schedule(booking_id):
                     # Event Start, Event End, and Setup fields are left untouched
                     cur.execute("""
                         UPDATE bookings SET
+                          setup_date=%s, setup_time=%s,
                           delivery_date=%s, delivery_time=%s,
+                          event_end_date=%s, event_end_time=%s,
                           pickup_date=%s, pickup_time=%s
                         WHERE id=%s
-                    """, (friday, "16:00", pickup_date, "10:00", booking_id))
+                    """, (friday, "16:00", friday, "16:00", pickup_date, "10:00", pickup_date, "10:00", booking_id))
                     conn.commit()
             cur.close(); conn.close()
         except Exception as e:
