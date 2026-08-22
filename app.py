@@ -16567,6 +16567,16 @@ def customer_portal_home():
                      'padding:.75rem 1rem;margin:1rem 1rem 0;font-size:.85rem;color:#166534;font-weight:600">'
                      '&#x2705; Your message was sent! We\'ll be in touch soon.</div>'
                      if request.args.get("msg_sent") else "")
+    _profile_banner = ('<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;'
+                        'padding:.75rem 1rem;margin:1rem 1rem 0;font-size:.85rem;color:#166534;font-weight:600">'
+                        '&#x2705; Your information has been updated!</div>'
+                        if request.args.get("profile_ok") else
+                        '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;'
+                        'padding:.75rem 1rem;margin:1rem 1rem 0;font-size:.85rem;color:#991b1b;font-weight:600">'
+                        '&#x26A0;&#xFE0F; Please enter your name.</div>'
+                        if request.args.get("profile_err") else "")
+    _cur_name  = (rows[0].get("full_name") or "") if rows else ""
+    _cur_phone = (rows[0].get("phone") or "") if rows else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -16590,12 +16600,13 @@ a.logout:hover{{color:#6b7280}}
   <p>Hi {first_name}! Here are your orders.</p>
 </div>
 {_msg_banner}
+{_profile_banner}
 <div class="container">
   <div class="section-label">Upcoming Orders</div>
   {upcoming_html}
   <div class="section-label">Past Orders</div>
   {past_html}
-  <div class="section-label" style="margin-top:1.75rem">Send Us a Message</div>
+  <a href="{BASE_URL}/" style="display:block;width:100%;padding:.85rem;background:linear-gradient(135deg,#16a34a,#15803d);color:white;border:none;border-radius:12px;font-size:.95rem;font-weight:800;text-align:center;text-decoration:none;box-sizing:border-box;margin-bottom:1rem;box-shadow:0 3px 10px rgba(22,163,74,.3)">\n    \U0001f389 Start a New Booking\n  </a>\n\n  <div class="section-label">My Information</div>\n  <div style="background:white;border:1.5px solid #e5e7eb;border-radius:14px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.05)">\n    <p style="font-size:.83rem;color:#6b7280;margin-bottom:.85rem">Update your name or phone number. We\'ll be notified automatically.</p>\n    <form method="POST" action="/my-orders/update-profile">\n      <label style="display:block;font-size:.78rem;font-weight:700;color:#374151;margin-bottom:.25rem">Full Name</label>\n      <input type="text" name="full_name" value="{{_cur_name}}" required\n        style="width:100%;padding:.65rem .85rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem;margin-bottom:.75rem;outline:none;box-sizing:border-box;font-family:inherit">\n      <label style="display:block;font-size:.78rem;font-weight:700;color:#374151;margin-bottom:.25rem">Phone Number</label>\n      <input type="tel" name="phone" value="{{_cur_phone}}" placeholder="(203) 555-0100"\n        style="width:100%;padding:.65rem .85rem;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem;margin-bottom:.85rem;outline:none;box-sizing:border-box;font-family:inherit">\n      <button type="submit"\n        style="width:100%;padding:.75rem;background:#6366f1;color:white;border:none;border-radius:8px;font-size:.92rem;font-weight:700;cursor:pointer">\U0001f4be Save Changes</button>\n    </form>\n  </div>\n\n  <div class="section-label" style="margin-top:1.75rem">Send Us a Message</div>
   <div style="background:white;border:1.5px solid #e5e7eb;border-radius:14px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.05)">
     <p style="font-size:.83rem;color:#6b7280;margin-bottom:.75rem">Have a question about your order? Send us a quick message and we\'ll get back to you.</p>
     <form method="POST" action="/my-orders/send-message">
