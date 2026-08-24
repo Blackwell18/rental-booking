@@ -16398,7 +16398,9 @@ def customer_portal_home():
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT id, full_name, status, payment_status, event_start_date, event_end_date,
+            SELECT id, full_name, company_name, email, phone,
+                   renter_street, renter_city, renter_state, renter_zip,
+                   status, payment_status, event_start_date, event_end_date,
                    event_start_time, setup_date, delivery_date, pickup_date,
                    event_street, event_city, event_state, event_zip,
                    items_json, grand_total, delivery_fee, late_night_fee, tax_amount, tax_rate,
@@ -16577,8 +16579,14 @@ def customer_portal_home():
                         'padding:.75rem 1rem;margin:1rem 1rem 0;font-size:.85rem;color:#991b1b;font-weight:600">'
                         '&#x26A0;&#xFE0F; Please enter your name.</div>'
                         if request.args.get("profile_err") else "")
-    _cur_name  = (rows[0].get("full_name") or "") if rows else ""
-    _cur_phone = (rows[0].get("phone") or "") if rows else ""
+    _cur_name    = (rows[0].get("full_name") or "") if rows else ""
+    _cur_email   = (rows[0].get("email") or email) if rows else email
+    _cur_phone   = (rows[0].get("phone") or "") if rows else ""
+    _cur_company = (rows[0].get("company_name") or "") if rows else ""
+    _cur_street  = (rows[0].get("renter_street") or "") if rows else ""
+    _cur_city    = (rows[0].get("renter_city") or "") if rows else ""
+    _cur_state   = (rows[0].get("renter_state") or "") if rows else ""
+    _cur_zip     = (rows[0].get("renter_zip") or "") if rows else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head>
