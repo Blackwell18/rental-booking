@@ -4469,7 +4469,7 @@ ADMIN_NEW_BOOKING_HTML = r"""
           background:#fff;border:1.5px solid #2563eb;border-radius:10px;
           box-shadow:0 8px 28px rgba(0,0,0,.18);max-height:300px;overflow-y:auto"></div>
       </div>
-      <div class="field"><label>Company Name <span style="color:#718096;font-weight:400">(if applicable)</span></label><input id="f_company" name="company_name" placeholder="ABC Events LLC" value="{{ form.company_name or '' }}"></div>
+      <div class="field" style="position:relative"><label>Company Name <span style="color:#718096;font-weight:400">(if applicable)</span></label><input id="f_company" name="company_name" placeholder="ABC Events LLC" value="{{ form.company_name or '' }}" autocomplete="new-company" oninput="csSearch(this.value,'cs-dd-co')" onkeydown="csKey(event,'cs-dd-co')"><div id="cs-dd-co" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:99999;background:#fff;border:1.5px solid #2563eb;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);max-height:300px;overflow-y:auto"></div></div>
     </div>
     <div class="field"><label>Street Address <span class="required">*</span></label><input id="f_street" name="renter_street" required placeholder="Start typing your address…" value="{{ form.renter_street or '' }}" autocomplete="new-address"></div>
     <div class="row3">
@@ -5381,15 +5381,17 @@ table{border-collapse:collapse}
   var _t=null,_data=[],_fi=-1;
   function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-  window.csSearch=function(val){
+  window.csSearch=function(val,ddId){
     clearTimeout(_t);
-    var dd=document.getElementById('cs-dd');
+    var dd=document.getElementById(ddId||'cs-dd');
     if(!val||val.length<2){dd.style.display='none';return;}
+    var _ddId=ddId||'cs-dd';
     _t=setTimeout(function(){
       fetch('/admin/api/customer-search?q='+encodeURIComponent(val))
         .then(function(r){return r.json();})
         .then(function(data){
           _data=data;_fi=-1;
+          var dd=document.getElementById(_ddId);
           if(!data.length){dd.style.display='none';return;}
           dd.innerHTML=data.map(function(row,i){
             var loc=[row.city,row.state].filter(Boolean).join(', ');
@@ -5421,8 +5423,8 @@ table{border-collapse:collapse}
     document.getElementById('f_company').focus();
   };
 
-  window.csKey=function(e){
-    var dd=document.getElementById('cs-dd');
+  window.csKey=function(e,ddId){
+    var dd=document.getElementById(ddId||'cs-dd');
     var items=dd.querySelectorAll('.cs-item');
     if(!items.length)return;
     if(e.key==='ArrowDown'){e.preventDefault();_fi=Math.min(_fi+1,items.length-1);}
@@ -5436,6 +5438,8 @@ table{border-collapse:collapse}
   document.addEventListener('click',function(e){
     if(!e.target.closest('#f_full_name')&&!e.target.closest('#cs-dd'))
       document.getElementById('cs-dd').style.display='none';
+    if(!e.target.closest('#f_company')&&!e.target.closest('#cs-dd-co'))
+      document.getElementById('cs-dd-co').style.display='none';
   });
 })();
 </script>
@@ -9786,9 +9790,9 @@ def api_customer_search():
         cur.execute("""
             SELECT full_name, company_name, email, phone, street, city, state, zip
             FROM customers
-            WHERE full_name ILIKE %s OR phone ILIKE %s OR email ILIKE %s
+            WHERE full_name ILIKE %s OR company_name ILIKE %s OR phone ILIKE %s OR email ILIKE %s
             ORDER BY full_name LIMIT 8
-        """, (f"%{q}%", f"%{q}%", f"%{q}%"))
+        """, (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"))
         rows = [dict(r) for r in cur.fetchall()]
         cur.close(); conn.close()
         return jsonify(rows)
