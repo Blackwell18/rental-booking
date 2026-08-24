@@ -14143,6 +14143,11 @@ ADMIN_CUSTOMERS_HTML = """
       <a href="/admin/booking/new" class="btn btn-primary" style="background:#16a34a">+ New Booking</a>
       <a href="/admin/customers/import" class="btn btn-outline">⬆ Import CSV</a>
       <button class="btn btn-primary" onclick="toggleAdd()">+ Add Customer</button>
+      <form method="POST" action="/admin/customers/sync-from-bookings" style="display:inline;margin:0">
+        <button type="submit" class="btn btn-outline" style="background:#eff6ff;color:#1d4ed8;border-color:#93c5fd"
+          onclick="return confirm('Sync all booking customers into Clients list? This won\'t overwrite existing records.')"
+          title="Import all unique customers from past bookings">🔄 Sync from Bookings</button>
+      </form>
     </div>
   </div>
 
@@ -15108,6 +15113,46 @@ def admin_customers():
         flash_ok=flash_ok,
         flash_err=flash_err,
     )
+
+
+@app.route("/admin/customers/sync-from-bookings", methods=["POST"])
+@admin_required
+def sync_customers_from_bookings():
+    """Create customer records for any booking email not already in customers table."""
+    conn = get_db()
+    added = 0
+    if conn:
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            # Get most-recent booking info per unique email
+            cur.execute("""
+                SELECT DISTINCT ON (LOWER(TRIM(email)))
+                    full_name, company_name, email, phone,
+                    renter_street AS street, renter_city AS city,
+                    renter_state AS state, renter_zip AS zip
+                FROM bookings
+                WHERE email IS NOT NULL AND TRIM(email) != ''
+                ORDER BY LOWER(TRIM(email)), id DESC
+            """)
+            rows = cur.fetchall()
+            for r in rows:
+                cur.execute(
+                    "SELECT id FROM customers WHERE LOWER(TRIM(email))=LOWER(%s)",
+                    (r["email"],)
+                )
+                if not cur.fetchone():
+                    cur.execute(
+                        "INSERT INTO customers (full_name, company_name, email, phone, street, city, state, zip) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (r["full_name"], r.get("company_name"), r["email"], r.get("phone"),
+                         r.get("street"), r.get("city"), r.get("state"), r.get("zip"))
+                    )
+                    added += 1
+            conn.commit()
+            cur.close(); conn.close()
+        except Exception as e:
+            log.error(f"sync_customers_from_bookings error: {e}")
+    return redirect(url_for("admin_customers", flash_ok=f"Synced {added} new customer(s) from bookings."))
 
 
 @app.route("/admin/customers/add", methods=["POST"])
