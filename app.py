@@ -5387,7 +5387,7 @@ table{border-collapse:collapse}
     if(!val||val.length<2){dd.style.display='none';return;}
     var _ddId=ddId||'cs-dd';
     _t=setTimeout(function(){
-      fetch('/admin/api/customer-search?q='+encodeURIComponent(val))
+      fetch('/admin/api/customer-search?q='+encodeURIComponent(val)+(_ddId==='cs-dd-co'?'&co=1':''))
         .then(function(r){return r.json();})
         .then(function(data){
           _data=data;_fi=-1;
@@ -9790,9 +9790,10 @@ def api_customer_search():
         cur.execute("""
             SELECT full_name, company_name, email, phone, street, city, state, zip
             FROM customers
-            WHERE full_name ILIKE %s OR company_name ILIKE %s OR phone ILIKE %s OR email ILIKE %s
+            WHERE (full_name ILIKE %s OR company_name ILIKE %s OR phone ILIKE %s OR email ILIKE %s)
+              AND (%s OR (company_name IS NOT NULL AND company_name != ''))
             ORDER BY full_name LIMIT 8
-        """, (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"))
+        """, (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", not bool(request.args.get("co"))))
         rows = [dict(r) for r in cur.fetchall()]
         cur.close(); conn.close()
         return jsonify(rows)
