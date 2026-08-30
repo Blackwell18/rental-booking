@@ -1044,7 +1044,7 @@ def build_contract_html(b, deposit_amount):
 
 OWNER_BCC = "rentapartyct@gmail.com"
 
-def _send_email(to, subject, html, plain, reply_to=None):
+def _send_email(to, subject, html, plain, reply_to=None, bcc=True):
     if not all([GMAIL_USER, GMAIL_APP_PASSWORD]):
         log.warning("Gmail not configured")
         return
@@ -1053,7 +1053,7 @@ def _send_email(to, subject, html, plain, reply_to=None):
         msg["From"]    = f"{BUSINESS_NAME} <{GMAIL_USER}>"
         msg["To"]      = to
         msg["Subject"] = subject
-        msg["Bcc"]     = OWNER_BCC
+        if bcc: msg["Bcc"] = OWNER_BCC
         if reply_to:
             msg["Reply-To"] = reply_to
         msg.attach(MIMEText(plain, "plain"))
@@ -16401,7 +16401,7 @@ def customer_portal_send_link():
 </div></body></html>"""
     plain = f"Here's your secure link to view your {BUSINESS_NAME} orders: {link} (expires in 24 hours)"
     try:
-        _send_email(email, f"Your {BUSINESS_NAME} Orders Link", html_email, plain)
+        _send_email(email, f"Your {BUSINESS_NAME} Orders Link", html_email, plain, bcc=False)
     except Exception as e:
         log.error(f"portal email error: {e}")
     return redirect(url_for("customer_portal_request", sent=1))
@@ -16435,6 +16435,12 @@ def customer_portal_access():
         return redirect(url_for("customer_portal_request", error="Something went wrong. Please try again."))
     session["portal_email"] = email
     session.permanent = True
+    try:
+        send_sms(BUSINESS_PHONE or "2037517964",
+            f"\U0001f4f1 Portal access: {email} just logged into their portal.",
+            _admin=True)
+    except Exception as _e:
+        log.error(f"portal access SMS error: {_e}")
     return redirect(url_for("customer_portal_home"))
 
 # ── Portal home: order history ────────────────────────────────────────────────
