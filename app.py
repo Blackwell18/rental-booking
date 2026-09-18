@@ -11571,10 +11571,98 @@ ADMIN_ROUTE_HTML = """
   {# ════════════════ DELIVERY COUNT TAB ════════════════ #}
   {% if view == 'count' %}
     {% if item_totals %}
+
+    {# Build full data structure as JSON for JS filtering #}
+    <script>
+    var COUNT_DATA = {{ item_totals | tojson }};
+    // active set of booking IDs
+    var ACTIVE_IDS = new Set(COUNT_DATA.flatMap(function(r){return r.bookings.map(function(b){return b.id;});}));
+
+    function rebuildCount() {
+      var tbody = document.getElementById('count-tbody');
+      var tfoot_span = document.getElementById('count-total');
+      var header_span = document.getElementById('count-types');
+      var grandTotal = 0;
+      var visibleTypes = 0;
+      var rows = tbody.querySelectorAll('tr[data-item]');
+      rows.forEach(function(tr) {
+        var item = tr.getAttribute('data-item');
+        var row  = COUNT_DATA.find(function(r){return r.item===item;});
+        if (!row) return;
+        var qty = row.bookings.reduce(function(s,b){return ACTIVE_IDS.has(b.id)?s+b.qty:s;}, 0);
+        var qtySpan = tr.querySelector('.count-qty');
+        if (qty === 0) {
+          tr.style.display = 'none';
+        } else {
+          tr.style.display = '';
+          qtySpan.textContent = qty;
+          visibleTypes++;
+          grandTotal += qty;
+          // Update booking pills visibility
+          tr.querySelectorAll('[data-bid]').forEach(function(pill){
+            var bid = parseInt(pill.getAttribute('data-bid'));
+            pill.style.display = ACTIVE_IDS.has(bid) ? '' : 'none';
+          });
+        }
+      });
+      tfoot_span.textContent = grandTotal;
+      header_span.textContent = visibleTypes + ' item type' + (visibleTypes!==1?'s':'');
+    }
+
+    function toggleCustomer(bid, btn) {
+      if (ACTIVE_IDS.has(bid)) {
+        ACTIVE_IDS.delete(bid);
+        btn.style.background='#f3f4f6';
+        btn.style.color='#9ca3af';
+        btn.style.borderColor='#e5e7eb';
+        btn.style.textDecoration='line-through';
+      } else {
+        ACTIVE_IDS.add(bid);
+        btn.style.background='#d1fae5';
+        btn.style.color='#065f46';
+        btn.style.borderColor='#6ee7b7';
+        btn.style.textDecoration='';
+      }
+      rebuildCount();
+    }
+    </script>
+
+    {# Collect unique customers across all item rows #}
+    {% set ns = namespace(seen=[]) %}
+    {% for row in item_totals %}{% for bk in row.bookings %}{% if bk.id not in ns.seen %}{% set ns.seen = ns.seen + [bk.id] %}{% endif %}{% endfor %}{% endfor %}
+    {% set all_customers = [] %}
+    {% for row in item_totals %}{% for bk in row.bookings %}{% if bk.id in ns.seen and bk not in all_customers %}{% set _ = all_customers.append(bk) %}{% endif %}{% endfor %}{% endfor %}
+
+    {# De-duplicate by booking id using a second pass #}
+    {% set unique_customers = [] %}
+    {% set seen_ids = [] %}
+    {% for row in item_totals %}
+      {% for bk in row.bookings %}
+        {% if bk.id not in seen_ids %}
+          {% set _ = unique_customers.append(bk) %}
+          {% set _ = seen_ids.append(bk.id) %}
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+
+    {# Customer filter pills #}
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:.85rem 1.1rem;margin-bottom:.75rem">
+      <div style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem">Filter by Customer</div>
+      <div style="display:flex;flex-wrap:wrap;gap:.4rem">
+        {% for cust in unique_customers %}
+        <button
+          onclick="toggleCustomer({{ cust.id }}, this)"
+          style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:20px;padding:.3rem .85rem;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s">
+          #{{ cust.id }} {{ cust.name }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:1.5rem">
       <div style="background:#059669;color:#fff;padding:.75rem 1.25rem;display:flex;align-items:center;justify-content:space-between">
         <span style="font-weight:700;font-size:1rem">📦 Total Items Going Out — {{ route_date }}</span>
-        <span style="font-size:.82rem;opacity:.85">{{ item_totals|length }} item type{{ 's' if item_totals|length != 1 }}</span>
+        <span id="count-types" style="font-size:.82rem;opacity:.85">{{ item_totals|length }} item type{{ 's' if item_totals|length != 1 }}</span>
       </div>
       <table style="width:100%;border-collapse:collapse">
         <thead>
@@ -11584,15 +11672,14 @@ ADMIN_ROUTE_HTML = """
             <th style="text-align:left;padding:.6rem 1.25rem;font-size:.78rem;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.05em;display:none" class="bk-col">Bookings</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="count-tbody">
           {% for row in item_totals %}
-          <tr style="border-bottom:1px solid #e5e7eb{% if loop.last %};border-bottom:none{% endif %}"
-              onclick="toggleBreakdown(this)" style="cursor:pointer">
-            <td style="padding:.75rem 1.25rem;font-weight:600;font-size:.92rem;color:#111827;cursor:pointer">
+          <tr data-item="{{ row.item }}" style="border-bottom:1px solid #e5e7eb{% if loop.last %};border-bottom:none{% endif %}">
+            <td style="padding:.75rem 1.25rem;font-weight:600;font-size:.92rem;color:#111827">
               {{ row.item }}
             </td>
             <td style="padding:.75rem 1.25rem;text-align:right">
-              <span style="background:#dcfce7;color:#166534;font-weight:800;font-size:1.05rem;padding:.2rem .7rem;border-radius:8px">
+              <span class="count-qty" style="background:#dcfce7;color:#166534;font-weight:800;font-size:1.05rem;padding:.2rem .7rem;border-radius:8px">
                 {{ row.qty }}
               </span>
             </td>
@@ -11600,6 +11687,7 @@ ADMIN_ROUTE_HTML = """
               <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                 {% for bk in row.bookings %}
                 <a href="/admin/booking/{{ bk.id }}"
+                   data-bid="{{ bk.id }}"
                    style="font-size:.75rem;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:.15rem .5rem;text-decoration:none;white-space:nowrap"
                    onclick="event.stopPropagation()">
                   #{{ bk.id }} {{ bk.name }} ({{ bk.qty }})
@@ -11614,7 +11702,7 @@ ADMIN_ROUTE_HTML = """
           <tr style="background:#f0fdf4;border-top:2px solid #bbf7d0">
             <td style="padding:.65rem 1.25rem;font-weight:700;color:#065f46;font-size:.88rem">TOTAL PIECES</td>
             <td style="padding:.65rem 1.25rem;text-align:right">
-              <span style="background:#059669;color:#fff;font-weight:800;font-size:1.1rem;padding:.25rem .8rem;border-radius:8px">
+              <span id="count-total" style="background:#059669;color:#fff;font-weight:800;font-size:1.1rem;padding:.25rem .8rem;border-radius:8px">
                 {{ item_totals | sum(attribute='qty') }}
               </span>
             </td>
