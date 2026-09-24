@@ -5687,6 +5687,15 @@ ADMIN_BOOKING_HTML = """
         <button onclick="return confirm('Reset to Not Delivered?')" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:7px;padding:.35rem .65rem;font-size:.8rem;cursor:pointer">&#x274C; Reset</button>
       </form>
     {% endif %}
+    {% if b.event_street %}
+    {% set _hdr_q = ((b.event_street or '') + (', ' + (b.event_city or '') if b.event_city else '') + (', ' + (b.event_state or '') if b.event_state else '') + (' ' + (b.event_zip or '') if b.event_zip else '')) | replace(' ', '+') %}
+    <span style="margin-left:auto;display:inline-flex;border-radius:7px;overflow:hidden;border:1.5px solid #d1d5db;flex-shrink:0">
+      <a href="https://www.google.com/maps/search/?api=1&query={{ _hdr_q }}" target="_blank" rel="noopener"
+         style="background:#4285f4;color:#fff;font-size:.78rem;font-weight:700;padding:.32rem .65rem;text-decoration:none;white-space:nowrap">📍 Google</a>
+      <a href="https://maps.apple.com/?q={{ _hdr_q }}" target="_blank" rel="noopener"
+         style="background:#1c1c1e;color:#fff;font-size:.78rem;font-weight:700;padding:.32rem .65rem;text-decoration:none;white-space:nowrap;border-left:1px solid #444"> Apple</a>
+    </span>
+    {% endif %}
   </div>
   {% endif %}
 </div>
@@ -5912,7 +5921,19 @@ ADMIN_BOOKING_HTML = """
           </span>
           <span class="k">Setup</span><span class="v">{{ b.setup_date.strftime('%m/%d/%Y') if b.setup_date else '—' }} &nbsp;{{ b.setup_time or '' }}</span>
           <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
-          <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
+          <span class="k">Event Address</span>
+          <span class="v">
+            {{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}
+            {% if b.event_street %}
+            {% set _ea_q = ((b.event_street or '') + (', ' + (b.event_city or '') if b.event_city else '') + (', ' + (b.event_state or '') if b.event_state else '') + (' ' + (b.event_zip or '') if b.event_zip else '')) | replace(' ', '+') %}
+            <span style="display:inline-flex;gap:.3rem;flex-wrap:wrap;margin-top:.3rem">
+              <a href="https://www.google.com/maps/search/?api=1&query={{ _ea_q }}" target="_blank" rel="noopener"
+                 style="font-size:.73rem;background:#4285f4;color:#fff;border-radius:5px;padding:.18rem .5rem;text-decoration:none;font-weight:600;white-space:nowrap">📍 Google Maps</a>
+              <a href="https://maps.apple.com/?q={{ _ea_q }}" target="_blank" rel="noopener"
+                 style="font-size:.73rem;background:#1c1c1e;color:#fff;border-radius:5px;padding:.18rem .5rem;text-decoration:none;font-weight:600;white-space:nowrap"> Apple Maps</a>
+            </span>
+            {% endif %}
+          </span>
           <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
           {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
         </div>
@@ -6043,7 +6064,19 @@ ADMIN_BOOKING_HTML = """
         </form>
         <div class="row" style="margin:.65rem 0 0">
           <span class="k">Venue Type</span><span class="v" style="text-transform:capitalize">{{ b.venue_type or '—' }}</span>
-          <span class="k">Event Address</span><span class="v">{{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}</span>
+          <span class="k">Event Address</span>
+          <span class="v">
+            {{ b.event_street or '' }}{% if b.event_city %}, {{ b.event_city }}{% endif %}{% if b.event_state %}, {{ b.event_state }}{% endif %} {{ b.event_zip or '' }}
+            {% if b.event_street %}
+            {% set _ea_q2 = ((b.event_street or '') + (', ' + (b.event_city or '') if b.event_city else '') + (', ' + (b.event_state or '') if b.event_state else '') + (' ' + (b.event_zip or '') if b.event_zip else '')) | replace(' ', '+') %}
+            <span style="display:inline-flex;gap:.3rem;flex-wrap:wrap;margin-top:.3rem">
+              <a href="https://www.google.com/maps/search/?api=1&query={{ _ea_q2 }}" target="_blank" rel="noopener"
+                 style="font-size:.73rem;background:#4285f4;color:#fff;border-radius:5px;padding:.18rem .5rem;text-decoration:none;font-weight:600;white-space:nowrap">📍 Google Maps</a>
+              <a href="https://maps.apple.com/?q={{ _ea_q2 }}" target="_blank" rel="noopener"
+                 style="font-size:.73rem;background:#1c1c1e;color:#fff;border-radius:5px;padding:.18rem .5rem;text-decoration:none;font-weight:600;white-space:nowrap"> Apple Maps</a>
+            </span>
+            {% endif %}
+          </span>
           <span class="k">Deliver To</span><span class="v">{{ b.delivery_location or '—' }}</span>
           {% if b.venue_latest_pickup %}<span class="k">Latest Pickup</span><span class="v">{{ b.venue_latest_pickup }}</span>{% endif %}
         </div>
