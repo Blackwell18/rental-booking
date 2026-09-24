@@ -5653,6 +5653,15 @@ ADMIN_BOOKING_HTML = """
     {% endif %}
     <a href="/admin/booking/{{ b.id }}/edit" style="margin-left:{% if b.status not in ('pending', 'accepted', 'confirmed') or b.payment_status not in ('waiting', None, '') %}auto{% else %}0{% endif %};font-size:.82rem;color:#6b7280;text-decoration:none;font-weight:500;white-space:nowrap;border:1px solid #e5e7eb;border-radius:6px;padding:.3rem .75rem">✏️ Edit</a>
   </div>
+  {% if b.phone %}
+  <div style="width:100%;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding-top:.4rem;border-top:1px solid #f3f4f6">
+    <span style="font-size:.75rem;font-weight:600;color:#6b7280;white-space:nowrap">Contact:</span>
+    <a href="tel:{{ b.phone }}" style="background:#2563eb;color:#fff;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;text-decoration:none;white-space:nowrap">📞 Call</a>
+    <a href="sms:{{ b.phone }}" style="background:#16a34a;color:#fff;border-radius:7px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;text-decoration:none;white-space:nowrap">💬 Text</a>
+    <span style="font-size:.82rem;color:#374151;font-weight:500">{{ b.phone }}</span>
+    {% if b.full_name %}<span style="font-size:.78rem;color:#9ca3af">— {{ b.full_name }}</span>{% endif %}
+  </div>
+  {% endif %}
   {% if b.status not in ('denied','cancelled') %}
   <div class="hdr-del" style="width:100%;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding-top:.4rem;border-top:1px solid #f3f4f6">
     <span style="font-size:.75rem;font-weight:600;color:#6b7280;white-space:nowrap">Delivery:</span>
