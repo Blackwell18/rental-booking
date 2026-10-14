@@ -130,6 +130,8 @@ DELIVERY_BASE_FEE  = _float("DELIVERY_BASE_FEE",  "55")
 DELIVERY_RATE      = _float("DELIVERY_RATE",       "3.80")
 
 GOOGLE_MAPS_KEY    = os.getenv("GOOGLE_MAPS_KEY",    "")
+RECAPTCHA_SITE_KEY   = os.getenv("RECAPTCHA_SITE_KEY",   "6Lf-8e4tAAAAACBMsICklKX3Rp85wUAfs1B0qqDU")
+RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "6Lf-8e4tAAAAAGGez7AiClqZEe7lKnfrO28-Al07")
 DATABASE_URL       = os.getenv("DATABASE_URL",       "")
 OWNER_EMAIL        = os.getenv("OWNER_EMAIL",        "")
 GMAIL_USER         = os.getenv("GMAIL_USER",         "")
@@ -2152,6 +2154,9 @@ FORM_HTML = r"""
     .submit-btn:hover{opacity:.92}
     .submit-btn:disabled{opacity:.6;cursor:not-allowed}
   </style>
+  {% if recaptcha_site_key %}
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  {% endif %}
 </head>
 <body>
 <header>
@@ -2455,6 +2460,11 @@ FORM_HTML = r"""
     style="position:absolute;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0;pointer-events:none" value="">
   <!-- Timestamp: used to detect instant bot submissions -->
   <input type="hidden" name="_ts" id="_form_ts" value="">
+  {% if recaptcha_site_key %}
+  <div style="display:flex;justify-content:center;margin-bottom:1rem">
+    <div class="g-recaptcha" data-sitekey="{{ recaptcha_site_key }}"></div>
+  </div>
+  {% endif %}
   <button type="submit" class="submit-btn" id="submitBtn">Send Quote Request</button>
 </form>
 </div>
@@ -7276,6 +7286,7 @@ def index():
         products=get_products(),
         exact_time_fee=EXACT_TIME_FEE,
         google_maps_key=GOOGLE_MAPS_KEY,
+        recaptcha_site_key=RECAPTCHA_SITE_KEY,
         error=None,
         form=prefill,
     )
@@ -7327,6 +7338,31 @@ def _submit_inner():
                 return redirect(url_for("index"))
     except Exception:
         pass
+    # 3. Google reCAPTCHA v2 verification
+    if RECAPTCHA_SECRET_KEY:
+        _rc_token = f.get("g-recaptcha-response", "")
+        if not _rc_token:
+            _prods = get_products()
+            return render_template_string(FORM_HTML, business_name=BUSINESS_NAME,
+                google_maps_key=GOOGLE_MAPS_KEY, recaptcha_site_key=RECAPTCHA_SITE_KEY,
+                products=_prods, exact_time_fee=EXACT_TIME_FEE,
+                error="Please check the 'I'm not a robot' box and try again.", form=f), 400
+        try:
+            _rc_resp = requests.post(
+                "https://www.google.com/recaptcha/api/siteverify",
+                data={"secret": RECAPTCHA_SECRET_KEY, "response": _rc_token,
+                      "remoteip": request.remote_addr},
+                timeout=5
+            )
+            if not _rc_resp.json().get("success"):
+                _prods = get_products()
+                return render_template_string(FORM_HTML, business_name=BUSINESS_NAME,
+                    google_maps_key=GOOGLE_MAPS_KEY, recaptcha_site_key=RECAPTCHA_SITE_KEY,
+                    products=_prods, exact_time_fee=EXACT_TIME_FEE,
+                    error="CAPTCHA verification failed. Please try again.", form=f), 400
+        except Exception as _rc_err:
+            log.error(f"reCAPTCHA verify error: {_rc_err}")
+            # Don't block if reCAPTCHA is temporarily unreachable
     # ──────────────────────────────────────────────────────────────────────
 
     full_name        = f.get("full_name",        "").strip()
@@ -7382,7 +7418,7 @@ def _submit_inner():
     _products = get_products()
     if not email or not full_name:
         return render_template_string(FORM_HTML, business_name=BUSINESS_NAME,
-            google_maps_key=GOOGLE_MAPS_KEY,
+            google_maps_key=GOOGLE_MAPS_KEY, recaptcha_site_key=RECAPTCHA_SITE_KEY,
             products=_products, exact_time_fee=EXACT_TIME_FEE,
             error="Name and email are required.", form=f), 400
 
