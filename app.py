@@ -2450,10 +2450,17 @@ FORM_HTML = r"""
     </p>
   </div>
 
+  <!-- Honeypot: hidden from real users, bots fill it in -->
+  <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true"
+    style="position:absolute;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0;pointer-events:none" value="">
+  <!-- Timestamp: used to detect instant bot submissions -->
+  <input type="hidden" name="_ts" id="_form_ts" value="">
   <button type="submit" class="submit-btn" id="submitBtn">Send Quote Request</button>
 </form>
 </div>
 <script>
+// Set form load timestamp for timing check
+(function(){ try{ document.getElementById('_form_ts').value = Date.now(); }catch(e){} })();
 const EXACT_FEE = {{ exact_time_fee }};
 const LATE_NIGHT_FEE = 125;
 const CT_TAX_RATE = 0.0635;
@@ -7304,6 +7311,23 @@ def submit():
 
 def _submit_inner():
     f = request.form
+
+    # ── Bot / spam protection ──────────────────────────────────────────────
+    # 1. Honeypot: hidden field that real users never fill in
+    if f.get("website", "").strip():
+        log.warning(f"Spam blocked (honeypot): email={f.get('email','')!r} ip={request.remote_addr}")
+        return redirect(url_for("index"))
+    # 2. Timing: real humans take at least 5 seconds to fill the form
+    try:
+        _ts = int(f.get("_ts") or 0)
+        if _ts > 0:
+            _elapsed = (time.time() * 1000 - _ts) / 1000
+            if _elapsed < 5:
+                log.warning(f"Spam blocked (submitted in {_elapsed:.1f}s): email={f.get('email','')!r} ip={request.remote_addr}")
+                return redirect(url_for("index"))
+    except Exception:
+        pass
+    # ──────────────────────────────────────────────────────────────────────
 
     full_name        = f.get("full_name",        "").strip()
     company_name     = f.get("company_name",     "").strip()
