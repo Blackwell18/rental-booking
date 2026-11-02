@@ -15282,16 +15282,15 @@ def admin_customers():
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute("SELECT * FROM customers ORDER BY full_name")
             rows = cur.fetchall()
+            # Fetch all bookings in one query and group by email (avoids N+1 timeout)
+            cur.execute("SELECT id, status, LOWER(email) AS lower_email FROM bookings WHERE email IS NOT NULL AND email <> '' ORDER BY id DESC")
+            bookings_by_email = {}
+            for bk in cur.fetchall():
+                em = bk["lower_email"]
+                bookings_by_email.setdefault(em, []).append({"id": bk["id"], "status": bk["status"]})
             for r in rows:
                 c = dict(r)
-                if c.get("email"):
-                    cur.execute(
-                        "SELECT id, status FROM bookings WHERE LOWER(email)=LOWER(%s) ORDER BY id DESC",
-                        (c["email"],)
-                    )
-                    c["bookings"] = [dict(b) for b in cur.fetchall()]
-                else:
-                    c["bookings"] = []
+                c["bookings"] = bookings_by_email.get((c.get("email") or "").lower(), [])
                 customers.append(c)
             cur.close()
             conn.close()
