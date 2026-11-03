@@ -4147,6 +4147,13 @@ ADMIN_BOOKING_EDIT_HTML = """
       <div><label>Delivery Fee ($)</label><input name="delivery_fee" type="number" step="0.01" value="{{ b.delivery_fee or 0 }}"></div>
       <div><label>Late Night Fee ($)</label><input name="late_night_fee" type="number" step="0.01" value="{{ b.late_night_fee or 0 }}"></div>
       <div><label>Distance (miles)</label><input name="distance_miles" type="number" step="0.1" value="{{ b.distance_miles or '' }}"></div>
+      <div style="grid-column:1/-1;padding:.6rem .75rem;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px">
+        <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-weight:600;color:#166534;font-size:.93rem">
+          <input type="checkbox" name="tax_exempt" value="1" {% if b.tax_exempt %}checked{% endif %}
+                 style="width:17px;height:17px;accent-color:#16a34a;cursor:pointer">
+          Tax Exempt (removes 6.35% CT sales tax)
+        </label>
+      </div>
     </div>
   </div>
 
@@ -9762,6 +9769,7 @@ def edit_booking(booking_id):
         "late_night_fee":   float(f.get("late_night_fee") or 0),
         "distance_miles":   float(f.get("distance_miles") or 0) or None,
         "notes":            f.get("notes","").strip(),
+        "tax_exempt":       f.get("tax_exempt") == "1",
     }
     try:
         cur = conn.cursor()
@@ -9780,7 +9788,7 @@ def edit_booking(booking_id):
               status=%(status)s, grand_total=%(grand_total)s,
               amount_paid=%(amount_paid)s, delivery_fee=%(delivery_fee)s,
               late_night_fee=%(late_night_fee)s, distance_miles=%(distance_miles)s,
-              notes=%(notes)s
+              notes=%(notes)s, tax_exempt=%(tax_exempt)s
             WHERE id=%(id)s
         """, {**fields, "id": booking_id})
         conn.commit()
@@ -10328,6 +10336,17 @@ def recalc_total(booking_id):
         disc_value   = float(b.get("discount_value") or 0)
         tax_rate     = float(b.get("tax_rate") or 0.0635)
         tax_exempt   = bool(b.get("tax_exempt"))
+        # Also check customer profile in case booking predates the exemption
+        if not tax_exempt and b.get("email"):
+            try:
+                tc = conn.cursor()
+                tc.execute("SELECT tax_exempt FROM customers WHERE LOWER(email)=LOWER(%s)", (b["email"],))
+                crow = tc.fetchone()
+                if crow and crow[0]:
+                    tax_exempt = True
+                tc.close()
+            except Exception:
+                pass
 
         pre_tax = round(items_sub + delivery_fee + exact_fee, 2)
 
