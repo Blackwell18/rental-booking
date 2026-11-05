@@ -2443,6 +2443,9 @@ FORM_HTML = r"""
     <div class="total-row" id="t_stackable_row" style="display:none"><span>Stackable Marquee</span><span id="t_stackable">$75.00</span></div>
     <div class="total-row" id="t_latenight_row" style="display:none"><span>Late Night / Early Morning Fee</span><span id="t_latenight">$125.00</span></div>
     <div class="total-row"><span>Delivery Fee</span><span id="t_delivery">Calculated after review</span></div>
+    <div id="dist_warning" style="display:none;margin:.4rem 0;padding:.6rem .85rem;background:#fef9c3;border:1.5px solid #fbbf24;border-radius:8px;font-size:.85rem;color:#92400e;line-height:1.4">
+      ⚠️ <strong>This venue is <span id="dist_warning_miles"></span> miles away.</strong> Please double-check that you entered the correct <em>event venue</em> address — not your home address.
+    </div>
     <div class="total-row"><span>CT Sales Tax (6.35%)</span><span id="t_tax">$0.00</span></div>
     <div class="total-row grand"><span>Estimated Total</span><span id="t_grand">$0.00</span></div>
     <p class="total-note">Final delivery fee and tax confirmed after we review your address. This is a quote request, not a charge.</p>
@@ -2816,7 +2819,7 @@ function applyWeekendDelivery(){
 }
 let distTimer;
 let _calcDeliveryFee=0;
-function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';_calcDeliveryFee=d.fee;updateTotals();}).catch(()=>{});}},800);}
+function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';_calcDeliveryFee=d.fee;updateTotals();const warn=document.getElementById('dist_warning');if(warn){if(d.miles&&d.miles>40){document.getElementById('dist_warning_miles').textContent=d.miles;warn.style.display='block';}else{warn.style.display='none';}}}).catch(()=>{});}},800);}
 // ── Date validation ───────────────────────────────────────────────────────
 const today=new Date().toISOString().split('T')[0];
 const startDateEl = document.getElementById('event_start_date');
@@ -4830,6 +4833,9 @@ ADMIN_NEW_BOOKING_HTML = r"""
     <div class="total-row" id="t_stackable_row" style="display:none"><span>Stackable Marquee</span><span id="t_stackable">$75.00</span></div>
     <div class="total-row" id="t_latenight_row" style="display:none"><span>Late Night / Early Morning Fee</span><span id="t_latenight">$125.00</span></div>
     <div class="total-row"><span>Delivery Fee</span><span id="t_delivery">Calculated after review</span></div>
+    <div id="dist_warning" style="display:none;margin:.4rem 0;padding:.6rem .85rem;background:#fef9c3;border:1.5px solid #fbbf24;border-radius:8px;font-size:.85rem;color:#92400e;line-height:1.4">
+      ⚠️ <strong>This venue is <span id="dist_warning_miles"></span> miles away.</strong> Please double-check that you entered the correct <em>event venue</em> address — not your home address.
+    </div>
     <div class="total-row"><span>CT Sales Tax (6.35%)</span><span id="t_tax">$0.00</span></div>
     <div class="total-row grand"><span>Estimated Total</span><span id="t_grand">$0.00</span></div>
     <p class="total-note">Live estimate — delivery fee calculated from event address.</p>
@@ -5211,7 +5217,7 @@ function applyWeekendDelivery(){
 }
 let distTimer;
 let _calcDeliveryFee=0;
-function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';_calcDeliveryFee=d.fee;updateTotals();}).catch(()=>{});}},800);}
+function scheduleDistanceCalc(){clearTimeout(distTimer);distTimer=setTimeout(()=>{const street=document.getElementById('event_street').value;const city=document.getElementById('event_city').value;const state=document.getElementById('event_state').value;const zip=document.getElementById('event_zip').value;if(street&&city&&state&&zip){const addr=street+', '+city+', '+state+' '+zip;fetch('/delivery_fee?address='+encodeURIComponent(addr)).then(r=>r.json()).then(d=>{document.getElementById('t_delivery').textContent='$'+d.fee.toFixed(2)+' ('+d.note+')';_calcDeliveryFee=d.fee;updateTotals();const warn=document.getElementById('dist_warning');if(warn){if(d.miles&&d.miles>40){document.getElementById('dist_warning_miles').textContent=d.miles;warn.style.display='block';}else{warn.style.display='none';}}}).catch(()=>{});}},800);}
 // ── Date validation ───────────────────────────────────────────────────────
 const today=new Date().toISOString().split('T')[0];
 const startDateEl = document.getElementById('event_start_date');
