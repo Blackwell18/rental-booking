@@ -9870,25 +9870,104 @@ def customer_search():
 @app.route("/admin/booking/rebook/<int:booking_id>")
 @admin_required
 def admin_rebook(booking_id):
-    """Pre-fill the new booking form with an existing customer's data."""
+    """Clone an existing booking as a new pending booking, then open it for editing."""
     conn = get_db()
-    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
-    src = cur.fetchone()
-    cur.close()
-    if not src:
+    if not conn:
         return redirect(url_for("admin_dashboard"))
-    # Pass relevant fields as query params so the form auto-fills
-    import urllib.parse as _up
-    fields = {
-        "prefill": "1",
-        "customer_name": src.get("full_name") or "",
-        "email": src.get("email") or "",
-        "phone": src.get("phone") or "",
-        "setup_address": src.get("delivery_location") or "",
-        "notes": f"[Rebook from #{booking_id}] ",
-    }
-    return redirect(url_for("new_booking") + "?" + _up.urlencode(fields))
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+        src = cur.fetchone()
+        if not src:
+            cur.close(); conn.close()
+            return redirect(url_for("admin_dashboard"))
+        new_token = secrets.token_urlsafe(24)
+        old_notes = (src.get("notes") or "").strip()
+        clone_note = f"[Cloned from #{booking_id}]"
+        merged_notes = (clone_note + "\n" + old_notes).strip() if old_notes else clone_note
+        cur2 = conn.cursor()
+        cur2.execute("""
+            INSERT INTO bookings (
+                full_name, company_name,
+                renter_street, renter_city, renter_state, renter_zip,
+                phone, email,
+                event_start_date, event_end_date,
+                event_start_time, event_end_time, setup_time, setup_date,
+                delivery_date, delivery_time,
+                pickup_date, pickup_time,
+                venue_type, venue_latest_pickup,
+                event_street, event_city, event_state, event_zip,
+                exact_time_delivery, delivery_location,
+                delivery_fee, distance_miles,
+                items_json, items_subtotal, exact_time_fee, late_night_fee,
+                tax_rate, tax_amount, tax_exempt, grand_total,
+                notes, view_token, status,
+                amount_paid, payment_status
+            ) VALUES (
+                %(full_name)s, %(company_name)s,
+                %(renter_street)s, %(renter_city)s, %(renter_state)s, %(renter_zip)s,
+                %(phone)s, %(email)s,
+                %(event_start_date)s, %(event_end_date)s,
+                %(event_start_time)s, %(event_end_time)s, %(setup_time)s, %(setup_date)s,
+                %(delivery_date)s, %(delivery_time)s,
+                %(pickup_date)s, %(pickup_time)s,
+                %(venue_type)s, %(venue_latest_pickup)s,
+                %(event_street)s, %(event_city)s, %(event_state)s, %(event_zip)s,
+                %(exact_time_delivery)s, %(delivery_location)s,
+                %(delivery_fee)s, %(distance_miles)s,
+                %(items_json)s, %(items_subtotal)s, %(exact_time_fee)s, %(late_night_fee)s,
+                %(tax_rate)s, %(tax_amount)s, %(tax_exempt)s, %(grand_total)s,
+                %(notes)s, %(view_token)s, 'pending',
+                0, NULL
+            ) RETURNING id
+        """, {
+            "full_name":         src.get("full_name") or "",
+            "company_name":      src.get("company_name") or "",
+            "renter_street":     src.get("renter_street") or "",
+            "renter_city":       src.get("renter_city") or "",
+            "renter_state":      src.get("renter_state") or "",
+            "renter_zip":        src.get("renter_zip") or "",
+            "phone":             src.get("phone") or "",
+            "email":             src.get("email") or "",
+            "event_start_date":  src.get("event_start_date"),
+            "event_end_date":    src.get("event_end_date"),
+            "event_start_time":  src.get("event_start_time") or "",
+            "event_end_time":    src.get("event_end_time") or "",
+            "setup_time":        src.get("setup_time") or "",
+            "setup_date":        src.get("setup_date"),
+            "delivery_date":     src.get("delivery_date"),
+            "delivery_time":     src.get("delivery_time") or "",
+            "pickup_date":       src.get("pickup_date"),
+            "pickup_time":       src.get("pickup_time") or "",
+            "venue_type":        src.get("venue_type") or "venue",
+            "venue_latest_pickup": src.get("venue_latest_pickup"),
+            "event_street":      src.get("event_street") or "",
+            "event_city":        src.get("event_city") or "",
+            "event_state":       src.get("event_state") or "",
+            "event_zip":         src.get("event_zip") or "",
+            "exact_time_delivery": src.get("exact_time_delivery") or False,
+            "delivery_location": src.get("delivery_location") or "",
+            "delivery_fee":      src.get("delivery_fee") or 0,
+            "distance_miles":    src.get("distance_miles"),
+            "items_json":        src.get("items_json") or "[]",
+            "items_subtotal":    src.get("items_subtotal") or 0,
+            "exact_time_fee":    src.get("exact_time_fee") or 0,
+            "late_night_fee":    src.get("late_night_fee") or 0,
+            "tax_rate":          src.get("tax_rate") or 0,
+            "tax_amount":        src.get("tax_amount") or 0,
+            "tax_exempt":        bool(src.get("tax_exempt")),
+            "grand_total":       src.get("grand_total") or 0,
+            "notes":             merged_notes,
+            "view_token":        new_token,
+        })
+        new_id = cur2.fetchone()[0]
+        conn.commit()
+        cur.close(); cur2.close(); conn.close()
+        log.info(f"Cloned booking #{booking_id} → #{new_id}")
+    except Exception as e:
+        log.error(f"admin_rebook clone error: {e}")
+        return redirect(url_for("admin_dashboard"))
+    return redirect(url_for("edit_booking", booking_id=new_id))
 
 
 @app.route("/admin/api/customer-search")
@@ -14488,6 +14567,9 @@ ADMIN_CUSTOMERS_HTML = """
           <td>
             <div class="action-btns">
               <a href="/admin/customers/{{ c.id }}/edit" class="btn btn-edit">Edit</a>
+              {% if c.bookings %}
+              <a href="/admin/booking/rebook/{{ c.bookings[0].id }}" class="btn" style="background:#f0fdf4;color:#166534;border-color:#bbf7d0" title="Clone booking #{{ c.bookings[0].id }} as new pending booking">🔁 Re-book</a>
+              {% endif %}
               <form method="POST" action="/admin/customers/{{ c.id }}/delete" style="display:inline">
                 <button class="btn btn-danger" onclick="return confirm('Remove {{ c.full_name }}?')">Remove</button>
               </form>
