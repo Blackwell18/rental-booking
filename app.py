@@ -1469,9 +1469,11 @@ def send_accepted_email(b, charge_amount, payment_type="deposit"):
         tax_row_html  = ""
         tax_row_plain = ""
 
+    # Link to delivery-confirmation page instead of directly to Stripe
+    _pay_page_url = f"{BASE_URL}/booking/pay/{b.get('view_token')}" if b.get("view_token") and BASE_URL else payment_link
     payment_btn = f"""
     <div style="text-align:center;margin:1.5rem 0">
-      <a href="{payment_link}"
+      <a href="{_pay_page_url}"
          style="display:inline-block;background:linear-gradient(135deg,#276749,#38a169);color:white;padding:1.1rem 2.75rem;border-radius:10px;font-weight:700;font-size:1.15rem;text-decoration:none;letter-spacing:.3px;box-shadow:0 4px 12px rgba(39,103,73,.35)">
         {pay_btn_label}
       </a>
@@ -1595,7 +1597,7 @@ INVOICE
 
 PAYMENT REQUIRED
   {due_label}: ${charge_amount:.2f}
-  {f"Pay here: {payment_link}" if payment_link else "We will send your payment link shortly."}
+  {f"Confirm delivery date & pay here: {_pay_page_url}" if payment_link else "We will send your payment link shortly."}
   {balance_plain}
 
 IMPORTANT: Your booking is NOT secured until payment is received.
@@ -8456,6 +8458,187 @@ def customer_booking_view(token):
 
 </div></body></html>"""
     return html
+
+
+@app.route("/booking/pay/<token>")
+def customer_booking_pay(token):
+    """Delivery-date confirmation page — customer must acknowledge before paying."""
+    if not token:
+        return "Invalid link.", 404
+    conn = get_db()
+    if not conn:
+        return "Unable to load booking. Please try again later.", 503
+    b = None
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT * FROM bookings WHERE view_token=%s", (token,))
+        row = cur.fetchone()
+        if row:
+            b = _row(row)
+        cur.close(); conn.close()
+    except Exception as e:
+        log.error(f"customer_booking_pay view error: {e}")
+    if not b:
+        return "Booking not found or link has expired.", 404
+
+    status = (b.get("status") or "").lower()
+    if status not in ("accepted", "confirmed", "partial", "agree_to_pay"):
+        # Booking not yet accepted — redirect to view page
+        return redirect(f"/booking/view/{token}")
+
+    stripe_url   = b.get("stripe_payment_link") or ""
+    grand_total  = float(b.get("grand_total") or 0)
+    amount_paid  = float(b.get("amount_paid") or 0)
+    balance_due  = max(round(grand_total - amount_paid, 2), 0)
+
+    # Pick the best delivery date to show
+    delivery_dt  = b.get("delivery_date") or b.get("event_start_date")
+    delivery_str = _fmt_date(delivery_dt) if delivery_dt else None
+    event_start  = _fmt_date(b.get("event_start_date")) if b.get("event_start_date") else "—"
+    event_end    = _fmt_date(b.get("event_end_date")) if b.get("event_end_date") else "—"
+    event_addr   = ", ".join(filter(None, [
+        b.get("event_street"), b.get("event_city"),
+        b.get("event_state"), b.get("event_zip")
+    ]))
+
+    # Determine what the button should show
+    deposit_pct  = 0.25
+    is_deposit   = balance_due > 0.50
+    if is_deposit:
+        charge_amount = round(grand_total * deposit_pct, 2) if amount_paid == 0 else balance_due
+        btn_label     = f"Pay ${charge_amount:.2f} Deposit &rarr;"
+    else:
+        charge_amount = balance_due if balance_due > 0 else grand_total
+        btn_label     = f"Pay ${charge_amount:.2f} &rarr;"
+
+    if not stripe_url:
+        pay_block = f"""
+        <div style="background:#fffaf0;border:2px solid #ed8936;border-radius:12px;padding:1.25rem;text-align:center">
+          <p style="font-weight:700;color:#744210;font-size:1.05rem">Amount Due: ${charge_amount:.2f}</p>
+          <p style="color:#744210;font-size:.9rem">We will send your payment link shortly. {f"Questions? Call {BUSINESS_PHONE}" if BUSINESS_PHONE else ""}</p>
+        </div>"""
+    else:
+        pay_block = f"""
+        <div id="pay-btn-wrap" style="text-align:center;margin:1.5rem 0">
+          <a id="pay-btn" href="#" onclick="return false;"
+             style="display:inline-block;background:#9ca3af;color:white;padding:1rem 2.5rem;border-radius:10px;font-weight:700;font-size:1.1rem;text-decoration:none;cursor:not-allowed;transition:all .2s"
+             data-stripe-url="{stripe_url}">
+            {btn_label}
+          </a>
+          <p id="pay-hint" style="margin:.5rem 0 0;font-size:.82rem;color:#9ca3af">Please confirm your delivery date above to unlock payment.</p>
+        </div>"""
+
+    delivery_block = ""
+    if delivery_str:
+        delivery_block = f"""
+  <!-- Delivery Date Confirmation Card -->
+  <div id="confirm-card" style="background:#fffbeb;border:2px solid #f59e0b;border-radius:12px;padding:1.5rem;margin-bottom:1.25rem">
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem">
+      <span style="font-size:1.6rem">📅</span>
+      <div>
+        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#92400e">Your Delivery Date</div>
+        <div style="font-size:1.5rem;font-weight:800;color:#1a202c">{delivery_str}</div>
+      </div>
+    </div>
+    <div style="background:#fef3c7;border-radius:8px;padding:.75rem 1rem;font-size:.85rem;color:#78350f;line-height:1.55;margin-bottom:1rem">
+      <strong>Note on delivery time:</strong> Your exact delivery window will be confirmed closer to your event date and depends on our delivery route for that day. We will reach out with a more precise window in advance.
+    </div>
+    <label style="display:flex;align-items:flex-start;gap:.75rem;cursor:pointer;font-size:.95rem;color:#1a202c">
+      <input type="checkbox" id="confirm-cb" onchange="onConfirm(this)"
+             style="margin-top:.2rem;width:20px;height:20px;accent-color:#16a34a;cursor:pointer;flex-shrink:0">
+      <span>I confirm that <strong>{delivery_str}</strong> is my delivery date and I am available to receive my rental items on this date.</span>
+    </label>
+  </div>"""
+    else:
+        # No delivery date set yet — skip the checkbox, just show the pay button directly
+        delivery_block = ""
+        if stripe_url:
+            pay_block = f"""
+        <div style="text-align:center;margin:1.5rem 0">
+          <a href="{stripe_url}"
+             style="display:inline-block;background:linear-gradient(135deg,#276749,#38a169);color:white;padding:1rem 2.5rem;border-radius:10px;font-weight:700;font-size:1.1rem;text-decoration:none">
+            {btn_label}
+          </a>
+        </div>"""
+
+    js = ""
+    if stripe_url and delivery_str:
+        js = """<script>
+function onConfirm(cb){
+  var btn = document.getElementById('pay-btn');
+  var hint = document.getElementById('pay-hint');
+  if(cb.checked){
+    btn.href = btn.dataset.stripeUrl;
+    btn.onclick = null;
+    btn.style.background = 'linear-gradient(135deg,#276749,#38a169)';
+    btn.style.cursor = 'pointer';
+    hint.style.color = '#6b7280';
+    hint.textContent = 'You\'re all set — click the button above to complete your payment.';
+  } else {
+    btn.href = '#';
+    btn.onclick = function(){return false;};
+    btn.style.background = '#9ca3af';
+    btn.style.cursor = 'not-allowed';
+    hint.style.color = '#9ca3af';
+    hint.textContent = 'Please confirm your delivery date above to unlock payment.';
+  }
+}
+</script>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Confirm &amp; Pay — {BUSINESS_NAME}</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c;padding:1.5rem 1rem}}
+  .wrap{{max-width:620px;margin:0 auto}}
+  .card{{background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.07);padding:1.5rem;margin-bottom:1.25rem}}
+  .section-title{{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin-bottom:.8rem}}
+</style>
+</head><body>
+<div class="wrap">
+
+  <div style="text-align:center;margin-bottom:1.5rem">
+    <div style="font-size:1.4rem;font-weight:800;color:#1a365d">{BUSINESS_NAME}</div>
+    <div style="font-size:.88rem;color:#6b7280;margin-top:.25rem">Review &amp; Pay — Booking #{b.get('id')}</div>
+  </div>
+
+  <!-- Order summary -->
+  <div class="card">
+    <div class="section-title">Order Summary</div>
+    <div style="font-size:.9rem;color:#374151;line-height:1.9">
+      <div><strong>Name:</strong> {b.get('full_name') or '—'}</div>
+      <div><strong>Event:</strong> {event_start} → {event_end}</div>
+      {'<div><strong>Venue:</strong> ' + event_addr + '</div>' if event_addr else ''}
+      <div style="margin-top:.5rem;padding:.6rem .9rem;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between">
+        <span style="font-weight:700">Total</span><span style="font-weight:700">${grand_total:.2f}</span>
+      </div>
+      {f'<div style="padding:.5rem .9rem;background:#f0fdf4;border-radius:8px;display:flex;justify-content:space-between;margin-top:.35rem"><span style="color:#166534;font-weight:600">✅ Paid</span><span style="color:#166534;font-weight:700">${amount_paid:.2f}</span></div>' if amount_paid > 0 else ''}
+      {f'<div style="padding:.5rem .9rem;background:#fff5f5;border-radius:8px;display:flex;justify-content:space-between;margin-top:.35rem"><span style="color:#991b1b;font-weight:700">Amount Due Now</span><span style="color:#991b1b;font-weight:700">${charge_amount:.2f}</span></div>' if charge_amount > 0 else ''}
+    </div>
+  </div>
+
+  {delivery_block}
+
+  <!-- Pay button -->
+  <div class="card" style="text-align:center">
+    {pay_block}
+    <p style="font-size:.78rem;color:#9ca3af;margin-top:.5rem">Secure payment powered by Stripe</p>
+    <p style="font-size:.78rem;color:#9ca3af;margin-top:.35rem"><a href="/booking/view/{token}" style="color:#6b7280">View full order details</a></p>
+  </div>
+
+  <div style="text-align:center;color:#9ca3af;font-size:.78rem;padding-bottom:1.5rem">
+    {f'Questions? Call <strong style="color:#374151">{BUSINESS_PHONE}</strong>' if BUSINESS_PHONE else 'Reply to your confirmation email with any questions.'}
+  </div>
+
+</div>
+{js}
+</body></html>"""
+    return html
+
+
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
