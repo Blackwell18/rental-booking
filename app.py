@@ -8541,7 +8541,7 @@ def customer_booking_pay(token):
       </div>
     </div>
     <div style="background:#fef3c7;border-radius:8px;padding:.75rem 1rem;font-size:.85rem;color:#78350f;line-height:1.55;margin-bottom:1rem">
-      <strong>Note on delivery time:</strong> Your exact delivery window will be confirmed closer to your event date and depends on our delivery route for that day. We will reach out with a more precise window in advance.
+      <strong>Please note:</strong> The delivery time listed is an estimated window. As our team coordinates multiple deliveries on the same day, your actual arrival time may vary slightly. We appreciate your flexibility and will do our best to arrive within your scheduled window.
     </div>
     <label style="display:flex;align-items:flex-start;gap:.75rem;cursor:pointer;font-size:.95rem;color:#1a202c">
       <input type="checkbox" id="confirm-cb" onchange="onConfirm(this)"
